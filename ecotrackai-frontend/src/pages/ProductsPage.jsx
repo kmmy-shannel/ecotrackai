@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Trash2, Edit2, Package } from 'lucide-react';
 import Layout from '../components/Layout';
 import authService from '../services/auth.service';
 import productService from '../services/product.service';
 import AddProductModal from '../components/AddProductModal';
+import { Plus, Search, Trash2, Package } from 'lucide-react'; // Removed Sparkles
 
 const ProductsPage = () => {
   const navigate = useNavigate();
@@ -26,30 +26,22 @@ const ProductsPage = () => {
     loadProducts();
   }, [navigate]);
 
- const loadProducts = async () => {
-  try {
-    setLoading(true);
-    console.log('📡 Calling product service...');
-    const response = await productService.getAllProducts();
-    
-    console.log('📦 Full response received:', response);
-    console.log('📦 Response.data:', response.data);
-    
-    // Handle different response structures
-    const productsList = response.data?.products || response.products || [];
-    console.log('📦 Products list:', productsList);
-    
-    setProducts(productsList);
-    setError('');
-  } catch (err) {
-    console.error('Load products error:', err);
-    console.error('Error response:', err.response);
-    console.error('Error data:', err.response?.data);
-    setError('Failed to load products');
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      console.log('📡 Calling product service...');
+      const response = await productService.getAllProducts();
+      
+      const productsList = response.data?.products || response.products || [];
+      setProducts(productsList);
+      setError('');
+    } catch (err) {
+      console.error('Load products error:', err);
+      setError('Failed to load products');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDelete = async (productId) => {
     if (!window.confirm('Are you sure you want to delete this product?')) {
@@ -131,8 +123,8 @@ const ProductsPage = () => {
             <tr>
               <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Product</th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Quantity</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Days</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Status</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Shelf Life</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Storage</th>
               <th className="text-right px-6 py-4 text-sm font-semibold text-gray-700">Action</th>
             </tr>
           </thead>
@@ -159,30 +151,24 @@ const ProductsPage = () => {
               filteredProducts.map((product) => (
                 <tr key={product.product_id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
-  <div className="flex items-center gap-3">
-    {product.image_url ? (
-      <img
-        src={product.image_url}
-        alt={product.product_name}
-        className="w-12 h-12 object-cover rounded-lg border"
-      />
-    ) : (
-      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-        <Package size={20} className="text-gray-400" />
-      </div>
-    )}
-
-    <div>
-      <p className="font-semibold text-gray-800">
-        {product.product_name}
-      </p>
-      <p className="text-sm text-gray-500">
-        {product.product_type}
-      </p>
-    </div>
-  </div>
-</td>
-
+                    <div className="flex items-center gap-3">
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
+                          alt={product.product_name}
+                          className="w-12 h-12 object-cover rounded-lg border"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                          <Package size={20} className="text-gray-400" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-gray-800">{product.product_name}</p>
+                        <p className="text-sm text-gray-500">{product.product_type}</p>
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <p className="text-gray-700">{parseFloat(product.total_quantity).toFixed(0)} {product.unit_of_measure}</p>
                   </td>

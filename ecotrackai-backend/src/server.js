@@ -5,7 +5,9 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth.routes');
 const managerRoutes = require('./routes/manager.routes');
-const productRoutes = require('./routes/product.routes'); // ← ADD THIS LINE
+const productRoutes = require('./routes/product.routes');
+const aiRoutes = require('./routes/ai.routes') 
+const deliveryRoutes = require('./routes/delivery.routes');
 
 const app = express();
 
@@ -25,12 +27,14 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/managers', managerRoutes);
-app.use('/api/products', productRoutes); // ← ADD THIS LINE
+app.use('/api/products', productRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/deliveries', deliveryRoutes);
 
 console.log('\nRegistered API Routes:');
 console.log('   /api/auth');
 console.log('   /api/managers');
-console.log('   /api/products');      // ← ADD THIS LINE
+console.log('   /api/products');    
 console.log('   /api/health\n');
 
 // Health check

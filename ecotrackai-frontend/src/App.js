@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import authService from './services/auth.service';
+import DeliveryRoutesPage from './pages/DeliveryRoutesPage';
 import ProductsPage from './pages/ProductsPage';
 
 // Protected Route Component
@@ -18,6 +19,7 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage/>}/>
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/products" element ={<ProductsPage/>}/> 
+        <Route path="/deliveries" element={<DeliveryRoutesPage />} />
         <Route
           path="/dashboard"
           element={
