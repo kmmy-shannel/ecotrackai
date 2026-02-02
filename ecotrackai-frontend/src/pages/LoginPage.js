@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import authService from '../services/auth.service';
 
 const LoginPage = () => {
-
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
@@ -11,9 +11,9 @@ const LoginPage = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
-
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
@@ -22,31 +22,47 @@ const LoginPage = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setError('');
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-  console.log('📤 FRONTEND: Sending login data:', {
-    email: formData.email,
-    password: '***hidden***'
-  });
-
-  try {
-    const result = await authService.login({
+    console.log('📤 FRONTEND: Sending login data:', {
       email: formData.email,
-      password: formData.password
+      password: '***hidden***'
     });
-    console.log('✅ FRONTEND: Login successful:', result);
-    navigate('/dashboard');
-  } catch (err) {
-    console.error('❌ FRONTEND: Login error:', err);
-    console.error('Error response:', err.response);
-    console.error('Error data:', err.response?.data);
-    setError(err.response?.data?.message || 'Login failed. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+
+    try {
+      const result = await authService.login({
+        email: formData.email,
+        password: formData.password
+      });
+      console.log('✅ FRONTEND: Login successful:', result);
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('❌ FRONTEND: Login error:', err);
+      console.error('Error response:', err.response);
+      console.error('Error data:', err.response?.data);
+      
+      // Log the actual validation errors
+      if (err.response?.data?.error) {
+        console.error('🚨 VALIDATION ERRORS:', err.response.data.error);
+      }
+      
+      // Display detailed error messages
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (err.response?.data?.error && Array.isArray(err.response.data.error)) {
+        // If errors is an array, join them
+        errorMessage = err.response.data.error.join(', ');
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-100 via-green-50 to-green-100 flex items-center justify-center p-4">
@@ -75,7 +91,7 @@ const LoginPage = () => {
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
-              type="text"
+              type="email"
               name="email"
               placeholder="Email"
               value={formData.email}
@@ -84,15 +100,36 @@ const LoginPage = () => {
               required
             />
             
-            <input
-              type="password"
-              name="password"
-              placeholder="Password"
-              value={formData.password}
-              onChange={handleChange}
-              className="w-full px-6 py-4 bg-gray-100 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-green-400"
-              required
-            />
+            {/* Password Field with Eye Icon */}
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full px-6 py-4 bg-gray-100 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-green-400 pr-12"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+
+            {/* Forgot Password Link */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/forgot-password')}
+                className="text-sm text-green-600 hover:text-green-700 hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>
 
             <button
               type="submit"

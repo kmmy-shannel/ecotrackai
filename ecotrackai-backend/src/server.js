@@ -8,6 +8,7 @@ const managerRoutes = require('./routes/manager.routes');
 const productRoutes = require('./routes/product.routes');
 const aiRoutes = require('./routes/ai.routes') 
 const deliveryRoutes = require('./routes/delivery.routes');
+const alertRoutes = require('./routes/alert.routes');
 
 const app = express();
 
@@ -30,11 +31,13 @@ app.use('/api/managers', managerRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/deliveries', deliveryRoutes);
+app.use('/api/alerts', alertRoutes);
 
 console.log('\nRegistered API Routes:');
 console.log('   /api/auth');
 console.log('   /api/managers');
 console.log('   /api/products');    
+console.log('   /api/alerts'); 
 console.log('   /api/health\n');
 
 // Health check

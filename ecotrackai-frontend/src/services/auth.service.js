@@ -19,15 +19,14 @@ class AuthService {
     }
   }
 
-  async login(email, password) {
+  async login(credentials) {
     try {
       console.log('🔐 Logging in...');
-      const response = await axios.post(`${API_URL}/login`, { email, password });
+      const response = await axios.post(`${API_URL}/login`, credentials);
       
       if (response.data.success && response.data.data.token) {
         console.log('✅ Login successful, storing token');
         
-        // CRITICAL: Store both user and token
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
         localStorage.setItem('token', response.data.data.token);
         
@@ -37,6 +36,67 @@ class AuthService {
       return response.data;
     } catch (error) {
       console.error('❌ Login error:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Send OTP to email
+  async sendOTP(email) {
+    try {
+      console.log('📧 Sending OTP to:', email);
+      const response = await axios.post(`${API_URL}/send-otp`, { email });
+      console.log('✅ OTP sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Send OTP error:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Verify OTP code
+  async verifyOTP(email, otp) {
+    try {
+      console.log('🔐 Verifying OTP for:', email);
+      const response = await axios.post(`${API_URL}/verify-otp`, { email, otp });
+      
+      if (response.data.success && response.data.data.token) {
+        // Store user and token after successful verification
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+        localStorage.setItem('token', response.data.data.token);
+      }
+      
+      console.log('✅ OTP verified successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Verify OTP error:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Initiate forgot password process
+  async forgotPassword(email) {
+    try {
+      console.log('🔑 Initiating password reset for:', email);
+      const response = await axios.post(`${API_URL}/forgot-password`, { email });
+      console.log('✅ Password reset email sent');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Forgot password error:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Reset password with token
+  async resetPassword(token, newPassword) {
+    try {
+      console.log('🔐 Resetting password with token');
+      const response = await axios.post(`${API_URL}/reset-password/${token}`, { 
+        password: newPassword 
+      });
+      console.log('✅ Password reset successful');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Reset password error:', error);
       throw error;
     }
   }
@@ -68,5 +128,4 @@ class AuthService {
     return !!this.getToken();
   }
 }
-
 export default new AuthService();

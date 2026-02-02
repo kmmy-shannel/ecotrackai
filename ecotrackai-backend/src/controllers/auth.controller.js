@@ -2,16 +2,16 @@ const pool = require('../config/database');
 const { hashPassword, comparePassword } = require('../utils/password.utils');
 const { generateToken } = require('../utils/jwt.utils');
 const { sendSuccess, sendError } = require('../utils/response.utils');
+const { generateOTP, generateResetToken } = require('../utils/otp.utils');
+const emailService = require('../services/email.service');
 
 // Register new user and business
 const register = async (req, res) => {
   const client = await pool.connect();
   
   try {
-    
     console.log('REGISTRATION ATTEMPT');
     console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    
     
     await client.query('BEGIN');
 
@@ -22,6 +22,8 @@ const register = async (req, res) => {
       address,
       contactEmail,
       contactPhone,
+      firstName,
+      lastName,
       username,
       email,
       password,
@@ -33,13 +35,15 @@ const register = async (req, res) => {
       businessName,
       username,
       email,
+      firstName,
+      lastName,
       fullName,
       hasPassword: !!password
     });
 
     // Validate required fields
-    if (!businessName || !username || !email || !password) {
-      console.log('Missing required fields');
+    if (!businessName || !username || !email || !password || !firstName || !lastName) {
+      console.log('❌ Missing required fields');
       await client.query('ROLLBACK');
       return sendError(res, 400, 'Please provide all required fields');
     }
@@ -52,7 +56,7 @@ const register = async (req, res) => {
     );
 
     if (userCheck.rows.length > 0) {
-      console.log('User already exists');
+      console.log('❌ User already exists');
       await client.query('ROLLBACK');
       return sendError(res, 400, 'User with this email or username already exists');
     }
@@ -76,19 +80,27 @@ const register = async (req, res) => {
     ]);
 
     const businessId = businessResult.rows[0].business_id;
-    console.log('Business created with ID:', businessId);
+    console.log('✅ Business created with ID:', businessId);
 
     // Hash password
     console.log('Hashing password...');
     const hashedPassword = await hashPassword(password);
-    console.log('Password hashed successfully');
+    console.log('✅ Password hashed successfully');
 
-    // Create user
+    // Generate OTP for email verification
+    const otp = generateOTP();
+    const otpExpires = new Date();
+    otpExpires.setMinutes(otpExpires.getMinutes() + 10); // OTP valid for 10 minutes
+
+    console.log('📧 Generated OTP for verification');
+
+    // Create user with OTP fields
     console.log('Creating user account...');
     const userQuery = `
       INSERT INTO users 
-      (business_id, username, email, password_hash, full_name, role)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      (business_id, username, email, password_hash, full_name, first_name, last_name, role, 
+       email_verified, verification_code, verification_code_expires)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING user_id, username, email, full_name, role
     `;
     
@@ -98,11 +110,16 @@ const register = async (req, res) => {
       email,
       hashedPassword,
       fullName,
-      role || 'admin'
+      firstName,
+      lastName,
+      role || 'admin',
+      false, // email_verified
+      otp,
+      otpExpires
     ]);
 
     const user = userResult.rows[0];
-    console.log('User created with ID:', user.user_id);
+    console.log('✅ User created with ID:', user.user_id);
 
     // Initialize EcoTrust score
     console.log('Creating EcoTrust score...');
@@ -110,52 +127,40 @@ const register = async (req, res) => {
       'INSERT INTO ecotrust_scores (business_id) VALUES ($1)',
       [businessId]
     );
-    console.log('EcoTrust score initialized');
+    console.log('✅ EcoTrust score initialized');
 
     await client.query('COMMIT');
-    console.log('Transaction committed successfully');
+    console.log('✅ Transaction committed successfully');
 
-    // Generate token
-    console.log('Generating JWT token...');
-    const token = generateToken({
-      userId: user.user_id,
-      businessId: businessId,
-      role: user.role
-    });
-    console.log('Token generated');
+    // Send OTP email
+    try {
+      await emailService.sendVerificationEmail(email, otp, fullName || username);
+      console.log('✅ Verification email sent');
+    } catch (emailError) {
+      console.error('⚠️ Failed to send verification email:', emailError);
+      // Don't fail registration if email fails
+    }
 
-    // Create session
-    console.log('Creating session...');
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    console.log('✅ REGISTRATION COMPLETED SUCCESSFULLY');
+    console.log('📧 User must verify email with OTP');
 
-    await pool.query(
-      `INSERT INTO user_sessions (user_id, token, expires_at, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [user.user_id, token, expiresAt, req.ip, req.get('user-agent')]
-    );
-    console.log(' Session created successfully');
-
-    
-    console.log(' REGISTRATION COMPLETED SUCCESSFULLY');
-   
-
-    sendSuccess(res, 201, 'Registration successful', {
+    sendSuccess(res, 201, 'Registration successful. Please check your email for verification code.', {
       user: {
         userId: user.user_id,
         businessId,
         username: user.username,
         email: user.email,
         fullName: user.full_name,
-        role: user.role
+        role: user.role,
+        emailVerified: false
       },
-      token
+      requiresVerification: true
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('========================================');
-    console.error('REGISTRATION ERROR');
+    console.error('❌ REGISTRATION ERROR');
     console.error('Error Message:', error.message);
     console.error('Error Stack:', error.stack);
     console.error('========================================');
@@ -164,18 +169,277 @@ const register = async (req, res) => {
     client.release();
   }
 };
-// Login user
+
+// NEW: Send OTP for email verification
+const sendOTP = async (req, res) => {
+  try {
+    console.log('📧 SEND OTP REQUEST');
+    const { email } = req.body;
+
+    if (!email) {
+      return sendError(res, 400, 'Email is required');
+    }
+
+    // Find user
+    const { rows } = await pool.query(
+      'SELECT user_id, username, full_name, email_verified FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (rows.length === 0) {
+      return sendError(res, 404, 'User not found');
+    }
+
+    const user = rows[0];
+
+    if (user.email_verified) {
+      return sendError(res, 400, 'Email already verified');
+    }
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpires = new Date();
+    otpExpires.setMinutes(otpExpires.getMinutes() + 10);
+
+    // Update user with new OTP
+    await pool.query(
+      'UPDATE users SET verification_code = $1, verification_code_expires = $2 WHERE user_id = $3',
+      [otp, otpExpires, user.user_id]
+    );
+
+    // Send OTP email
+    await emailService.sendVerificationEmail(email, otp, user.full_name || user.username);
+
+    console.log('✅ New OTP sent to:', email);
+
+    sendSuccess(res, 200, 'Verification code sent to your email');
+
+  } catch (error) {
+    console.error('❌ Send OTP error:', error);
+    sendError(res, 500, 'Failed to send verification code', error.message);
+  }
+};
+
+// NEW: Verify OTP
+const verifyOTP = async (req, res) => {
+  try {
+    console.log('🔐 VERIFY OTP REQUEST');
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return sendError(res, 400, 'Email and OTP are required');
+    }
+
+    // Find user
+    const query = `
+      SELECT u.*, b.business_name 
+      FROM users u
+      JOIN business_profiles b ON u.business_id = b.business_id
+      WHERE u.email = $1
+    `;
+    
+    const { rows } = await pool.query(query, [email]);
+
+    if (rows.length === 0) {
+      return sendError(res, 404, 'User not found');
+    }
+
+    const user = rows[0];
+
+    // Check if already verified
+    if (user.email_verified) {
+      return sendError(res, 400, 'Email already verified');
+    }
+
+    // Check if OTP matches
+    if (user.verification_code !== otp) {
+      return sendError(res, 400, 'Invalid verification code');
+    }
+
+    // Check if OTP expired
+    if (new Date() > new Date(user.verification_code_expires)) {
+      return sendError(res, 400, 'Verification code has expired. Please request a new one.');
+    }
+
+    // Mark email as verified
+    await pool.query(
+      `UPDATE users 
+       SET email_verified = true, 
+           verification_code = NULL, 
+           verification_code_expires = NULL,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [user.user_id]
+    );
+
+    // Generate token
+    const token = generateToken({
+      userId: user.user_id,
+      businessId: user.business_id,
+      role: user.role
+    });
+
+    // Create session
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await pool.query(
+      `INSERT INTO user_sessions (user_id, token, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [user.user_id, token, expiresAt, req.ip, req.get('user-agent')]
+    );
+
+    console.log('✅ Email verified successfully for:', email);
+
+    sendSuccess(res, 200, 'Email verified successfully', {
+      user: {
+        userId: user.user_id,
+        businessId: user.business_id,
+        username: user.username,
+        email: user.email,
+        fullName: user.full_name,
+        role: user.role,
+        businessName: user.business_name,
+        emailVerified: true
+      },
+      token
+    });
+
+  } catch (error) {
+    console.error('❌ Verify OTP error:', error);
+    sendError(res, 500, 'Verification failed', error.message);
+  }
+};
+
+// NEW: Forgot Password
+const forgotPassword = async (req, res) => {
+  try {
+    console.log('🔑 FORGOT PASSWORD REQUEST');
+    const { email } = req.body;
+
+    if (!email) {
+      return sendError(res, 400, 'Email is required');
+    }
+
+    // Find user
+    const { rows } = await pool.query(
+      'SELECT user_id, username, full_name FROM users WHERE email = $1 AND is_active = true',
+      [email]
+    );
+
+    // Always return success even if user not found (security best practice)
+    if (rows.length === 0) {
+      console.log('⚠️ User not found, but returning success for security');
+      return sendSuccess(res, 200, 'If an account with that email exists, a password reset link has been sent.');
+    }
+
+    const user = rows[0];
+
+    // Generate reset token
+    const resetToken = generateResetToken();
+    const resetTokenExpires = new Date();
+    resetTokenExpires.setHours(resetTokenExpires.getHours() + 1); // Valid for 1 hour
+
+    // Save reset token to database
+    await pool.query(
+      `UPDATE users 
+       SET reset_password_token = $1, 
+           reset_password_expires = $2,
+           updated_at = NOW()
+       WHERE user_id = $3`,
+      [resetToken, resetTokenExpires, user.user_id]
+    );
+
+    // Send reset email
+    await emailService.sendPasswordResetEmail(email, resetToken, user.full_name || user.username);
+
+    console.log('✅ Password reset email sent to:', email);
+
+    sendSuccess(res, 200, 'If an account with that email exists, a password reset link has been sent.');
+
+  } catch (error) {
+    console.error('❌ Forgot password error:', error);
+    sendError(res, 500, 'Failed to process password reset request', error.message);
+  }
+};
+
+// NEW: Reset Password
+const resetPassword = async (req, res) => {
+  try {
+    console.log('🔐 RESET PASSWORD REQUEST');
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return sendError(res, 400, 'Password is required');
+    }
+
+    if (password.length < 8 || password.length > 16) {
+      return sendError(res, 400, 'Password must be 8-16 characters');
+    }
+
+    if (!/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
+      return sendError(res, 400, 'Password must contain both letters and numbers');
+    }
+
+    // Find user with valid reset token
+    const { rows } = await pool.query(
+      `SELECT user_id, email, username 
+       FROM users 
+       WHERE reset_password_token = $1 
+       AND reset_password_expires > NOW()
+       AND is_active = true`,
+      [token]
+    );
+
+    if (rows.length === 0) {
+      return sendError(res, 400, 'Invalid or expired reset token');
+    }
+
+    const user = rows[0];
+
+    // Hash new password
+    const hashedPassword = await hashPassword(password);
+
+    // Update password and clear reset token
+    await pool.query(
+      `UPDATE users 
+       SET password_hash = $1,
+           reset_password_token = NULL,
+           reset_password_expires = NULL,
+           updated_at = NOW()
+       WHERE user_id = $2`,
+      [hashedPassword, user.user_id]
+    );
+
+    // Invalidate all existing sessions for this user
+    await pool.query(
+      'DELETE FROM user_sessions WHERE user_id = $1',
+      [user.user_id]
+    );
+
+    console.log('✅ Password reset successful for:', user.email);
+
+    sendSuccess(res, 200, 'Password reset successful. Please login with your new password.');
+
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    sendError(res, 500, 'Failed to reset password', error.message);
+  }
+};
+
+// Login user (UPDATED to check email verification)
 const login = async (req, res) => {
   try {
     console.log('========================================');
-    console.log('LOGIN ATTEMPT');
+    console.log('🔐 LOGIN ATTEMPT');
     console.log('Request Body:', JSON.stringify(req.body, null, 2));
     console.log('========================================');
 
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log('Missing email or password');
+      console.log('❌ Missing email or password');
       return sendError(res, 400, 'Please provide email and password');
     }
 
@@ -190,22 +454,28 @@ const login = async (req, res) => {
     const { rows } = await pool.query(query, [email]);
 
     if (rows.length === 0) {
-      console.log('User not found or inactive');
+      console.log('❌ User not found or inactive');
       return sendError(res, 401, 'Invalid credentials');
     }
 
     const user = rows[0];
-    console.log('User found:', user.username);
+    console.log('✅ User found:', user.username);
 
     console.log('Verifying password...');
     const isPasswordValid = await comparePassword(password, user.password_hash);
 
     if (!isPasswordValid) {
-      console.log('Invalid password');
+      console.log('❌ Invalid password');
       return sendError(res, 401, 'Invalid credentials');
     }
 
-    console.log('Password valid');
+    console.log('✅ Password valid');
+
+    // Check if email is verified
+    if (!user.email_verified) {
+      console.log('⚠️ Email not verified');
+      return sendError(res, 403, 'Please verify your email before logging in. Check your inbox for the verification code.');
+    }
 
     console.log('Generating token...');
     const token = generateToken({
@@ -213,7 +483,7 @@ const login = async (req, res) => {
       businessId: user.business_id,
       role: user.role
     });
-    console.log('Token generated');
+    console.log('✅ Token generated');
 
     console.log('Creating session...');
     const expiresAt = new Date();
@@ -224,7 +494,7 @@ const login = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [user.user_id, token, expiresAt, req.ip, req.get('user-agent')]
     );
-    console.log('Session created');
+    console.log('✅ Session created');
 
     console.log('Updating last login...');
     await pool.query(
@@ -232,9 +502,7 @@ const login = async (req, res) => {
       [user.user_id]
     );
 
-    
-    console.log('LOGIN SUCCESSFUL');
-    
+    console.log('✅ LOGIN SUCCESSFUL');
 
     sendSuccess(res, 200, 'Login successful', {
       user: {
@@ -251,7 +519,7 @@ const login = async (req, res) => {
 
   } catch (error) {
     console.error('========================================');
-    console.error('LOGIN ERROR');
+    console.error('❌ LOGIN ERROR');
     console.error('Error Message:', error.message);
     console.error('Error Stack:', error.stack);
     console.error('========================================');
@@ -293,7 +561,7 @@ const getProfile = async (req, res) => {
     const query = `
       SELECT 
         u.user_id, u.username, u.email, u.full_name, u.role, u.is_active,
-        u.created_at, u.last_login,
+        u.created_at, u.last_login, u.email_verified,
         b.business_id, b.business_name, b.business_type, b.registration_number,
         b.address, b.contact_email, b.contact_phone,
         e.current_score as ecotrust_score, e.level as ecotrust_level, e.rank as ecotrust_rank
@@ -319,6 +587,7 @@ const getProfile = async (req, res) => {
         fullName: profile.full_name,
         role: profile.role,
         isActive: profile.is_active,
+        emailVerified: profile.email_verified,
         lastLogin: profile.last_login,
         createdAt: profile.created_at
       },
@@ -422,8 +691,12 @@ const changePassword = async (req, res) => {
       return sendError(res, 400, 'Please provide current and new password');
     }
 
-    if (newPassword.length < 6) {
-      return sendError(res, 400, 'New password must be at least 6 characters');
+    if (newPassword.length < 8 || newPassword.length > 16) {
+      return sendError(res, 400, 'New password must be 8-16 characters');
+    }
+
+    if (!/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(newPassword)) {
+      return sendError(res, 400, 'Password must contain both letters and numbers');
     }
 
     const { rows } = await pool.query(
@@ -473,5 +746,9 @@ module.exports = {
   logout,
   getProfile,
   updateProfile,
-  changePassword
+  changePassword,
+  sendOTP,
+  verifyOTP,
+  forgotPassword,
+  resetPassword
 };

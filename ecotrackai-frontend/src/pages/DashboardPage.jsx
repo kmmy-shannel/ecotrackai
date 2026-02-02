@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/auth.service';
 import aiService from '../services/ai.service';
@@ -6,45 +6,25 @@ import Navigation from '../components/Navigation';
 import ManagerManagement from '../components/ManagerManagement';
 import { 
   TrendingUp, ChevronRight, Check,
-  Users, Sparkles, Clock, AlertCircle, Package, Truck, AlertTriangle, DollarSign, Award, Map
+  Users, Sparkles, Clock, AlertCircle, Package, Truck, AlertTriangle, DollarSign, Map
 } from 'lucide-react';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [showManagerModal, setShowManagerModal] = useState(false);
-  
-  const [aiInsights, setAiInsights] = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
-  
-  const [stats] = useState({
-    totalProducts: 24,
-    totalDeliveries: 8,
-    totalAlerts: 3,
-    profit: 49000,
-    ecoScore: 890
+  const [aiInsights, setAiInsights] = useState(null);
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    totalDeliveries: 0,
+    totalAlerts: 0,
+    ecoScore: 0,
+    profit: 0
   });
 
-  useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      navigate('/');
-      return;
-    }
-    setUser(currentUser);
-    loadAIInsights();
-  }, [navigate]);
-
-  const handleLogout = async () => {
-    try {
-      await authService.logout();
-      navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
-  const loadAIInsights = async () => {
+  // Single loadAIInsights function with useCallback
+  const loadAIInsights = useCallback(async () => {
     try {
       setLoadingInsights(true);
       console.log('📊 Requesting AI insights with stats:', stats);
@@ -101,7 +81,28 @@ const DashboardPage = () => {
     } finally {
       setLoadingInsights(false);
     }
+  }, [stats]);
+
+  useEffect(() => {
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      navigate('/');
+      return;
+    }
+    setUser(currentUser);
+    loadAIInsights();
+  }, [navigate, loadAIInsights]);
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
+
+  
 
   const getPriorityColor = (priority) => {
     const colors = {
