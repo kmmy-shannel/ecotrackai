@@ -4,52 +4,92 @@ import authService from './auth.service';
 const API_URL = 'http://localhost:5000/api/alerts';
 
 class AlertService {
+  // Get authorization headers
   getAuthHeader() {
     const token = authService.getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  // Sync alerts from products
+  async syncAlerts() {
+    try {
+      const response = await axios.post(
+        `${API_URL}/sync`,
+        {},
+        { headers: this.getAuthHeader() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Sync alerts error:', error);
+      throw error;
+    }
+  }
+
+  // Get all alerts
   async getAllAlerts() {
-    const response = await axios.get(API_URL, {
-      headers: this.getAuthHeader()
-    });
-    return response.data;
+    try {
+      const response = await axios.get(API_URL, {
+        headers: this.getAuthHeader()
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Get alerts error:', error);
+      throw error;
+    }
   }
 
-  async getAlertsByRiskLevel(riskLevel) {
-    const response = await axios.get(`${API_URL}/risk/${riskLevel}`, {
-      headers: this.getAuthHeader()
-    });
-    return response.data;
-  }
-
+  // Get alert statistics
   async getAlertStats() {
-    const response = await axios.get(`${API_URL}/stats`, {
-      headers: this.getAuthHeader()
-    });
-    return response.data;
+    try {
+      const response = await axios.get(`${API_URL}/stats`, {
+        headers: this.getAuthHeader()
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Get stats error:', error);
+      throw error;
+    }
   }
 
-  async createAlert(alertData) {
-    const response = await axios.post(API_URL, alertData, {
-      headers: this.getAuthHeader()
-    });
-    return response.data;
+  // Get AI insights for an alert
+  async getAIInsights(alertId) {
+    try {
+      const response = await axios.get(`${API_URL}/${alertId}/insights`, {
+        headers: this.getAuthHeader()
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Get AI insights error:', error);
+      throw error;
+    }
   }
 
-  async updateAlertStatus(id, status) {
-    const response = await axios.patch(`${API_URL}/${id}/status`, 
-      { status },
-      { headers: this.getAuthHeader() }
-    );
-    return response.data;
+  // Update alert status
+  async updateAlertStatus(alertId, status) {
+    try {
+      const response = await axios.put(
+        `${API_URL}/${alertId}/status`,
+        { status },
+        { headers: this.getAuthHeader() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Update alert status error:', error);
+      throw error;
+    }
   }
 
-  async deleteAlert(id) {
-    const response = await axios.delete(`${API_URL}/${id}`, {
-      headers: this.getAuthHeader()
-    });
-    return response.data;
+  // Delete alert
+  async deleteAlert(alertId) {
+    try {
+      const response = await axios.delete(`${API_URL}/${alertId}`, {
+        headers: this.getAuthHeader()
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Delete alert error:', error);
+      throw error;
+    }
   }
 }
 

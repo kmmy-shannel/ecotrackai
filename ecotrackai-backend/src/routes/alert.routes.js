@@ -1,21 +1,35 @@
 const { Router } = require('express');
 const {
+  syncAlertsFromProducts,
   getAllAlerts,
-  getAlertsByRiskLevel,
-  createAlert,
-  updateAlertStatus,
+  getAlertStats,
   deleteAlert,
-  getAlertStats
+  updateAlertStatus,
+  getAIInsights
 } = require('../controllers/alert.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
 const router = Router();
 
-router.get('/', authenticate, getAllAlerts);
-router.get('/stats', authenticate, getAlertStats);
-router.get('/risk/:riskLevel', authenticate, getAlertsByRiskLevel);
-router.post('/', authenticate, createAlert);
-router.patch('/:id/status', authenticate, updateAlertStatus);
-router.delete('/:id', authenticate, deleteAlert);
+// All routes require authentication
+router.use(authenticate);
+
+// Sync alerts from products (call this when products are added/updated)
+router.post('/sync', syncAlertsFromProducts);
+
+// Get all alerts
+router.get('/', getAllAlerts);
+
+// Get alert statistics
+router.get('/stats', getAlertStats);
+
+// Get AI insights for specific alert
+router.get('/:id/insights', getAIInsights);
+
+// Update alert status
+router.put('/:id/status', updateAlertStatus);
+
+// Delete alert
+router.delete('/:id', deleteAlert);
 
 module.exports = router;
