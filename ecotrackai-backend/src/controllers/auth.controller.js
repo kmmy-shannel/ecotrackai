@@ -471,11 +471,11 @@ const login = async (req, res) => {
 
     console.log('✅ Password valid');
 
-    // Check if email is verified
-    if (!user.email_verified) {
-      console.log('⚠️ Email not verified');
-      return sendError(res, 403, 'Please verify your email before logging in. Check your inbox for the verification code.');
-    }
+    // ❌ REMOVE THIS ENTIRE BLOCK - No longer checking email verification for login
+    // if (!user.email_verified) {
+    //   console.log('⚠️ Email not verified');
+    //   return sendError(res, 403, 'Please verify your email before logging in. Check your inbox for the verification code.');
+    // }
 
     console.log('Generating token...');
     const token = generateToken({
@@ -512,7 +512,8 @@ const login = async (req, res) => {
         email: user.email,
         fullName: user.full_name,
         role: user.role,
-        businessName: user.business_name
+        businessName: user.business_name,
+        emailVerified: user.email_verified  // Still return the status for frontend reference
       },
       token
     });
@@ -526,6 +527,7 @@ const login = async (req, res) => {
     sendError(res, 500, 'Login failed', error.message);
   }
 };
+
 
 // Logout user
 const logout = async (req, res) => {
