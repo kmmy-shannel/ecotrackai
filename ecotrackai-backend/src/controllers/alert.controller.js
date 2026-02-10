@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response.utils');
+const aiService = require('../services/ai.service'); 
 
 /**
  * Calculate risk level based on days left and storage conditions
@@ -342,7 +343,7 @@ const updateAlertStatus = async (req, res) => {
 };
 
 /**
- * Get AI insights for an alert
+ * Get AI insights for an alert - NOW WITH REAL AI!
  */
 const getAIInsights = async (req, res) => {
   try {
@@ -362,8 +363,8 @@ const getAIInsights = async (req, res) => {
 
     const alert = rows[0];
 
-    // Generate AI insights based on alert data
-    const insights = generateAIInsights(alert);
+    // 🔥 NEW: Use real AI instead of rules!
+    const insights = await aiService.generateAlertInsights(alert);
 
     sendSuccess(res, 200, 'AI insights generated', insights);
 
@@ -371,69 +372,6 @@ const getAIInsights = async (req, res) => {
     console.error('Get AI insights error:', error);
     sendError(res, 500, 'Failed to generate insights', error.message);
   }
-};
-
-/**
- * Generate AI insights for an alert
- */
-const generateAIInsights = (alert) => {
-  const insights = {
-    recommendations: [],
-    priority_actions: [],
-    cost_impact: 0
-  };
-
-  // Base recommendations on risk level
-  if (alert.risk_level === 'HIGH') {
-    insights.recommendations = [
-      `Immediate delivery recommended - only ${alert.days_left} days remaining`,
-      'Consider promotional pricing to accelerate sales',
-      'Prioritize this product for next delivery batch',
-      'Monitor temperature closely - current conditions may accelerate spoilage'
-    ];
-    insights.priority_actions = [
-      'Immediate: Schedule delivery within 24-48 hours',
-      'Short-term: Verify storage temperature is optimal',
-      'Medium-term: Review supplier delivery schedules to reduce storage time'
-    ];
-    insights.cost_impact = (parseFloat(alert.value || 0) * 0.8).toFixed(2);
-  } else if (alert.risk_level === 'MEDIUM') {
-    insights.recommendations = [
-      'Schedule delivery within the next 5-7 days',
-      'Monitor storage conditions daily',
-      'Consider bundling with faster-moving products',
-      'Check if temperature/humidity are within optimal range'
-    ];
-    insights.priority_actions = [
-      'Short-term: Plan delivery route to include this product',
-      'Medium-term: Optimize storage conditions',
-      'Long-term: Adjust ordering quantities based on demand patterns'
-    ];
-    insights.cost_impact = (parseFloat(alert.value || 0) * 0.5).toFixed(2);
-  } else {
-    insights.recommendations = [
-      'Continue regular monitoring',
-      'Product condition is stable',
-      'Maintain current storage conditions',
-      'No immediate action required'
-    ];
-    insights.priority_actions = [
-      'Regular: Continue standard monitoring procedures',
-      'Long-term: Track shelf life patterns for future planning'
-    ];
-    insights.cost_impact = (parseFloat(alert.value || 0) * 0.1).toFixed(2);
-  }
-
-  // Add temperature-specific recommendations
-  if (alert.temperature > 25) {
-    insights.recommendations.push('Temperature is elevated - consider moving to cooler storage');
-  }
-
-  if (alert.humidity < 50) {
-    insights.recommendations.push('Humidity is low - product may dehydrate faster');
-  }
-
-  return insights;
 };
 
 module.exports = {

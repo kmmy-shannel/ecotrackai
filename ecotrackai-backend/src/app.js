@@ -6,6 +6,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth.routes');
 const managerRoutes = require('./routes/manager.routes');
 const productRoutes = require('./routes/product.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
 const app = express();
 
 // Security middleware
@@ -27,6 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/managers', managerRoutes); 
 app.use('/api/products',productRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 console.log('\nRegistered API Routes:');
 console.log('/api/auth');

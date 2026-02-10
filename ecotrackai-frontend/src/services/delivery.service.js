@@ -1,4 +1,5 @@
 import axios from 'axios';
+import routingService from './routing.service'; 
 
 const API_URL = 'http://localhost:5000/api/deliveries';
 
@@ -84,12 +85,30 @@ class DeliveryService {
 
   async optimizeRoute(deliveryId) {
     try {
-      console.log('🤖 Optimizing route for delivery:', deliveryId);
+      console.log('Optimizing route for delivery:', deliveryId);
       const response = await axios.post(
         `${API_URL}/${deliveryId}/optimize`,
         {},
         { headers: getAuthHeader() }
       );
+       if (response.data.success) {
+      const result = response.data.data;
+      
+      // Get coordinates for original route
+      const originalCoords = result.originalRoute.stops.map(s => [s.lng, s.lat]);
+      const originalRouteGeometry = await routingService.getRoute(originalCoords);
+      
+      // Get coordinates for optimized route
+      const optimizedCoords = result.optimizedRoute.stops.map(s => [s.lng, s.lat]);
+      const optimizedRouteGeometry = await routingService.getRoute(optimizedCoords);
+      
+      // Add geometry to response
+      result.originalRoute.routeGeometry = originalRouteGeometry.geometry;
+      result.optimizedRoute.routeGeometry = optimizedRouteGeometry.geometry;
+      
+      console.log('✅ Route optimization complete with geometry');
+      return response.data;
+    }
       return response.data;
     } catch (error) {
       console.error('Optimize route error:', error);

@@ -1,11 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
+const { sendSuccess, sendError } = require('../utils/response.utils');
+const aiService = require('../services/ai.service');
 const axios = require('axios');
 
 const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
 
-// AI Spoilage Analysis
+/**
+ * Get dashboard insights from AI
+ * POST /api/ai/dashboard-insights
+ */
+router.post('/dashboard-insights', authenticate, async (req, res) => {
+  try {
+    console.log('📊 Dashboard insights request received');
+    const { stats } = req.body;
+
+    if (!stats) {
+      return sendError(res, 400, 'Stats data is required');
+    }
+
+    // Generate AI insights using the AI service
+    const insights = await aiService.generateDashboardInsights(stats);
+
+    sendSuccess(res, 200, 'Dashboard insights generated successfully', insights);
+
+  } catch (error) {
+    console.error('❌ Dashboard insights error:', error);
+    sendError(res, 500, 'Failed to generate dashboard insights', error.message);
+  }
+});
+
+/**
+ * AI Spoilage Analysis
+ * POST /api/ai/analyze-spoilage
+ */
 router.post('/analyze-spoilage', authenticate, async (req, res) => {
   try {
     const { product, storageData } = req.body;
@@ -108,6 +137,41 @@ Return ONLY valid JSON (no markdown):
       message: 'Failed to analyze spoilage risk',
       error: error.message
     });
+  }
+});
+
+/**
+ * Get route optimization suggestions
+ * POST /api/ai/route-optimization
+ */
+router.post('/route-optimization', authenticate, async (req, res) => {
+  try {
+    console.log('🚚 Route optimization request received');
+    const { routeData } = req.body;
+
+    if (!routeData) {
+      return sendError(res, 400, 'Route data is required');
+    }
+
+    // TODO: Implement route optimization AI
+    // For now, return a fallback
+    sendSuccess(res, 200, 'Route optimization generated successfully', {
+      optimizedRoute: [],
+      savings: {
+        distance: '15km',
+        fuel: '₱500',
+        time: '30 minutes'
+      },
+      recommendations: [
+        'Consolidate deliveries to northern region',
+        'Avoid peak traffic hours (8-10 AM)',
+        'Use alternative route via Highway 5'
+      ]
+    });
+
+  } catch (error) {
+    console.error('❌ Route optimization error:', error);
+    sendError(res, 500, 'Failed to generate route optimization', error.message);
   }
 });
 

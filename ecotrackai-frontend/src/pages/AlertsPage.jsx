@@ -171,7 +171,7 @@ const AlertsPage = () => {
           <div className="bg-white rounded-xl p-6 text-center min-h-[100px] flex items-center justify-center">
             {stats.high_risk > 0 ? (
               <div className="text-left w-full">
-                <p className="text-red-600 font-semibold mb-2">⚠️ Urgent Action Required</p>
+                <p className="text-red-600 font-semibold mb-2">Urgent Action Required</p>
                 <p className="text-gray-700 text-sm">
                   You have {stats.high_risk} high-risk product{stats.high_risk > 1 ? 's' : ''} requiring immediate attention.
                   Click "Get AI insights" to view recommendations.

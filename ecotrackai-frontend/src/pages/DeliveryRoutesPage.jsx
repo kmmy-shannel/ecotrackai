@@ -7,6 +7,7 @@ import Layout from '../components/Layout';
 import authService from '../services/auth.service';
 import deliveryService from '../services/delivery.service';
 import PlanNewDeliveryModal from '../components/PlanNewDeliveryModal';
+import { GeoJSON } from 'react-leaflet';
 import { 
   Plus, Search, Trash2, MapPin, Navigation, 
   Sparkles, TrendingDown, Clock, Fuel, Leaf,
@@ -478,7 +479,7 @@ const RouteVisualizationMap = ({ originalRoute, optimizedRoute }) => {
   const allStops = originalRoute.stops || [];
   const bounds = allStops.length > 0 
     ? allStops.map(stop => [stop.lat, stop.lng])
-    : [[15.8949, 120.2863]]; // Default to Pangasinan
+    : [[14.5995, 120.9842]];
 
   const getMarkerIcon = (type) => {
     if (type === 'origin') return originIcon;
@@ -531,28 +532,32 @@ const RouteVisualizationMap = ({ originalRoute, optimizedRoute }) => {
           maxZoom={20}
         />
 
-        {/* Original Route Line (dashed blue) */}
-        {originalRoute.stops?.length > 1 && (
-          <Polyline
-            positions={originalRoute.stops.map(s => [s.lat, s.lng])}
-            color="#3b82f6"
-            weight={3}
-            opacity={0.6}
-            dashArray="10, 10"
+       {/* ✅ UPDATED: Original Route - Real Road Geometry */}
+        {originalRoute.routeGeometry && (
+          <GeoJSON
+            data={originalRoute.routeGeometry}
+            style={{
+              color: '#3b82f6',
+              weight: 3,
+              opacity: 0.6,
+              dashArray: '10, 10'
+            }}
           />
         )}
 
-        {/* Optimized Route Line (solid green) */}
-        {optimizedRoute.stops?.length > 1 && (
-          <Polyline
-            positions={optimizedRoute.stops.map(s => [s.lat, s.lng])}
-            color="#10b981"
-            weight={4}
-            opacity={0.8}
+        {/* ✅ UPDATED: Optimized Route - Real Road Geometry */}
+        {optimizedRoute.routeGeometry && (
+          <GeoJSON
+            data={optimizedRoute.routeGeometry}
+            style={{
+              color: '#10b981',
+              weight: 4,
+              opacity: 0.8
+            }}
           />
         )}
 
-        {/* Markers for all stops */}
+        {/* Markers */}
         {allStops.map((stop, index) => (
           <Marker
             key={index}
