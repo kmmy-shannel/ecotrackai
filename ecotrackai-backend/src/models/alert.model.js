@@ -23,9 +23,9 @@ class Alert {
 
     try {
       await pool.query(query);
-      console.log('✅ Alerts table created/verified');
+      console.log('Alerts table created/verified');
     } catch (error) {
-      console.error('❌ Error creating alerts table:', error);
+      console.error(' Error creating alerts table:', error);
       throw error;
     }
   }

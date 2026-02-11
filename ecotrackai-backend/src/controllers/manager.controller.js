@@ -41,11 +41,11 @@ const getManagers = async (req, res) => {
 // Create new manager account
 const createManager = async (req, res) => {
   try {
-    console.log('========================================');
-    console.log('👤 CREATING MANAGER ACCOUNT');
+    
+    console.log('CREATING MANAGER ACCOUNT');
     console.log('Request by admin:', req.user.userId);
     console.log('Request data:', req.body);
-    console.log('========================================');
+    
 
     if (!req.user) {
       return sendError(res, 401, 'Not authenticated');
@@ -79,7 +79,7 @@ const createManager = async (req, res) => {
     }
 
     // Check if user already exists
-    console.log('🔍 Checking for existing user...');
+    console.log('Checking for existing user...');
     const userCheck = await pool.query(
       'SELECT user_id FROM users WHERE email = $1 OR username = $2',
       [email, username]
@@ -91,11 +91,11 @@ const createManager = async (req, res) => {
     }
 
     // Hash password
-    console.log('🔐 Hashing password...');
+    console.log('Hashing password...');
     const hashedPassword = await hashPassword(password);
 
     // Create manager account
-    console.log('👤 Creating manager account...');
+    console.log('Creating manager account...');
     const userQuery = `
       INSERT INTO users 
       (business_id, username, email, password_hash, full_name, role, is_active)

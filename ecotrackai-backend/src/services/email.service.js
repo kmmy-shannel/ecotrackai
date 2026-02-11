@@ -9,8 +9,8 @@ const nodemailer = require('nodemailer');
 const createTransporter = () => {
   // Validate environment variables
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    console.warn('⚠️ EMAIL_USER or EMAIL_PASSWORD not configured in .env');
-    console.warn('⚠️ Email functionality will not work until configured');
+    console.warn('EMAIL_USER or EMAIL_PASSWORD not configured in .env');
+    console.warn('Email functionality will not work until configured');
   }
 
   return nodemailer.createTransport({
@@ -37,12 +37,11 @@ const sendVerificationEmail = async (email, otp, name) => {
       
       // For development: log OTP to console instead of sending email
       console.log('');
-      console.log('========================================');
-      console.log('📧 VERIFICATION EMAIL (Development Mode)');
+     
+      console.log('VERIFICATION EMAIL (Development Mode)');
       console.log('To:', email);
       console.log('Name:', name);
       console.log('OTP Code:', otp);
-      console.log('========================================');
       console.log('');
       
       return { messageId: 'dev-mode-no-email' };
@@ -133,22 +132,21 @@ const sendVerificationEmail = async (email, otp, name) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Verification email sent:', info.messageId);
+    console.log('Verification email sent:', info.messageId);
     return info;
 
   } catch (error) {
-    console.error('❌ Error sending verification email:', error);
+    console.error('Error sending verification email:', error);
     
     // For development: still log the OTP even if email fails
     console.log('');
     console.log('========================================');
-    console.log('📧 EMAIL FAILED - OTP FOR DEVELOPMENT');
+    console.log('EMAIL FAILED - OTP FOR DEVELOPMENT');
     console.log('To:', email);
     console.log('Name:', name);
     console.log('OTP Code:', otp);
     console.log('Error:', error.message);
-    console.log('========================================');
-    console.log('');
+
     
     throw new Error('Failed to send verification email');
   }
@@ -166,14 +164,13 @@ const sendPasswordResetEmail = async (email, resetToken, name) => {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
       const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
       
-      console.warn('⚠️ Email not configured');
+      console.warn('Email not configured');
       console.log('');
-      console.log('========================================');
-      console.log('📧 PASSWORD RESET EMAIL (Development Mode)');
+      
+      console.log('PASSWORD RESET EMAIL (Development Mode)');
       console.log('To:', email);
       console.log('Name:', name);
       console.log('Reset Link:', resetUrl);
-      console.log('========================================');
       console.log('');
       
       return { messageId: 'dev-mode-no-email' };
@@ -282,22 +279,20 @@ const sendPasswordResetEmail = async (email, resetToken, name) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Password reset email sent:', info.messageId);
+    console.log('Password reset email sent:', info.messageId);
     return info;
 
   } catch (error) {
-    console.error('❌ Error sending password reset email:', error);
+    console.error('Error sending password reset email:', error);
     
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
     console.log('');
-    console.log('========================================');
     console.log('📧 EMAIL FAILED - RESET LINK FOR DEVELOPMENT');
     console.log('To:', email);
     console.log('Name:', name);
     console.log('Reset Link:', resetUrl);
     console.log('Error:', error.message);
-    console.log('========================================');
-    console.log('');
+  
     
     throw new Error('Failed to send password reset email');
   }

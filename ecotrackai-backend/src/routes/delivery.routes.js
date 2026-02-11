@@ -82,7 +82,7 @@ let nextId = 3;
 // Get all deliveries
 router.get('/', authenticate, async (req, res) => {
   try {
-    console.log('📦 Fetching deliveries for user:', req.user.userId);
+    console.log('Fetching deliveries for user:', req.user.userId);
     
     res.json({
       success: true,
@@ -128,7 +128,7 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const { deliveryDate, driver, vehicleType, estimatedLoad, stops } = req.body;
     
-    console.log('📦 Creating new delivery:', { deliveryDate, driver, vehicleType });
+    console.log('Creating new delivery:', { deliveryDate, driver, vehicleType });
     
     // Calculate estimated metrics
     const totalDistance = stops.length * 15;
@@ -172,7 +172,7 @@ router.delete('/:id', authenticate, async (req, res) => {
   try {
     const deliveryId = parseInt(req.params.id);
     
-    console.log('🗑️ Deleting delivery:', deliveryId);
+    console.log('Deleting delivery:', deliveryId);
     
     const index = deliveries.findIndex(d => d.id === deliveryId);
     
@@ -211,7 +211,7 @@ router.post('/:id/optimize', authenticate, async (req, res) => {
       });
     }
     
-    console.log('🤖 Optimizing route with AI service for:', delivery.deliveryCode);
+    console.log('Optimizing route with AI service for:', delivery.deliveryCode);
     
     // Use the centralized AI service (same as alerts and dashboard)
     const aiOptimization = await aiService.optimizeDeliveryRoute(delivery);

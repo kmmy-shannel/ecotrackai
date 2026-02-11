@@ -4,14 +4,14 @@ const { sendSuccess, sendError } = require('../utils/response.utils');
 // Get all products for current business
 const getProducts = async (req, res) => {
   try {
-    console.log('========================================');
-    console.log('🔥 GET PRODUCTS ENDPOINT HIT!');
+  
+    console.log('GET PRODUCTS ENDPOINT HIT!');
     console.log('User:', req.user);
     console.log('Query params:', req.query);
-    console.log('========================================');
+   
 
     if (!req.user) {
-      console.log('❌ No user found in request');
+      console.log('No user found in request');
       return sendError(res, 401, 'Not authenticated');
     }
 
@@ -53,9 +53,9 @@ const getProducts = async (req, res) => {
     const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
     query += ` ORDER BY p.${sortField} ${order}`;
 
-    console.log('📊 Executing query for businessId:', req.user.businessId);
+    console.log('Executing query for businessId:', req.user.businessId);
     const { rows } = await pool.query(query, params);
-    console.log('✅ Found products:', rows.length);
+    console.log('Found products:', rows.length);
 
     sendSuccess(res, 200, 'Products retrieved successfully', {
       count: rows.length,
@@ -63,10 +63,10 @@ const getProducts = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('========================================');
+
     console.error('GET PRODUCTS ERROR');
     console.error('Error:', error);
-    console.error('========================================');
+  
     sendError(res, 500, 'Failed to retrieve products', error.message);
   }
 };
@@ -110,11 +110,11 @@ const getProductById = async (req, res) => {
 const createProduct = async (req, res) => {
   const imageUrl = req.file ? req.file.path : null;
   try {
-    console.log('========================================');
+
     console.log('CREATING PRODUCT');
     console.log('Request by user:', req.user.userId);
     console.log('Request data:', req.body);
-    console.log('========================================');
+
 
     if (!req.user) {
       return sendError(res, 401, 'Not authenticated');
@@ -172,17 +172,17 @@ const createProduct = async (req, res) => {
   unitOfMeasure || 'units'   // $11
 ]);
     const newProduct = result.rows[0];
-    console.log('✅ Product created with ID:', newProduct.product_id);
+    console.log('Product created with ID:', newProduct.product_id);
 
     sendSuccess(res, 201, 'Product created successfully', {
       product: newProduct
     });
 
   } catch (error) {
-    console.error('========================================');
-    console.error('❌ CREATE PRODUCT ERROR');
+
+    console.error('CREATE PRODUCT ERROR');
     console.error('Error:', error);
-    console.error('========================================');
+   
     sendError(res, 500, 'Failed to create product', error.message);
   }
 };

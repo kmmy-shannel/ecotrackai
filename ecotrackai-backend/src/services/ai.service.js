@@ -37,7 +37,7 @@ Respond ONLY with this JSON (no other text):
   "cost_impact": "3200.00"
 }`;
 
-      console.log('🤖 Calling Ollama for alert insights...');
+      console.log('Calling Ollama for alert insights...');
       
       const response = await axios.post(OLLAMA_API_URL, {
         model: OLLAMA_MODEL,
@@ -54,15 +54,15 @@ Respond ONLY with this JSON (no other text):
         timeout: 60000
       });
 
-      console.log('📝 Raw Ollama response:', response.data.response?.substring(0, 200));
+      console.log('Raw Ollama response:', response.data.response?.substring(0, 200));
       
       return this.parseOllamaResponse(response.data.response, () => this.getFallbackAlertInsights(alertData));
       
     } catch (error) {
-      console.error('🤖 Ollama AI Service Error:', error.message);
+      console.error('Ollama AI Service Error:', error.message);
       
       if (error.code === 'ECONNREFUSED') {
-        console.warn('⚠️ Ollama not running. Using fallback.');
+        console.warn('Ollama not running. Using fallback.');
       }
       
       return this.getFallbackAlertInsights(alertData);
@@ -187,7 +187,7 @@ Respond ONLY with this JSON:
   ]
 }`;
 
-      console.log('🤖 Calling Ollama for route optimization...');
+      console.log('Calling Ollama for route optimization...');
       
       const response = await axios.post(OLLAMA_API_URL, {
         model: OLLAMA_MODEL,
@@ -204,12 +204,12 @@ Respond ONLY with this JSON:
         timeout: 60000
       });
 
-      console.log('📝 Raw route optimization response:', response.data.response?.substring(0, 200));
+      console.log('Raw route optimization response:', response.data.response?.substring(0, 200));
       
       return this.parseOllamaResponse(response.data.response, () => this.getFallbackRouteOptimization(delivery));
       
     } catch (error) {
-      console.error('🤖 Route Optimization AI Error:', error.message);
+      console.error('Route Optimization AI Error:', error.message);
       return this.getFallbackRouteOptimization(delivery);
     }
   }
@@ -220,7 +220,7 @@ Respond ONLY with this JSON:
   parseOllamaResponse(responseText, fallbackFn) {
     try {
       if (!responseText) {
-        console.warn('⚠️ Empty response from Ollama');
+        console.warn('Empty response from Ollama');
         return fallbackFn();
       }
 
@@ -240,7 +240,7 @@ Respond ONLY with this JSON:
       }
       
       const parsed = JSON.parse(cleanText);
-      console.log('✅ Ollama response parsed successfully');
+      console.log('Ollama response parsed successfully');
       return parsed;
       
     } catch (parseError) {
@@ -255,7 +255,7 @@ Respond ONLY with this JSON:
    * Fallback insights for alerts (rule-based)
    */
   getFallbackAlertInsights(alertData) {
-    console.log('📝 Using fallback alert insights');
+    console.log('Using fallback alert insights');
     
     const daysLeft = alertData.days_left || 0;
     const riskLevel = alertData.risk_level;
@@ -318,7 +318,7 @@ Respond ONLY with this JSON:
    * Fallback insights for dashboard (rule-based)
    */
   getFallbackDashboardInsights(stats) {
-    console.log('📝 Using fallback dashboard insights');
+    console.log('Using fallback dashboard insights');
     
     const urgentRecommendations = [];
     
@@ -387,7 +387,7 @@ Respond ONLY with this JSON:
    * Fallback route optimization (rule-based)
    */
   getFallbackRouteOptimization(delivery) {
-    console.log('📝 Using fallback route optimization');
+    console.log('Using fallback route optimization');
     
     // Simple 15-20% improvement estimate
     const improvementFactor = 0.15;

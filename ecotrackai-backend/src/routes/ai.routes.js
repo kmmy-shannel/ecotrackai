@@ -13,7 +13,7 @@ const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
  */
 router.post('/dashboard-insights', authenticate, async (req, res) => {
   try {
-    console.log('📊 Dashboard insights request received');
+    console.log('Dashboard insights request received');
     const { stats } = req.body;
 
     if (!stats) {
@@ -26,7 +26,7 @@ router.post('/dashboard-insights', authenticate, async (req, res) => {
     sendSuccess(res, 200, 'Dashboard insights generated successfully', insights);
 
   } catch (error) {
-    console.error('❌ Dashboard insights error:', error);
+    console.error('Dashboard insights error:', error);
     sendError(res, 500, 'Failed to generate dashboard insights', error.message);
   }
 });
@@ -170,7 +170,7 @@ router.post('/route-optimization', authenticate, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Route optimization error:', error);
+    console.error('Route optimization error:', error);
     sendError(res, 500, 'Failed to generate route optimization', error.message);
   }
 });

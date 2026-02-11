@@ -8,11 +8,11 @@ const getAuthHeader = () => {
   const token = localStorage.getItem('token'); // Get token directly
   
   if (!token) {
-    console.error('❌ No token found in localStorage');
+    console.error('No token found in localStorage');
     return {};
   }
   
-  console.log('✅ Token found, adding to headers');
+  console.log('Token found, adding to headers');
   return {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
@@ -22,7 +22,7 @@ const getAuthHeader = () => {
 class DeliveryService {
   async getAllDeliveries() {
     try {
-      console.log('📡 Fetching deliveries...');
+      console.log('Fetching deliveries...');
       const headers = getAuthHeader();
       console.log('Headers:', headers);
       
@@ -48,7 +48,7 @@ class DeliveryService {
 
   async createDelivery(deliveryData) {
     try {
-      console.log('📦 Creating delivery...', deliveryData);
+      console.log('Creating delivery...', deliveryData);
       const response = await axios.post(API_URL, deliveryData, {
         headers: getAuthHeader()
       });
@@ -106,7 +106,7 @@ class DeliveryService {
       result.originalRoute.routeGeometry = originalRouteGeometry.geometry;
       result.optimizedRoute.routeGeometry = optimizedRouteGeometry.geometry;
       
-      console.log('✅ Route optimization complete with geometry');
+      console.log('Route optimization complete with geometry');
       return response.data;
     }
       return response.data;
@@ -118,7 +118,7 @@ class DeliveryService {
 
   async applyOptimization(deliveryId, optimizedRoute) {
     try {
-      console.log('💾 Applying optimization...');
+      console.log('Applying optimization...');
       const response = await axios.put(
         `${API_URL}/${deliveryId}/apply-optimization`,
         { optimizedRoute },

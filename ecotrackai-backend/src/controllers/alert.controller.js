@@ -363,7 +363,7 @@ const getAIInsights = async (req, res) => {
 
     const alert = rows[0];
 
-    // 🔥 NEW: Use real AI instead of rules!
+    // AI 
     const insights = await aiService.generateAlertInsights(alert);
 
     sendSuccess(res, 200, 'AI insights generated', insights);

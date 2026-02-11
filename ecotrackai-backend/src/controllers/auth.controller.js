@@ -306,7 +306,7 @@ const verifyOTP = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Verify OTP error:', error);
+    console.error('Verify OTP error:', error);
     sendError(res, 500, 'Verification failed', error.message);
   }
 };
@@ -314,7 +314,7 @@ const verifyOTP = async (req, res) => {
 // NEW: Forgot Password
 const forgotPassword = async (req, res) => {
   try {
-    console.log('🔑 FORGOT PASSWORD REQUEST');
+    console.log('FORGOT PASSWORD REQUEST');
     const { email } = req.body;
 
     if (!email) {
@@ -353,12 +353,12 @@ const forgotPassword = async (req, res) => {
     // Send reset email
     await emailService.sendPasswordResetEmail(email, resetToken, user.full_name || user.username);
 
-    console.log('✅ Password reset email sent to:', email);
+    console.log('Password reset email sent to:', email);
 
     sendSuccess(res, 200, 'If an account with that email exists, a password reset link has been sent.');
 
   } catch (error) {
-    console.error('❌ Forgot password error:', error);
+    console.error('Forgot password error:', error);
     sendError(res, 500, 'Failed to process password reset request', error.message);
   }
 };
@@ -366,7 +366,7 @@ const forgotPassword = async (req, res) => {
 // NEW: Reset Password
 const resetPassword = async (req, res) => {
   try {
-    console.log('🔐 RESET PASSWORD REQUEST');
+    console.log('RESET PASSWORD REQUEST');
     const { token } = req.params;
     const { password } = req.body;
 
@@ -418,12 +418,12 @@ const resetPassword = async (req, res) => {
       [user.user_id]
     );
 
-    console.log('✅ Password reset successful for:', user.email);
+    console.log('Password reset successful for:', user.email);
 
     sendSuccess(res, 200, 'Password reset successful. Please login with your new password.');
 
   } catch (error) {
-    console.error('❌ Reset password error:', error);
+    console.error('Reset password error:', error);
     sendError(res, 500, 'Failed to reset password', error.message);
   }
 };
@@ -431,15 +431,13 @@ const resetPassword = async (req, res) => {
 // Login user (UPDATED to check email verification)
 const login = async (req, res) => {
   try {
-    console.log('========================================');
-    console.log('🔐 LOGIN ATTEMPT');
+    console.log('LOGIN ATTEMPT');
     console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    console.log('========================================');
 
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log('❌ Missing email or password');
+      console.log('Missing email or password');
       return sendError(res, 400, 'Please provide email and password');
     }
 
@@ -454,36 +452,31 @@ const login = async (req, res) => {
     const { rows } = await pool.query(query, [email]);
 
     if (rows.length === 0) {
-      console.log('❌ User not found or inactive');
+      console.log('User not found or inactive');
       return sendError(res, 401, 'Invalid credentials');
     }
 
     const user = rows[0];
-    console.log('✅ User found:', user.username);
+    console.log('User found:', user.username);
 
     console.log('Verifying password...');
     const isPasswordValid = await comparePassword(password, user.password_hash);
 
     if (!isPasswordValid) {
-      console.log('❌ Invalid password');
+      console.log('Invalid password');
       return sendError(res, 401, 'Invalid credentials');
     }
 
-    console.log('✅ Password valid');
+    console.log('Password valid');
 
-    // ❌ REMOVE THIS ENTIRE BLOCK - No longer checking email verification for login
-    // if (!user.email_verified) {
-    //   console.log('⚠️ Email not verified');
-    //   return sendError(res, 403, 'Please verify your email before logging in. Check your inbox for the verification code.');
-    // }
-
+   
     console.log('Generating token...');
     const token = generateToken({
       userId: user.user_id,
       businessId: user.business_id,
       role: user.role
     });
-    console.log('✅ Token generated');
+    console.log('Token generated');
 
     console.log('Creating session...');
     const expiresAt = new Date();
@@ -494,7 +487,7 @@ const login = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [user.user_id, token, expiresAt, req.ip, req.get('user-agent')]
     );
-    console.log('✅ Session created');
+    console.log('Session created');
 
     console.log('Updating last login...');
     await pool.query(
@@ -502,7 +495,7 @@ const login = async (req, res) => {
       [user.user_id]
     );
 
-    console.log('✅ LOGIN SUCCESSFUL');
+    console.log('LOGIN SUCCESSFUL');
 
     sendSuccess(res, 200, 'Login successful', {
       user: {
@@ -519,11 +512,10 @@ const login = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('========================================');
-    console.error('❌ LOGIN ERROR');
+   
+    console.error('LOGIN ERROR');
     console.error('Error Message:', error.message);
     console.error('Error Stack:', error.stack);
-    console.error('========================================');
     sendError(res, 500, 'Login failed', error.message);
   }
 };
