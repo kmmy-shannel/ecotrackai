@@ -1,12 +1,20 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  connectionString: isProduction
+    ? process.env.DATABASE_URL   // ✅ Used on Render
+    : undefined,
+  host: !isProduction ? process.env.DB_HOST : undefined,
+  port: !isProduction ? parseInt(process.env.DB_PORT || '5432') : undefined,
+  database: !isProduction ? process.env.DB_NAME : undefined,
+  user: !isProduction ? process.env.DB_USER : undefined,
+  password: !isProduction ? process.env.DB_PASSWORD : undefined,
+  ssl: isProduction
+    ? { rejectUnauthorized: false }   // ✅ REQUIRED for Neon
+    : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
