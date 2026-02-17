@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Truck, AlertTriangle, 
-  Leaf, Users, DollarSign, Wrench, Award, FileText,
+  Leaf, Users, Brain, Award, // Changed Wrench to Brain
   Settings, LogOut
 } from 'lucide-react';
 import authService from '../services/auth.service';
@@ -27,10 +27,8 @@ const Layout = ({ children, currentPage, user }) => {
     { icon: AlertTriangle, label: 'Alerts', path: '/alerts' },
     { icon: Leaf, label: 'Carbon', path: '/carbon' },
     { icon: Users, label: 'Managers', path: '/managers' },
-    { icon: DollarSign, label: 'Profit', path: '/profit' },
-    { icon: Wrench, label: 'AI Tools', path: '/ai-tools' },
+    { icon: Brain, label: 'AI Tools', path: '/ai-tools' }, // Changed from Wrench to Brain
     { icon: Award, label: 'EcoScore', path: '/ecoscore' },
-    { icon: FileText, label: 'Reports', path: '/reports' },
   ];
 
   return (
@@ -39,15 +37,15 @@ const Layout = ({ children, currentPage, user }) => {
       <aside className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col shadow-sm">
         {/* Logo */}
         <div className="flex items-center gap-3 mb-10">
-  <img 
-    src="/logo.jpg" 
-    alt="EcoTrackAI Logo" 
-    className="w-10 h-10 rounded-xl shadow-md object-cover"
-  />
-  <h1 className="text-lg font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-    ECO-TRACKAI
-  </h1>
-</div>
+          <img 
+            src="/logo.jpg" 
+            alt="EcoTrackAI Logo" 
+            className="w-10 h-10 rounded-xl shadow-md object-cover"
+          />
+          <h1 className="text-lg font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            ECO-TRACKAI
+          </h1>
+        </div>
 
         {/* Menu Label */}
         <p className="text-xs text-gray-500 font-semibold mb-4 uppercase tracking-wider">Menu</p>

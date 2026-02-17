@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../components/Layout';
-import authService from '../services/auth.service';
+import Layout from '../../components/Layout';
+import authService from '../../services/auth.service';
 import { 
   Award,
   Star,

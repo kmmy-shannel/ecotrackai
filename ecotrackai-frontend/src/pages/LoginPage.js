@@ -37,22 +37,36 @@ const LoginPage = () => {
         password: formData.password
       });
       console.log('✅ FRONTEND: Login successful:', result);
-      navigate('/dashboard');
+
+      // ✅ ONLY CHANGE IS HERE - role-based redirect
+      const roleRoutes = {
+        admin: '/dashboard',
+        inventory_manager: '/manager/inventory',
+        logistics_manager: '/manager/logistics',
+        sustainability_manager: '/manager/sustainability',
+        finance_manager: '/manager/finance'
+      };
+
+      const userRole = result.user?.role || result.role || 'admin';
+      const redirectPath = roleRoutes[userRole] || '/dashboard';
+
+      console.log('👤 User role:', userRole);
+      console.log('🔀 Redirecting to:', redirectPath);
+
+      navigate(redirectPath);
+
     } catch (err) {
       console.error('❌ FRONTEND: Login error:', err);
       console.error('Error response:', err.response);
       console.error('Error data:', err.response?.data);
       
-      // Log the actual validation errors
       if (err.response?.data?.error) {
         console.error('🚨 VALIDATION ERRORS:', err.response.data.error);
       }
       
-      // Display detailed error messages
       let errorMessage = 'Login failed. Please try again.';
       
       if (err.response?.data?.error && Array.isArray(err.response.data.error)) {
-        // If errors is an array, join them
         errorMessage = err.response.data.error.join(', ');
       } else if (err.response?.data?.message) {
         errorMessage = err.response.data.message;
@@ -159,7 +173,6 @@ const LoginPage = () => {
         {/* Right Side - Image Placeholder */}
         <div className="hidden lg:block lg:w-1/2 bg-gray-200 relative">
           <div className="absolute inset-0 flex items-center justify-center">
-            {/* X pattern like in your design */}
             <svg className="w-full h-full" viewBox="0 0 400 400">
               <line x1="0" y1="0" x2="400" y2="400" stroke="#999" strokeWidth="1" />
               <line x1="400" y1="0" x2="0" y2="400" stroke="#999" strokeWidth="1" />

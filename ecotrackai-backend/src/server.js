@@ -11,6 +11,7 @@ const deliveryRoutes = require('./routes/delivery.routes');
 const alertRoutes = require('./routes/alert.routes');
 const indexRoutes = require('./routes/index');
 const carbonRoutes = require('./routes/carbon.routes');
+const approvalRoutes = require('./routes/approval.routes');
 const app = express();
 
 // Security
@@ -37,6 +38,7 @@ app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api', indexRoutes);  
 app.use('/api/carbon', carbonRoutes);
+app.use('/api/approvals', approvalRoutes);
 
 console.log('\nRegistered API Routes:');
 console.log('   /api/auth');

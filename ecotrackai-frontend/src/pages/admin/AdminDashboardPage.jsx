@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../services/auth.service';
-import aiService from '../services/ai.service';
-import Navigation from '../components/Navigation';
-import ManagerManagement from '../components/ManagerManagement';
+import authService from '../../services/auth.service';
+import aiService from '../../services/ai.service';
+import Navigation from '../../components/Navigation';
+import ManagerManagement from '../../components/admin/ManagerManagement';
 import { 
   TrendingUp, ChevronRight, Check,
   Users, Sparkles, Clock, AlertCircle, Package, Truck, AlertTriangle, DollarSign, Map
@@ -30,13 +30,13 @@ const DashboardPage = () => {
       console.log('Requesting AI insights with stats:', stats);
       
       const response = await aiService.getDashboardInsights(stats);
-      console.log('✅ AI insights received:', response);
+      console.log('AI insights received:', response);
       
       if (response.success) {
         setAiInsights(response.data);
       }
     } catch (error) {
-      console.error('❌ Failed to load AI insights:', error);
+      console.error('Failed to load AI insights:', error);
       // Set fallback data for demo purposes
       setAiInsights({
         urgentRecommendations: [

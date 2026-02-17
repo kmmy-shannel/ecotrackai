@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../components/Layout';
-import authService from '../services/auth.service';
-import alertService from '../services/alert.service';
+import Layout from '../../components/Layout';
+import authService from '../../services/auth.service';
+import alertService from '../../services/alert.service';
 import { Search, Sparkles, Trash2, X, TrendingDown, Package, Clock } from 'lucide-react';
 
 const AlertsPage = () => {

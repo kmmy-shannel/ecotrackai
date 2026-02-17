@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../components/Layout';
-import authService from '../services/auth.service';
-import productService from '../services/product.service';
-import AddProductModal from '../components/AddProductModal';
+import Layout from '../../components/Layout';
+import authService from '../../services/auth.service';
+import productService from '../../services/product.service';
+import AddProductModal from '../../components/AddProductModal';
 import { Plus, Search, Trash2, Package } from 'lucide-react'; // Removed Sparkles
 
 const ProductsPage = () => {
