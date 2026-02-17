@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import Layout from '../components/Layout';
-import authService from '../services/auth.service';
-import deliveryService from '../services/delivery.service';
-import PlanNewDeliveryModal from '../components/PlanNewDeliveryModal';
+import Layout from '../../components/Layout';
+import authService from '../../services/auth.service';
+import deliveryService from '../../services/delivery.service';
+import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
 import { GeoJSON } from 'react-leaflet';
 import { 
   Plus, Search, Trash2, MapPin, Navigation, 

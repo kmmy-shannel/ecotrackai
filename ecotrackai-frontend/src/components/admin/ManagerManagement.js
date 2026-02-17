@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Edit2, Trash2, Key, UserCheck, UserX } from 'lucide-react';
-import managerService from '../services/manager.service';
+import managerService from '../../services/manager.service';
 
 const ManagerManagement = ({ onClose }) => {
   const [managers, setManagers] = useState([]);

@@ -5,14 +5,19 @@ import RegisterPage from './pages/RegisterPage';
 import VerifyOTPPage from './pages/VerifyOTPPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import DashboardPage from './pages/DashboardPage';
-import DeliveryRoutesPage from './pages/DeliveryRoutesPage';
-import ProductsPage from './pages/ProductsPage';
-import AlertsPage from './pages/AlertsPage';
+import DashboardPage from './pages/admin/AdminDashboardPage';
+import DeliveryRoutesPage from './pages/admin/DeliveryRoutesPage';
+import ProductsPage from './pages/admin/ProductsPage';
+import AlertsPage from './pages/admin/AlertsPage';
 import authService from './services/auth.service';
-import CarbonFootprintPage from './pages/CarbonFootprintPage';
+import CarbonFootprintPage from './pages/admin/CarbonFootprintPage';
 import ManagerPage from './pages/ManagerPage'; 
-import EcoScorePage from './pages/EcoScorePage';  
+import EcoScorePage from './pages/admin/EcoScorePage';  
+// Manager pages
+import InventoryManagerPage from './pages/manager/InventoryManagerPage';
+import LogisticsManagerPage from './pages/manager/LogisticsManagerPage';
+import SustainabilityManagerPage from './pages/manager/SustainabilityManagerPage';
+import FinanceManagerPage from './pages/manager/FinanceManagerPage';
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   return authService.isAuthenticated() ? <>{children}</> : <Navigate to="/" />;

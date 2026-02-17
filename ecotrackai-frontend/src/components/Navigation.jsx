@@ -7,10 +7,8 @@ import {
   AlertTriangle, 
   Leaf, 
   Users, 
-  DollarSign, 
   Brain, 
   Award, 
-  FileText,
   Settings,
   LogOut
 } from 'lucide-react';
@@ -20,6 +18,7 @@ const Navigation = ({ onLogout }) => {
   const location = useLocation();
 
   // Navigation items with their routes and proper icons
+  // Removed 'Profit' and 'Reports' from the navigation
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: Package, label: 'Products', path: '/products' },
@@ -27,10 +26,8 @@ const Navigation = ({ onLogout }) => {
     { icon: AlertTriangle, label: 'Alerts', path: '/alerts' },
     { icon: Leaf, label: 'Carbon', path: '/carbon' },
     { icon: Users, label: 'Managers', path: '/managers' },
-    { icon: DollarSign, label: 'Profit', path: '/profit' },
     { icon: Brain, label: 'AI Tools', path: '/ai-tools' },
     { icon: Award, label: 'EcoScore', path: '/ecoscore' },
-    { icon: FileText, label: 'Reports', path: '/reports' },
   ];
 
   const settingsItems = [

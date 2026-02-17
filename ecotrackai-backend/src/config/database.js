@@ -1,32 +1,34 @@
 const { Pool } = require('pg');
-require('dotenv').config();
 
-const isProduction = process.env.NODE_ENV === 'production';
+// ✅ Always use DATABASE_URL if it exists (Neon)
+// Otherwise fall back to individual vars (local)
+const pool = new Pool(
+  process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+      }
+    : {
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT) || 5432,
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: String(process.env.DB_PASSWORD), // force string
+        ssl: false
+      }
+);
 
-const pool = new Pool({
-  connectionString: isProduction
-    ? process.env.DATABASE_URL   // ✅ Used on Render (Neon)
-    : undefined,                  // ✅ Not used locally
-  host: !isProduction ? process.env.DB_HOST : undefined,
-  port: !isProduction ? parseInt(process.env.DB_PORT || '5432') : undefined,
-  database: !isProduction ? process.env.DB_NAME : undefined,
-  user: !isProduction ? process.env.DB_USER : undefined,
-  password: !isProduction ? process.env.DB_PASSWORD : undefined,
-  ssl: isProduction
-    ? { rejectUnauthorized: false }
-    : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-
-pool.on('connect', () => {
-  console.log('Database connected successfully');
-});
-
-pool.on('error', (err) => {
-  console.error('Unexpected database error:', err);
-  process.exit(-1);
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ Database connection error:', err.message);
+  } else {
+    console.log(
+      process.env.DATABASE_URL
+        ? '✅ Connected to Neon PostgreSQL'
+        : '✅ Connected to Local PostgreSQL'
+    );
+    release();
+  }
 });
 
 module.exports = pool;

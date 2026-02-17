@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../components/Layout';
-import authService from '../services/auth.service';
-import carbonService from '../services/carbon.service';
-import HowCalculatedModal from '../components/HowCalculatedModal';        // ← NEW
-import MonthlyComparisonModal from '../components/MonthlyComparisonModal'; // ← NEW
+import Layout from '../../components/Layout';
+import authService from '../../services/auth.service';
+import carbonService from '../../services/carbon.service';
+import HowCalculatedModal from '../../components/HowCalculatedModal';        // ← NEW
+import MonthlyComparisonModal from '../../components/MonthlyComparisonModal'; // ← NEW
 import { 
   Leaf, TrendingDown, TrendingUp,
   Truck, Package, MapPin, ChevronRight, RefreshCw
