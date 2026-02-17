@@ -10,7 +10,9 @@ import DeliveryRoutesPage from './pages/DeliveryRoutesPage';
 import ProductsPage from './pages/ProductsPage';
 import AlertsPage from './pages/AlertsPage';
 import authService from './services/auth.service';
-
+import CarbonFootprintPage from './pages/CarbonFootprintPage';
+import ManagerPage from './pages/ManagerPage'; 
+import EcoScorePage from './pages/EcoScorePage';  
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   return authService.isAuthenticated() ? <>{children}</> : <Navigate to="/" />;
@@ -52,11 +54,36 @@ function App() {
             </ProtectedRoute>
           }
         />
+      
         <Route
           path="/alerts"
           element={
             <ProtectedRoute>
               <AlertsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+  path="/carbon"
+  element={
+    <ProtectedRoute>
+      <CarbonFootprintPage />
+    </ProtectedRoute>
+  }
+/>
+  <Route
+          path="/managers"
+          element={
+            <ProtectedRoute>
+              <ManagerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ecoscore"
+          element={
+            <ProtectedRoute>
+              <EcoScorePage />
             </ProtectedRoute>
           }
         />

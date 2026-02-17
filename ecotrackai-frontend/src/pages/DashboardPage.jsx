@@ -27,7 +27,7 @@ const DashboardPage = () => {
   const loadAIInsights = useCallback(async () => {
     try {
       setLoadingInsights(true);
-      console.log('📊 Requesting AI insights with stats:', stats);
+      console.log('Requesting AI insights with stats:', stats);
       
       const response = await aiService.getDashboardInsights(stats);
       console.log('✅ AI insights received:', response);

@@ -64,7 +64,7 @@ const VerifyOTPPage = () => {
         navigate('/dashboard');
       }, 2000);
     } catch (err) {
-      console.error('❌ FRONTEND: OTP verification error:', err);
+      console.error('FRONTEND: OTP verification error:', err);
       setError(err.response?.data?.message || 'Verification failed. Please try again.');
     } finally {
       setLoading(false);

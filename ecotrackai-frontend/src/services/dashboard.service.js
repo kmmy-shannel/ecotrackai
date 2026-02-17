@@ -1,7 +1,8 @@
 import axios from 'axios';
 import authService from './auth.service';
 
-const API_URL = 'http://localhost:5000/api/dashboard';
+const API_URL = `${process.env.REACT_APP_API_URL}/dashboard`;
+
 
 class DashboardService {
   // Get authorization headers
@@ -13,7 +14,7 @@ class DashboardService {
   // Get AI insights for dashboard
   async getDashboardInsights(stats) {
     try {
-      console.log('📊 Requesting dashboard AI insights with stats:', stats);
+      console.log('Requesting dashboard AI insights with stats:', stats);
       
       const response = await axios.post(
         `${API_URL}/ai-insights`,

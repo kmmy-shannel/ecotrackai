@@ -5,15 +5,15 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 const pool = new Pool({
   connectionString: isProduction
-    ? process.env.DATABASE_URL   // ✅ Used on Render
-    : undefined,
+    ? process.env.DATABASE_URL   // ✅ Used on Render (Neon)
+    : undefined,                  // ✅ Not used locally
   host: !isProduction ? process.env.DB_HOST : undefined,
   port: !isProduction ? parseInt(process.env.DB_PORT || '5432') : undefined,
   database: !isProduction ? process.env.DB_NAME : undefined,
   user: !isProduction ? process.env.DB_USER : undefined,
   password: !isProduction ? process.env.DB_PASSWORD : undefined,
   ssl: isProduction
-    ? { rejectUnauthorized: false }   // ✅ REQUIRED for Neon
+    ? { rejectUnauthorized: false }
     : false,
   max: 20,
   idleTimeoutMillis: 30000,

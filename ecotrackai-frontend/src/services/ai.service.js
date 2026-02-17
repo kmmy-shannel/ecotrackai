@@ -1,4 +1,5 @@
 const axios = require('axios');
+const API_URL = `${process.env.REACT_APP_API_URL}/ai`;
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434/api/generate';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:7b';

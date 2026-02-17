@@ -1,7 +1,8 @@
 import axios from 'axios';
 import routingService from './routing.service'; 
 
-const API_URL = 'http://localhost:5000/api/deliveries';
+const API_URL = `${process.env.REACT_APP_API_URL}/deliveries`;
+
 
 // Helper to get auth header
 const getAuthHeader = () => {

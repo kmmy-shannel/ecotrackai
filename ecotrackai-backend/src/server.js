@@ -9,7 +9,8 @@ const productRoutes = require('./routes/product.routes');
 const aiRoutes = require('./routes/ai.routes') 
 const deliveryRoutes = require('./routes/delivery.routes');
 const alertRoutes = require('./routes/alert.routes');
-
+const indexRoutes = require('./routes/index');
+const carbonRoutes = require('./routes/carbon.routes');
 const app = express();
 
 // Security
@@ -17,8 +18,10 @@ app.use(helmet());
 
 // CORS
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN || '*', // Allows Render + any frontend
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Body parsers
@@ -32,6 +35,8 @@ app.use('/api/products', productRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api', indexRoutes);  
+app.use('/api/carbon', carbonRoutes);
 
 console.log('\nRegistered API Routes:');
 console.log('   /api/auth');

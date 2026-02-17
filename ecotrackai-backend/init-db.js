@@ -26,7 +26,7 @@ async function initDatabase() {
     // Insert sample alerts if table is empty
     const { rows } = await pool.query('SELECT COUNT(*) as count FROM alerts');
     if (parseInt(rows[0].count) === 0) {
-      console.log('📊 Inserting sample alerts...');
+      console.log('Inserting sample alerts...');
       
       const sampleAlerts = [
         {
