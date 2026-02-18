@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import authService from '../../services/auth.service';
-import carbonService from '../../services/carbon.service';
-import HowCalculatedModal from '../../components/HowCalculatedModal';        // ← NEW
-import MonthlyComparisonModal from '../../components/MonthlyComparisonModal'; // ← NEW
+import useCarbon from '../../hooks/useCarbon';
+import HowCalculatedModal from '../../components/HowCalculatedModal';
+import MonthlyComparisonModal from '../../components/MonthlyComparisonModal';
 import { 
   Leaf, TrendingDown, TrendingUp,
   Truck, Package, MapPin, ChevronRight, RefreshCw
@@ -13,63 +13,38 @@ import {
 const CarbonFootprintPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showHowCalculated, setShowHowCalculated] = useState(false);      // ← NEW
-  const [showMonthlyComparison, setShowMonthlyComparison] = useState(false); // ← NEW
-  const [carbonData, setCarbonData] = useState({
-    thisMonth: {
-      totalEmissions: 0,
-      deliveryTrips: 0,
-      distanceTraveled: 0,
-      litersOfFuelUsed: 0,
-      month: ''
-    },
-    comparison: {
-      previousMonth: 0,
-      change: 0,
-      trend: 'decreased'
-    }
-  });
 
+  // — all state and logic 
+  const {
+    loading,
+    error,
+    carbonData,
+    showHowCalculated,
+    showMonthlyComparison,
+    decreaseAmount,
+    loadCarbonData,
+    setShowHowCalculated,
+    setShowMonthlyComparison
+  } = useCarbon();
+
+  // Auth check on mount
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
-    if (!currentUser) { navigate('/'); return; }
-    setUser(currentUser);
-    loadCarbonData();
-  }, [navigate]);
-
-  const loadCarbonData = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const response = await carbonService.getCarbonFootprint();
-      if (response.success) setCarbonData(response.data);
-    } catch (err) {
-      console.error('❌ Failed to load carbon data:', err);
-      setError('Failed to load carbon footprint data');
-      setCarbonData({
-        thisMonth: {
-          totalEmissions: 0, deliveryTrips: 0,
-          distanceTraveled: 0, litersOfFuelUsed: 0,
-          month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
-        },
-        comparison: { previousMonth: 0, change: 0, trend: 'decreased' }
-      });
-    } finally {
-      setLoading(false);
+    if (!currentUser) {
+      navigate('/');
+      return;
     }
-  };
+    setUser(currentUser);
+  }, [navigate]);
 
   if (!user) return null;
 
   const { thisMonth, comparison } = carbonData;
-  const decreaseAmount = Math.abs(comparison.change).toFixed(1);
 
   return (
     <Layout currentPage="Carbon Footprint" user={user}>
 
-      {/* ← NEW: Modals */}
+      {/* Modals */}
       {showHowCalculated && (
         <HowCalculatedModal
           onClose={() => setShowHowCalculated(false)}
@@ -83,12 +58,17 @@ const CarbonFootprintPage = () => {
         />
       )}
 
+      {/* Error Message */}
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={loadCarbonData}><RefreshCw size={16} /></button>
+          <button onClick={loadCarbonData}>
+            <RefreshCw size={16} />
+          </button>
         </div>
       )}
+
+      {/* Loading Message */}
       {loading && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg flex items-center gap-2">
           <RefreshCw size={16} className="animate-spin" />
@@ -96,16 +76,19 @@ const CarbonFootprintPage = () => {
         </div>
       )}
 
+      {/* Main Card */}
       <div className="grid grid-cols-1 gap-6">
         <div className="w-full">
           <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
 
+            {/* Header */}
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-green-200">
               <h2 className="text-center font-bold text-gray-800 text-lg">
                 {thisMonth.month || 'This Month'}
               </h2>
             </div>
 
+            {/* Total Emissions */}
             <div className="bg-gradient-to-br from-green-100 to-emerald-100 px-8 py-12">
               <div className="text-center">
                 <p className="text-7xl font-bold text-gray-800 mb-3">
@@ -134,16 +117,32 @@ const CarbonFootprintPage = () => {
               </div>
             </div>
 
+            {/* Breakdown */}
             <div className="px-6 py-6 bg-white">
               <h3 className="text-center font-bold text-gray-800 mb-6 text-lg">Breakdown</h3>
               <div className="grid grid-cols-3 gap-4">
-                <EcoStatCard title="Delivery Trips" value={thisMonth.deliveryTrips} subtitle="This month" icon={<Truck size={20} />} />
-                <EcoStatCard title="KM Traveled" value={thisMonth.distanceTraveled.toFixed(1)} subtitle="Total distance" icon={<MapPin size={20} />} />
-                <EcoStatCard title="Liters of Fuel Used" value={thisMonth.litersOfFuelUsed.toFixed(1)} subtitle="Total consumption" icon={<Package size={20} />} />
+                <EcoStatCard 
+                  title="Delivery Trips" 
+                  value={thisMonth.deliveryTrips} 
+                  subtitle="This month" 
+                  icon={<Truck size={20} />} 
+                />
+                <EcoStatCard 
+                  title="KM Traveled" 
+                  value={thisMonth.distanceTraveled.toFixed(1)} 
+                  subtitle="Total distance" 
+                  icon={<MapPin size={20} />} 
+                />
+                <EcoStatCard 
+                  title="Liters of Fuel Used" 
+                  value={thisMonth.litersOfFuelUsed.toFixed(1)} 
+                  subtitle="Total consumption" 
+                  icon={<Package size={20} />} 
+                />
               </div>
             </div>
 
-            {/* ← UPDATED Quick Actions */}
+            {/* Quick Actions */}
             <div className="px-6 py-5 bg-gray-50 border-t border-gray-200">
               <h3 className="font-semibold text-gray-800 mb-3">Quick Actions</h3>
               <div className="grid grid-cols-3 gap-3">
@@ -153,14 +152,12 @@ const CarbonFootprintPage = () => {
                 >
                   View all deliveries
                 </button>
-                {/* ← CHANGED: was "Refresh data", now "How it's calculated" */}
                 <button
                   onClick={() => setShowHowCalculated(true)}
                   className="px-4 py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-sm rounded-lg transition-colors shadow-sm font-medium"
                 >
                   How it's calculated
                 </button>
-                {/* ← CHANGED: now opens modal */}
                 <button
                   onClick={() => setShowMonthlyComparison(true)}
                   className="px-4 py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-sm rounded-lg transition-colors shadow-sm font-medium"
@@ -174,6 +171,7 @@ const CarbonFootprintPage = () => {
         </div>
       </div>
 
+      {/* Tips Section */}
       <div className="mt-6">
         <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-200">
           <div className="flex items-center gap-2 mb-4">
@@ -181,9 +179,18 @@ const CarbonFootprintPage = () => {
             <h3 className="text-lg font-bold text-gray-800">Tips to Reduce Carbon Footprint</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <TipCard tip="Optimize delivery routes to reduce fuel consumption" impact="Can save up to 15% CO₂ emissions" />
-            <TipCard tip="Consolidate deliveries to minimize trips" impact="Reduces emissions by 20-30%"/>
-            <TipCard tip="Switch to eco-friendly vehicles when possible" impact="Can cut emissions by up to 50%" />
+            <TipCard 
+              tip="Optimize delivery routes to reduce fuel consumption" 
+              impact="Can save up to 15% CO₂ emissions" 
+            />
+            <TipCard 
+              tip="Consolidate deliveries to minimize trips" 
+              impact="Reduces emissions by 20-30%"
+            />
+            <TipCard 
+              tip="Switch to eco-friendly vehicles when possible" 
+              impact="Can cut emissions by up to 50%" 
+            />
           </div>
         </div>
       </div>
@@ -191,7 +198,7 @@ const CarbonFootprintPage = () => {
   );
 };
 
-// Keep EcoStatCard and TipCard exactly as they are
+// EcoStatCard Component
 const EcoStatCard = ({ title, value, subtitle, icon }) => (
   <div className="bg-white overflow-hidden flex flex-col rounded-2xl shadow-md hover:shadow-xl transition-all transform hover:-translate-y-1 border border-gray-100">
     <div className="bg-[#1a4d2e] px-5 pt-4 pb-3 rounded-t-2xl flex items-center justify-between">
@@ -208,6 +215,7 @@ const EcoStatCard = ({ title, value, subtitle, icon }) => (
   </div>
 );
 
+// TipCard Component
 const TipCard = ({ tip, impact }) => (
   <div className="flex items-start gap-3 p-4 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl hover:shadow-md transition-all">
     <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>

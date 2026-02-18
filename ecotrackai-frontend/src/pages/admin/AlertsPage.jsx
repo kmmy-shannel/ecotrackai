@@ -2,30 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import authService from '../../services/auth.service';
-import alertService from '../../services/alert.service';
+import useAlerts from '../../hooks/useAlerts';
 import { Search, Sparkles, Trash2, X, TrendingDown, Package, Clock } from 'lucide-react';
 
 const AlertsPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [filteredAlerts, setFilteredAlerts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('All');
-  const [stats, setStats] = useState({
-    total: 0,
-    high_risk: 0,
-    medium_risk: 0,
-    low_risk: 0
-  });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [selectedAlert, setSelectedAlert] = useState(null);
-  const [aiInsights, setAIInsights] = useState(null);
-  const [loadingInsights, setLoadingInsights] = useState(false);
 
+  //   all state and logic 
+  const {
+    filteredAlerts,
+    loading,
+    stats,
+    error,
+    success,
+    searchTerm,
+    selectedFilter,
+    showAIModal,
+    selectedAlert,
+    aiInsights,
+    loadingInsights,
+    setSearchTerm,
+    setSelectedFilter,
+    deleteAlert,
+    getAIInsights,
+    closeAIModal,
+    getRiskBadgeColor,
+    getRiskBadgeText,
+    getProductImage
+  } = useAlerts();
+
+  // Auth check on mount
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     if (!currentUser) {
@@ -33,121 +40,7 @@ const AlertsPage = () => {
       return;
     }
     setUser(currentUser);
-    loadAlerts();
-    loadStats();
   }, [navigate]);
-
-  useEffect(() => {
-    filterAlerts();
-  }, [alerts, searchTerm, selectedFilter]);
-
-  const loadAlerts = async () => {
-    try {
-      setLoading(true);
-      const response = await alertService.getAllAlerts();
-      setAlerts(response.data.alerts || []);
-      setError('');
-    } catch (err) {
-      console.error('Load alerts error:', err);
-      setError(err.response?.data?.message || 'Failed to load alerts');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const response = await alertService.getAlertStats();
-      setStats(response.data);
-    } catch (err) {
-      console.error('Load stats error:', err);
-    }
-  };
-
-  const filterAlerts = () => {
-    let filtered = alerts;
-
-    if (selectedFilter !== 'All') {
-      filtered = filtered.filter(alert => {
-        if (selectedFilter === 'High') return alert.risk_level === 'HIGH';
-        if (selectedFilter === 'Medium') return alert.risk_level === 'MEDIUM';
-        if (selectedFilter === 'Low') return alert.risk_level === 'LOW';
-        return true;
-      });
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(alert =>
-        alert.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        alert.details.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    setFilteredAlerts(filtered);
-  };
-
-  const handleDeleteAlert = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this alert?')) {
-      return;
-    }
-
-    try {
-      await alertService.deleteAlert(id);
-      setSuccess('Alert deleted successfully');
-      loadAlerts();
-      loadStats();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Delete alert error:', err);
-      setError('Failed to delete alert');
-      setTimeout(() => setError(''), 3000);
-    }
-  };
-
-  const handleGetAIInsights = async (alert) => {
-    setSelectedAlert(alert);
-    setShowAIModal(true);
-    setLoadingInsights(true);
-
-    try {
-      const response = await alertService.getAIInsights(alert.id);
-      setAIInsights(response.data);
-    } catch (err) {
-      console.error('Get AI insights error:', err);
-      setAIInsights({
-        recommendations: [
-          'Unable to generate insights at this time',
-          'Please try again later'
-        ],
-        priority_actions: [],
-        cost_impact: 'Unknown'
-      });
-    } finally {
-      setLoadingInsights(false);
-    }
-  };
-
-  const getRiskBadgeColor = (riskLevel) => {
-    const colors = {
-      HIGH: 'bg-red-100 text-red-600 border-red-200',
-      MEDIUM: 'bg-orange-100 text-orange-600 border-orange-200',
-      LOW: 'bg-green-100 text-green-600 border-green-200'
-    };
-    return colors[riskLevel] || colors.LOW;
-  };
-
-  const getRiskBadgeText = (riskLevel) => {
-    const text = {
-      HIGH: 'High',
-      MEDIUM: 'Medium',
-      LOW: 'Low'
-    };
-    return text[riskLevel] || 'Low';
-  };
-
-  const getProductImage = (productName) => {
-    return '🥔';
-  };
 
   if (!user) return null;
 
@@ -247,8 +140,8 @@ const AlertsPage = () => {
               <ProductCard
                 key={alert.id}
                 alert={alert}
-                onDelete={handleDeleteAlert}
-                onGetInsights={handleGetAIInsights}
+                onDelete={deleteAlert}
+                onGetInsights={getAIInsights}
                 getProductImage={getProductImage}
                 getRiskBadgeColor={getRiskBadgeColor}
                 getRiskBadgeText={getRiskBadgeText}
@@ -264,7 +157,7 @@ const AlertsPage = () => {
             <button
               onClick={() => {
                 if (filteredAlerts.length > 0) {
-                  handleGetAIInsights(filteredAlerts[0]);
+                  getAIInsights(filteredAlerts[0]);
                 }
               }}
               className="inline-flex items-center gap-2 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-full transition-colors shadow-lg shadow-purple-200"
@@ -282,11 +175,7 @@ const AlertsPage = () => {
           alert={selectedAlert}
           insights={aiInsights}
           loading={loadingInsights}
-          onClose={() => {
-            setShowAIModal(false);
-            setSelectedAlert(null);
-            setAIInsights(null);
-          }}
+          onClose={closeAIModal}
         />
       )}
     </Layout>
@@ -505,6 +394,7 @@ const AIInsightsModal = ({ alert, insights, loading, onClose }) => {
             onClick={onClose}
             className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-semibold rounded-lg transition-colors"
           >
+            Close
           </button>
         </div>
       </div>

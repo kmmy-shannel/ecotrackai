@@ -112,13 +112,13 @@ Respond ONLY with this JSON:
   }
 }`;
 
-      console.log('🤖 Calling Ollama for dashboard insights...');
+      console.log('Calling Ollama for dashboard insights...');
       
       const response = await axios.post(OLLAMA_API_URL, {
         model: OLLAMA_MODEL,
         prompt: prompt,
         stream: false,
-        format: 'json',  // ✅ Force JSON format
+        format: 'json',  // Force JSON format
         options: {
           temperature: 0.3,
           top_p: 0.9,
@@ -129,12 +129,12 @@ Respond ONLY with this JSON:
         timeout: 60000
       });
 
-      console.log('📝 Raw dashboard response:', response.data.response?.substring(0, 200));
+      console.log('Raw dashboard response:', response.data.response?.substring(0, 200));
       
       return this.parseOllamaResponse(response.data.response, () => this.getFallbackDashboardInsights(stats));
       
     } catch (error) {
-      console.error('🤖 Dashboard AI Error:', error.message);
+      console.error('Dashboard AI Error:', error.message);
       return this.getFallbackDashboardInsights(stats);
     }
   }
@@ -145,7 +145,7 @@ Respond ONLY with this JSON:
   parseOllamaResponse(responseText, fallbackFn) {
     try {
       if (!responseText) {
-        console.warn('⚠️ Empty response from Ollama');
+        console.warn('Empty response from Ollama');
         return fallbackFn();
       }
 
@@ -167,11 +167,11 @@ Respond ONLY with this JSON:
       
       // Try to parse
       const parsed = JSON.parse(cleanText);
-      console.log('✅ Ollama response parsed successfully');
+      console.log('Ollama response parsed successfully');
       return parsed;
       
     } catch (parseError) {
-      console.error('❌ Failed to parse Ollama response');
+      console.error('Failed to parse Ollama response');
       console.error('Response preview:', responseText?.substring(0, 300));
       console.error('Parse error:', parseError.message);
       return fallbackFn();
@@ -182,7 +182,7 @@ Respond ONLY with this JSON:
    * Fallback insights for alerts (rule-based)
    */
   getFallbackAlertInsights(alertData) {
-    console.log('📝 Using fallback alert insights');
+    console.log('Using fallback alert insights');
     
     const daysLeft = alertData.days_left || 0;
     const riskLevel = alertData.risk_level;
@@ -245,7 +245,7 @@ Respond ONLY with this JSON:
    * Fallback insights for dashboard (rule-based)
    */
   getFallbackDashboardInsights(stats) {
-    console.log('📝 Using fallback dashboard insights');
+    console.log('Using fallback dashboard insights');
     
     const urgentRecommendations = [];
     

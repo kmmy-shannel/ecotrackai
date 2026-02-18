@@ -64,7 +64,7 @@ class ProductService {
 
   async updateProduct(productId, updateData) {
     try {
-      console.log('📡 Calling PUT /products/' + productId);
+      console.log('Calling PUT /products/' + productId);
       const response = await api.put(`/products/${productId}`, updateData);
       console.log('Update product response:', response.data);
       return response.data;
