@@ -12,7 +12,7 @@ class RoutingService {
    */
   async getRoute(coordinates, profile = 'driving-car') {
     try {
-      console.log('🗺️ Fetching route from OpenRouteService...');
+      console.log('Fetching route from OpenRouteService...');
       console.log('Coordinates:', coordinates);
 
       const response = await axios.post(
@@ -37,7 +37,7 @@ class RoutingService {
       const properties = route.properties;
       const segments = properties.segments[0];
 
-      console.log('✅ Route fetched successfully');
+      console.log('Route fetched successfully');
 
       return {
         geometry: route.geometry, // GeoJSON LineString
@@ -47,7 +47,7 @@ class RoutingService {
       };
 
     } catch (error) {
-      console.error('❌ Routing error:', error.response?.data || error.message);
+      console.error('Routing error:', error.response?.data || error.message);
       
       // Fallback: return straight line
       return this.getStraightLineRoute(coordinates);
@@ -61,7 +61,7 @@ class RoutingService {
    */
   async getOptimizedRoute(coordinates) {
     try {
-      console.log('🤖 Requesting route optimization from OpenRouteService...');
+      console.log('Requesting route optimization from OpenRouteService...');
 
       // OpenRouteService Optimization API
       const response = await axios.post(
@@ -95,7 +95,7 @@ class RoutingService {
 
       const route = response.data.routes[0];
       
-      console.log('✅ Optimized route received');
+      console.log('Optimized route received');
 
       return {
         optimizedOrder: route.steps.map(step => step.job || 0),
@@ -105,7 +105,7 @@ class RoutingService {
       };
 
     } catch (error) {
-      console.error('❌ Optimization error:', error.response?.data || error.message);
+      console.error('Optimization error:', error.response?.data || error.message);
       
       // Fallback: just get regular route
       return this.getRoute(coordinates);
@@ -116,7 +116,7 @@ class RoutingService {
    * Fallback: Calculate straight line route
    */
   getStraightLineRoute(coordinates) {
-    console.log('⚠️ Using straight line fallback');
+    console.log('Using straight line fallback');
 
     // Convert coordinates to GeoJSON LineString
     const geometry = {

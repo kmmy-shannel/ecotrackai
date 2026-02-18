@@ -1,21 +1,32 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import authService from '../../services/auth.service';
-import productService from '../../services/product.service';
 import AddProductModal from '../../components/AddProductModal';
-import { Plus, Search, Trash2, Package } from 'lucide-react'; // Removed Sparkles
+import useProducts from '../../hooks/useProducts';
+import { Plus, Search, Trash2, Package } from 'lucide-react';
 
 const ProductsPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
+  // — all state and logic 
+  const {
+    products,
+    loading,
+    error,
+    success,
+    searchTerm,
+    setSearchTerm,
+    deleteProduct,
+    handleProductCreated,
+    getStorageBadgeColor
+  } = useProducts();
+
+  // Auth check on mount
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     if (!currentUser) {
@@ -23,55 +34,7 @@ const ProductsPage = () => {
       return;
     }
     setUser(currentUser);
-    loadProducts();
   }, [navigate]);
-
-  const loadProducts = async () => {
-    try {
-      setLoading(true);
-      console.log('📡 Calling product service...');
-      const response = await productService.getAllProducts();
-      
-      const productsList = response.data?.products || response.products || [];
-      setProducts(productsList);
-      setError('');
-    } catch (err) {
-      console.error('Load products error:', err);
-      setError('Failed to load products');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (productId) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) {
-      return;
-    }
-
-    try {
-      await productService.deleteProduct(productId);
-      setSuccess('Product deleted successfully');
-      loadProducts();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete product');
-      setTimeout(() => setError(''), 3000);
-    }
-  };
-
-  const filteredProducts = products.filter(product =>
-    product.product_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getStorageBadgeColor = (category) => {
-    const colors = {
-      refrigerated: 'bg-blue-100 text-blue-700',
-      frozen: 'bg-cyan-100 text-cyan-700',
-      ambient: 'bg-gray-100 text-gray-700',
-      controlled_atmosphere: 'bg-purple-100 text-purple-700'
-    };
-    return colors[category] || 'bg-gray-100 text-gray-700';
-  };
 
   if (!user) return null;
 
@@ -135,7 +98,7 @@ const ProductsPage = () => {
                   Loading products...
                 </td>
               </tr>
-            ) : filteredProducts.length === 0 ? (
+            ) : products.length === 0 ? (
               <tr>
                 <td colSpan="5" className="text-center py-12">
                   <div className="flex flex-col items-center justify-center">
@@ -148,7 +111,7 @@ const ProductsPage = () => {
                 </td>
               </tr>
             ) : (
-              filteredProducts.map((product) => (
+              products.map((product) => (
                 <tr key={product.product_id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -183,7 +146,7 @@ const ProductsPage = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => handleDelete(product.product_id)}
+                        onClick={() => deleteProduct(product.product_id)}
                         className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
                         title="Delete Product"
                       >
@@ -204,9 +167,7 @@ const ProductsPage = () => {
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             setShowAddModal(false);
-            loadProducts();
-            setSuccess('Product added successfully');
-            setTimeout(() => setSuccess(''), 3000);
+            handleProductCreated();
           }}
         />
       )}
