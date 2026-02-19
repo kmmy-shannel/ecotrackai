@@ -3,7 +3,10 @@ const {
   getApprovals,
   getPendingCount,
   approveItem,
-  rejectItem
+  rejectItem,
+  getInventoryApprovals,
+  submitApprovalDecision,
+  getApprovalHistory
 } = require('../controllers/approval.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
@@ -15,5 +18,8 @@ router.get('/', getApprovals);
 router.get('/count', getPendingCount);
 router.put('/:approvalId/approve', approveItem);
 router.put('/:approvalId/reject', rejectItem);
+router.get('/inventory',          authenticate, getInventoryApprovals);
+router.put('/:id/decision',       authenticate, submitApprovalDecision);
+router.get('/history',            authenticate, getApprovalHistory);
 
 module.exports = router;

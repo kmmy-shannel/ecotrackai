@@ -65,10 +65,45 @@ const rejectItem = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to reject item');
   }
 };
+// GET all pending approvals for inventory manager
+const getInventoryApprovals = async (req, res) => {
+  try {
+    const approvals = await approvalService.getByType('inventory');
+    return res.json({ success: true, data: approvals });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST approve or decline
+const submitApprovalDecision = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { decision, comments } = req.body; // decision = 'approved' | 'declined'
+    const managerId = req.user.id;
+    const result = await approvalService.submitDecision(id, decision, comments, managerId);
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET approval history for this manager
+const getApprovalHistory = async (req, res) => {
+  try {
+    const managerId = req.user.id;
+    const history = await approvalService.getHistoryByManager(managerId);
+    return res.json({ success: true, data: history });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 
 module.exports = {
   getApprovals,
   getPendingCount,
   approveItem,
-  rejectItem
+  rejectItem, getInventoryApprovals, submitApprovalDecision, getApprovalHistory
 };

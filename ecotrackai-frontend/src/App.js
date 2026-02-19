@@ -84,6 +84,12 @@ function App() {
             </ProtectedRoute>
           }
         />
+      <Route
+         path="/inventory-manager" 
+        element={<ProtectedRoute>
+          <InventoryManagerPage />
+          </ProtectedRoute>}
+           />
         <Route
           path="/ecoscore"
           element={
@@ -92,6 +98,22 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/logistics-manager"
+  element={
+    <ProtectedRoute>
+      <LogisticsManagerPage />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/sustainability-manager"
+  element={
+    <ProtectedRoute>
+      <SustainabilityManagerPage />
+    </ProtectedRoute>
+  }
+/>
 
         {/* Catch all - redirect to login */}
         <Route path="*" element={<Navigate to="/" />} />
