@@ -36,32 +36,31 @@ const LoginPage = () => {
         email: formData.email,
         password: formData.password
       });
-      console.log('✅ FRONTEND: Login successful:', result);
+      console.log('FRONTEND: Login successful:', result);
 
-      // ✅ ONLY CHANGE IS HERE - role-based redirect
-      const roleRoutes = {
-        admin: '/dashboard',
-        inventory_manager: '/manager/inventory',
-        logistics_manager: '/manager/logistics',
-        sustainability_manager: '/manager/sustainability',
-        finance_manager: '/manager/finance'
-      };
+      // 
+     const roleRoutes = {
+  admin: '/dashboard',
+  inventory_manager: '/inventory-manager',
+  logistics_manager: '/logistics-manager',
+  sustainability_manager: '/sustainability-manager',
+  finance_manager: '/finance-manager'
+};
+      const userRole = result.data?.user?.role || result.user?.role || result.role;
+      const redirectPath = roleRoutes[userRole] ?? '/dashboard';
 
-      const userRole = result.user?.role || result.role || 'admin';
-      const redirectPath = roleRoutes[userRole] || '/dashboard';
-
-      console.log('👤 User role:', userRole);
-      console.log('🔀 Redirecting to:', redirectPath);
+      console.log('User role:', userRole);
+      console.log('Redirecting to:', redirectPath);
 
       navigate(redirectPath);
 
     } catch (err) {
-      console.error('❌ FRONTEND: Login error:', err);
+      console.error('FRONTEND: Login error:', err);
       console.error('Error response:', err.response);
       console.error('Error data:', err.response?.data);
       
       if (err.response?.data?.error) {
-        console.error('🚨 VALIDATION ERRORS:', err.response.data.error);
+        console.error('VALIDATION ERRORS:', err.response.data.error);
       }
       
       let errorMessage = 'Login failed. Please try again.';

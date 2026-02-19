@@ -24,6 +24,26 @@ class ApprovalService {
     const response = await api.get('/approvals/count');
     return response.data;
   }
+
+  
+
+  async getInventoryApprovals() {
+    const response = await api.get('/approvals/inventory');
+    return response.data;
+  }
+
+  async submitDecision(id, decision, comments) {
+    const response = await api.put(`/approvals/${id}/decision`, {
+      decision,
+      comments
+    });
+    return response.data;
+  }
+
+  async getApprovalHistory() {
+    const response = await api.get('/approvals/history');
+    return response.data;
+  }
 }
 
 const approvalServiceInstance = new ApprovalService();

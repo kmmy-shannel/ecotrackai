@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Polyline, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import Layout from '../../components/Layout';
 import authService from '../../services/auth.service';
-import deliveryService from '../../services/delivery.service';
 import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
 import { GeoJSON } from 'react-leaflet';
 import { 
@@ -13,6 +12,9 @@ import {
   Sparkles, TrendingDown, Clock, Fuel, Leaf,
   ChevronDown, ChevronUp, Route, Package, Layers, X
 } from 'lucide-react';
+
+// ADD THIS IMPORT
+import useDelivery from '../../hooks/useDelivery';
 
 // Fix Leaflet marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -58,17 +60,32 @@ const MAP_LAYERS = {
 const DeliveryRoutesPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [deliveries, setDeliveries] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [expandedDelivery, setExpandedDelivery] = useState(null);
-  const [optimizingRoute, setOptimizingRoute] = useState(null);
-  const [optimizationResult, setOptimizationResult] = useState(null);
-  const [showOptimizationModal, setShowOptimizationModal] = useState(false);
 
+  // ✅ REPLACE all useState and functions with this hook
+  const {
+    deliveries,
+    loading,
+    error,
+    success,
+    searchTerm,
+    showAddModal,
+    expandedDelivery,
+    optimizingRoute,
+    optimizationResult,
+    showOptimizationModal,
+    summaryStats,
+    setSearchTerm,
+    setShowAddModal,
+    setExpandedDelivery,
+    deleteDelivery,
+    optimizeRoute,
+    applyOptimization,
+    handleDeliveryCreated,
+    closeOptimizationModal,
+    getStatusBadge
+  } = useDelivery();
+
+  // Auth check on mount (KEEP THIS - unchanged)
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     if (!currentUser) {
@@ -76,77 +93,11 @@ const DeliveryRoutesPage = () => {
       return;
     }
     setUser(currentUser);
-    loadDeliveries();
   }, [navigate]);
-
-  const loadDeliveries = async () => {
-    try {
-      setLoading(true);
-      const response = await deliveryService.getAllDeliveries();
-      const deliveriesList = response.data?.deliveries || response.deliveries || [];
-      setDeliveries(deliveriesList);
-      setError('');
-    } catch (err) {
-      console.error('Load deliveries error:', err);
-      setError(err.response?.data?.message || 'Failed to load deliveries');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOptimizeRoute = async (delivery) => {
-    try {
-      setOptimizingRoute(delivery.id);
-      const response = await deliveryService.optimizeRoute(delivery.id);
-      
-      if (response.success) {
-        setOptimizationResult(response.data);
-        setShowOptimizationModal(true);
-      }
-    } catch (error) {
-      console.error('Optimization error:', error);
-      setError(error.response?.data?.message || 'Failed to optimize route');
-      setTimeout(() => setError(''), 3000);
-    } finally {
-      setOptimizingRoute(null);
-    }
-  };
-
-  const handleDeleteDelivery = async (deliveryId) => {
-    if (!window.confirm('Are you sure you want to delete this delivery?')) {
-      return;
-    }
-    
-    try {
-      await deliveryService.deleteDelivery(deliveryId);
-      loadDeliveries();
-      setSuccess('Delivery deleted successfully');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Delete error:', err);
-      setError(err.response?.data?.message || 'Failed to delete delivery');
-      setTimeout(() => setError(''), 3000);
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    const badges = {
-      pending: 'bg-yellow-100 text-yellow-700',
-      in_progress: 'bg-blue-100 text-blue-700',
-      completed: 'bg-green-100 text-green-700',
-      cancelled: 'bg-red-100 text-red-700'
-    };
-    return badges[status] || badges.pending;
-  };
 
   const getVehicleIcon = (type) => {
     return <Package size={16} />;
   };
-
-  const filteredDeliveries = deliveries.filter(delivery =>
-    delivery.deliveryCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    delivery.driver?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   if (!user) return null;
 
@@ -189,21 +140,21 @@ const DeliveryRoutesPage = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <SummaryCard
           title="Today's Deliveries"
-          value={deliveries.length}
-          subtitle={`${deliveries.filter(d => d.status === 'in_progress').length} in progress`}
+          value={summaryStats.totalDeliveries}
+          subtitle={`${summaryStats.inProgress} in progress`}
           icon={<Route />}
           color="blue"
         />
         <SummaryCard
           title="Total Distance"
-          value={`${deliveries.reduce((sum, d) => sum + (parseFloat(d.totalDistance) || 0), 0).toFixed(1)} km`}
+          value={`${summaryStats.totalDistance} km`}
           subtitle="Today"
           icon={<Navigation />}
           color="purple"
         />
         <SummaryCard
           title="Fuel Saved"
-          value="12.3 L"
+          value={`${summaryStats.fuelSaved} L`}
           subtitle="vs unoptimized"
           icon={<Fuel />}
           color="green"
@@ -211,7 +162,7 @@ const DeliveryRoutesPage = () => {
         />
         <SummaryCard
           title="CO₂ Reduced"
-          value="32.4 kg"
+          value={`${summaryStats.co2Reduced} kg`}
           subtitle="This week"
           icon={<Leaf />}
           color="emerald"
@@ -238,7 +189,7 @@ const DeliveryRoutesPage = () => {
                     Loading deliveries...
                   </td>
                 </tr>
-              ) : filteredDeliveries.length === 0 ? (
+              ) : deliveries.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="text-center py-12">
                     <div className="flex flex-col items-center justify-center">
@@ -251,7 +202,7 @@ const DeliveryRoutesPage = () => {
                   </td>
                 </tr>
               ) : (
-                filteredDeliveries.map((delivery) => (
+                deliveries.map((delivery) => (
                   <React.Fragment key={delivery.id}>
                     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
@@ -308,7 +259,7 @@ const DeliveryRoutesPage = () => {
                             {expandedDelivery === delivery.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                           </button>
                           <button
-                            onClick={() => handleOptimizeRoute(delivery)}
+                            onClick={() => optimizeRoute(delivery)}
                             disabled={optimizingRoute === delivery.id}
                             className="p-2 hover:bg-purple-50 text-purple-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="AI Route Optimization"
@@ -319,7 +270,7 @@ const DeliveryRoutesPage = () => {
                             />
                           </button>
                           <button
-                            onClick={() => handleDeleteDelivery(delivery.id)}
+                            onClick={() => deleteDelivery(delivery.id)}
                             className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
                             title="Delete Delivery"
                           >
@@ -346,41 +297,15 @@ const DeliveryRoutesPage = () => {
       {showOptimizationModal && optimizationResult && (
         <OptimizationModal
           result={optimizationResult}
-          onClose={() => {
-            setShowOptimizationModal(false);
-            setOptimizationResult(null);
-          }}
-          onApply={async () => {
-            try {
-              await deliveryService.applyOptimization(
-                optimizationResult.originalRoute.id,
-                optimizationResult.optimizedRoute
-              );
-              
-              setSuccess('Route optimization applied successfully');
-              setShowOptimizationModal(false);
-              setOptimizationResult(null);
-              loadDeliveries();
-              
-              setTimeout(() => setSuccess(''), 3000);
-            } catch (error) {
-              console.error('Apply optimization error:', error);
-              setError('Failed to apply optimization');
-              setTimeout(() => setError(''), 3000);
-            }
-          }}
+          onClose={closeOptimizationModal}
+          onApply={applyOptimization}
         />
       )}
 
       {showAddModal && (
         <PlanNewDeliveryModal
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
-            setShowAddModal(false);
-            loadDeliveries();
-            setSuccess('Delivery planned successfully');
-            setTimeout(() => setSuccess(''), 3000);
-          }}
+          onSuccess={handleDeliveryCreated}
         />
       )}
     </Layout>
@@ -532,7 +457,7 @@ const RouteVisualizationMap = ({ originalRoute, optimizedRoute }) => {
           maxZoom={20}
         />
 
-       {/* ✅ UPDATED: Original Route - Real Road Geometry */}
+        {/* Original Route - Real Road Geometry */}
         {originalRoute.routeGeometry && (
           <GeoJSON
             data={originalRoute.routeGeometry}
@@ -545,7 +470,7 @@ const RouteVisualizationMap = ({ originalRoute, optimizedRoute }) => {
           />
         )}
 
-        {/* ✅ UPDATED: Optimized Route - Real Road Geometry */}
+        {/* Optimized Route - Real Road Geometry */}
         {optimizedRoute.routeGeometry && (
           <GeoJSON
             data={optimizedRoute.routeGeometry}
@@ -724,4 +649,3 @@ const MetricRow = ({ label, value }) => {
 };
 
 export default DeliveryRoutesPage;
-

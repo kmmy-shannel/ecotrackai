@@ -27,7 +27,6 @@ const Layout = ({ children, currentPage, user }) => {
     { icon: AlertTriangle, label: 'Alerts', path: '/alerts' },
     { icon: Leaf, label: 'Carbon', path: '/carbon' },
     { icon: Users, label: 'Managers', path: '/managers' },
-    { icon: Brain, label: 'AI Tools', path: '/ai-tools' }, // Changed from Wrench to Brain
     { icon: Award, label: 'EcoScore', path: '/ecoscore' },
   ];
 

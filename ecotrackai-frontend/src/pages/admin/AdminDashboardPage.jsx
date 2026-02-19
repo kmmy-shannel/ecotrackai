@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import authService from '../../services/auth.service';
 import aiService from '../../services/ai.service';
 import Navigation from '../../components/Navigation';
-import ManagerManagement from '../../components/admin/ManagerManagement';
+
 import { 
   TrendingUp, ChevronRight, Check,
   Users, Sparkles, Clock, AlertCircle, Package, Truck, AlertTriangle, DollarSign, Map
@@ -12,7 +12,6 @@ import {
 const DashboardPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [showManagerModal, setShowManagerModal] = useState(false);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [aiInsights, setAiInsights] = useState(null);
   const [stats, setStats] = useState({
@@ -161,27 +160,33 @@ const DashboardPage = () => {
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">DASHBOARD</h1>
-          <div className="flex gap-3">
-            {user && user.role === 'admin' && (
-              <button
-                onClick={() => setShowManagerModal(true)}
-                className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-              >
-                <Users size={20} />
-                <span className="font-medium">Manage Accounts</span>
-              </button>
-            )}
+        <div className="flex gap-3">
+  {user && user.role === 'admin' && (
+    <button
+      onClick={() => navigate('/managers')}
+      className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+    >
+      <Users size={20} />
+      <span className="font-medium">Manage Accounts</span>
+    </button>
+  )}
 
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5">
-              <Map size={20} />
-              <span className="font-medium">Plan Route</span>
-            </button>
+  <button
+    onClick={() => navigate('/deliveries')}
+    className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5"
+  >
+    <Map size={20} />
+    <span className="font-medium">Plan Route</span>
+  </button>
 
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-              <span className="text-xl font-semibold">+</span>
-              <span className="font-medium">Add Product</span>
-            </button>
-          </div>
+  <button
+    onClick={() => navigate('/products')}
+    className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+  >
+    <span className="text-xl font-semibold">+</span>
+    <span className="font-medium">Add Product</span>
+  </button>
+</div>
         </div>
 
         <div className="grid grid-cols-5 gap-4 mb-6">
@@ -370,9 +375,7 @@ const DashboardPage = () => {
         </div>
       </main>
 
-      {showManagerModal && (
-        <ManagerManagement onClose={() => setShowManagerModal(false)} />
-      )}
+     
     </div>
   );
 };
