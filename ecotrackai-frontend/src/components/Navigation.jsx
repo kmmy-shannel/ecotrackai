@@ -26,7 +26,6 @@ const Navigation = ({ onLogout }) => {
     { icon: AlertTriangle, label: 'Alerts', path: '/alerts' },
     { icon: Leaf, label: 'Carbon', path: '/carbon' },
     { icon: Users, label: 'Managers', path: '/managers' },
-    { icon: Brain, label: 'AI Tools', path: '/ai-tools' },
     { icon: Award, label: 'EcoScore', path: '/ecoscore' },
   ];
 
