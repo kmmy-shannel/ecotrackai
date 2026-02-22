@@ -7,7 +7,7 @@ const getApprovals = async (req, res) => {
     const result = await ApprovalService.getApprovals(
       req.user,
       req.query.status || 'pending',
-      req.query.role || null
+      req.query.role || null        // ← admin passes role=inventory_manager
     );
     sendSuccess(res, 200, 'Approvals retrieved', result);
   } catch (error) {
@@ -36,7 +36,7 @@ const getApprovalHistory = async (req, res) => {
     const result = await ApprovalService.getApprovalHistory(
       req.user,
       req.query.limit || 50,
-      req.query.role || null
+      req.query.role || null        // ← admin passes role=inventory_manager
     );
     sendSuccess(res, 200, 'Approval history retrieved', result);
   } catch (error) {

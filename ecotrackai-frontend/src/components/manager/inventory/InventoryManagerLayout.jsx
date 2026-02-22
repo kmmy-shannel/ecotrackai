@@ -1,6 +1,16 @@
+// ============================================================
+// FILE LOCATION: src/components/manager/inventory/InventoryManagerLayout.jsx
+// DESIGN: Matches admin Layout.js exactly — white sidebar,
+//         green gradient active states, same header structure
+// ============================================================
+
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, History, LogOut, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  ClipboardList,
+  LogOut,
+} from 'lucide-react';
 import authService from '../../../services/auth.service';
 
 // Matches admin NavItem exactly
@@ -18,54 +28,55 @@ const NavItem = ({ Icon, label, active, onClick }) => (
   </div>
 );
 
-const InventoryManagerLayout = ({ children, currentPage, user }) => {
+const InventoryManagerLayout = ({ children, currentPage, user, activeView, onViewChange }) => {
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard',        path: '/inventory-manager' },
-    { icon: History,         label: 'Approval History', path: '/inventory-manager/history' },
-  ];
 
   const displayName    = user?.fullName || user?.full_name || 'Manager';
   const displayInitial = displayName.charAt(0).toUpperCase();
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    try { await authService.logout(); } catch {}
     navigate('/');
   };
+
+  const navItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', view: 'dashboard' },
+    { icon: ClipboardList,   label: 'History',   view: 'history'   },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50 flex">
 
-      {/* Sidebar — matches admin sidebar exactly */}
+      {/* ── Sidebar — matches admin sidebar exactly ── */}
       <aside className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col shadow-sm">
 
-        {/* Logo */}
+        {/* Logo — matches admin logo block */}
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-[#1a4d2e] rounded-xl shadow-md flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm">ET</span>
-          </div>
+          <img
+            src="/logo.jpg"
+            alt="EcoTrackAI Logo"
+            className="w-10 h-10 rounded-xl shadow-md object-cover"
+          />
           <div>
             <h1 className="text-lg font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
               ECO-TRACKAI
             </h1>
-            <p className="text-xs text-green-600 font-semibold">Inventory Manager</p>
+            <p className="text-xs text-green-600 font-semibold -mt-0.5">Inventory Manager</p>
           </div>
         </div>
 
         {/* Menu Label */}
-        <p className="text-xs text-gray-400 font-semibold mb-4 uppercase tracking-wider">Menu</p>
+        <p className="text-xs text-gray-500 font-semibold mb-4 uppercase tracking-wider">Menu</p>
 
         {/* Navigation */}
         <nav className="space-y-1 flex-1">
           {navItems.map((item) => (
             <NavItem
-              key={item.path}
+              key={item.view}
               Icon={item.icon}
               label={item.label}
-              active={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
+              active={activeView === item.view}
+              onClick={() => onViewChange(item.view)}
             />
           ))}
         </nav>
@@ -82,14 +93,16 @@ const InventoryManagerLayout = ({ children, currentPage, user }) => {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── Main — matches admin main exactly ── */}
       <main className="flex-1 flex flex-col">
 
         {/* Header — matches admin header */}
         <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
-          <h1 className="text-2xl font-bold text-gray-800 uppercase tracking-wide">
-            {currentPage}
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-800 uppercase tracking-wide">
+              {currentPage}
+            </h1>
+          </div>
           <div className="flex items-center gap-3">
             <div className="text-right mr-3">
               <p className="text-sm font-medium text-gray-700">{displayName}</p>
@@ -101,7 +114,7 @@ const InventoryManagerLayout = ({ children, currentPage, user }) => {
           </div>
         </header>
 
-        {/* Content */}
+        {/* Page Content */}
         <div className="flex-1 overflow-auto p-8">
           {children}
         </div>

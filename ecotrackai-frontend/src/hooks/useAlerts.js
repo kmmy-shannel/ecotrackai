@@ -1,196 +1,246 @@
-import { useState, useEffect } from 'react';
+// ============================================================
+// FILE LOCATION: src/hooks/useAlerts.js
+// PURPOSE: State + logic for AlertsPage
+// KEY FIX: submitReview('accepted') now calls approvalService.createFromAlert
+//          which creates a pending approval visible to the Inventory Manager
+// ============================================================
+
+import { useState, useEffect, useCallback } from 'react';
 import alertService from '../services/alert.service';
 import approvalService from '../services/approval.service';
 
 const useAlerts = () => {
-  // ── State ──────────────────────────────────────────────────
-  const [alerts, setAlerts] = useState([]);
+  const [alerts, setAlerts]               = useState([]);
   const [filteredAlerts, setFilteredAlerts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading]             = useState(false);
+  const [stats, setStats]                 = useState({ total: 0, high_risk: 0, medium_risk: 0, low_risk: 0 });
+  const [error, setError]                 = useState('');
+  const [success, setSuccess]             = useState('');
+  const [searchTerm, setSearchTerm]       = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
-  const [stats, setStats] = useState({
-    total: 0,
-    high_risk: 0,
-    medium_risk: 0,
-    low_risk: 0
-  });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [selectedAlert, setSelectedAlert] = useState(null);
-  const [aiInsights, setAIInsights] = useState(null);
+
+  // AI modal state
+  const [showAIModal, setShowAIModal]       = useState(false);
+  const [selectedAlert, setSelectedAlert]   = useState(null);
+  const [aiInsights, setAiInsights]         = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
 
-  // ── Business Logic ─────────────────────────────────────────
+  // ── Load alerts on mount ────────────────────────────────────
+  useEffect(() => {
+    loadAlerts();
+  }, []);
 
-  // Load all alerts from API
-  const loadAlerts = async () => {
-    try {
-      setLoading(true);
-      const response = await alertService.getAllAlerts();
-      setAlerts(response.data.alerts || []);
-      setError('');
-    } catch (err) {
-      console.error('Load alerts error:', err);
-      setError(err.response?.data?.message || 'Failed to load alerts');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ── Filter whenever alerts / search / filter change ────────
+  useEffect(() => {
+    let result = [...alerts];
 
-  // Load alert statistics
-  const loadStats = async () => {
-    try {
-      const response = await alertService.getAlertStats();
-      setStats(response.data);
-    } catch (err) {
-      console.error('Load stats error:', err);
-    }
-  };
-
-  // Filter alerts based on search term and risk level
-  const filterAlerts = () => {
-    let filtered = alerts;
-
-    // Filter by risk level
-    if (selectedFilter !== 'All') {
-      filtered = filtered.filter(alert => {
-        if (selectedFilter === 'High') return alert.risk_level === 'HIGH';
-        if (selectedFilter === 'Medium') return alert.risk_level === 'MEDIUM';
-        if (selectedFilter === 'Low') return alert.risk_level === 'LOW';
-        return true;
-      });
-    }
-
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(alert =>
-        alert.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        alert.details.toLowerCase().includes(searchTerm.toLowerCase())
+    if (searchTerm.trim()) {
+      result = result.filter(a =>
+        a.product_name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    setFilteredAlerts(filtered);
-  };
-
-  // Delete alert with confirmation
-  const deleteAlert = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this alert?')) {
-      return;
+    if (selectedFilter !== 'All') {
+      result = result.filter(a =>
+        a.risk_level?.toLowerCase() === selectedFilter.toLowerCase()
+      );
     }
 
+    setFilteredAlerts(result);
+  }, [alerts, searchTerm, selectedFilter]);
+
+  // ── Fetch all alerts + sync ─────────────────────────────────
+  const loadAlerts = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      // Auto-sync to generate alerts from current products
+      try { await alertService.syncAlerts(); } catch { /* non-fatal */ }
+
+      const response = await alertService.getAllAlerts();
+      const data = response?.data || response?.alerts || response || [];
+      const list = Array.isArray(data) ? data : (data.alerts || []);
+      setAlerts(list);
+
+      // Compute stats locally (in case /stats endpoint is slow)
+      setStats({
+        total:       list.length,
+        high_risk:   list.filter(a => a.risk_level === 'HIGH').length,
+        medium_risk: list.filter(a => a.risk_level === 'MEDIUM').length,
+        low_risk:    list.filter(a => a.risk_level === 'LOW').length,
+      });
+    } catch (err) {
+      console.error('Load alerts error:', err);
+      setError('Failed to load alerts');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Delete an alert ─────────────────────────────────────────
+  const deleteAlert = useCallback(async (id) => {
     try {
       await alertService.deleteAlert(id);
-      setSuccess('Alert deleted successfully');
-      loadAlerts();
-      loadStats();
+      setAlerts(prev => prev.filter(a => a.id !== id));
+      setSuccess('Alert deleted');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Delete alert error:', err);
+    } catch {
       setError('Failed to delete alert');
       setTimeout(() => setError(''), 3000);
     }
-  };
+  }, []);
 
-  // Get AI insights for an alert
-  const getAIInsights = async (alert) => {
+  // ── Open AI modal and fetch insights ───────────────────────
+  const getAIInsights = useCallback(async (alert) => {
     setSelectedAlert(alert);
+    setAiInsights(null);
     setShowAIModal(true);
     setLoadingInsights(true);
 
     try {
       const response = await alertService.getAIInsights(alert.id);
-      setAIInsights(response.data);
-    } catch (err) {
-      console.error('Get AI insights error:', err);
-      setAIInsights({
-        recommendations: [
-          'Unable to generate insights at this time',
-          'Please try again later'
-        ],
-        priority_actions: [],
-        cost_impact: 'Unknown'
-      });
+      const insights = response?.data || response;
+      setAiInsights(insights);
+    } catch {
+      // Fallback — rule-based insights so UI never stays empty
+      const daysLeft   = alert.days_left || 0;
+      const riskLevel  = alert.risk_level;
+
+      const fallbackMap = {
+        HIGH: {
+          recommendations: [
+            `Immediate delivery recommended — only ${daysLeft} days remaining`,
+            'Apply 20–30% promotional discount to accelerate sales',
+            'Prioritise this product in the next delivery batch',
+            `Verify cooling: current temp ${alert.temperature ?? '?'}°C`,
+            'Alert top buyers about limited-time bulk availability',
+          ],
+          priority_actions: [
+            'Immediate: Schedule delivery within 24–48 hours',
+            'Short-term: Contact buyers for emergency bulk orders',
+            'Medium-term: Review supplier lead times',
+          ],
+          cost_impact: String((parseFloat(alert.value || 0) * 0.80).toFixed(2)),
+        },
+        MEDIUM: {
+          recommendations: [
+            `${daysLeft} days left — schedule delivery this week`,
+            'Monitor storage conditions daily',
+            'Bundle with faster-moving products to increase turnover',
+          ],
+          priority_actions: [
+            'Short-term: Include in next delivery route within 5–7 days',
+            'Medium-term: Optimise storage conditions',
+            'Long-term: Adjust order quantities based on demand',
+          ],
+          cost_impact: String((parseFloat(alert.value || 0) * 0.50).toFixed(2)),
+        },
+        LOW: {
+          recommendations: [
+            'Product condition is stable — continue regular monitoring',
+            'Maintain current storage conditions',
+            `${daysLeft} days allows standard distribution`,
+          ],
+          priority_actions: [
+            'Regular: Continue standard monitoring procedures',
+            'Medium-term: Track shelf-life patterns',
+            'Long-term: Optimise procurement cycles',
+          ],
+          cost_impact: String((parseFloat(alert.value || 0) * 0.10).toFixed(2)),
+        },
+      };
+
+      setAiInsights(fallbackMap[riskLevel] || fallbackMap.LOW);
     } finally {
       setLoadingInsights(false);
     }
-  };
-
-  // Close AI modal
-  const closeAIModal = () => {
-    setShowAIModal(false);
-    setSelectedAlert(null);
-    setAIInsights(null);
-  };
-// Called when admin clicks Accept or Reject in AI modal
-const submitReview = async (decision) => {
-  if (!selectedAlert) return;
-
-  if (decision === 'accepted') {
-    try {
-      await approvalService.createFromAlert({
-        product_name:  selectedAlert.product_name,
-        quantity:      selectedAlert.quantity,
-        location:      selectedAlert.location || 'Warehouse',
-        days_left:     selectedAlert.days_left,
-        risk_level:    selectedAlert.risk_level,
-        ai_suggestion: aiInsights?.recommendations?.join(' | ') || '',
-      });
-      setSuccess('Sent to Inventory Manager for review');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Submit review error:', err);
-      setError('Failed to send to manager');
-      setTimeout(() => setError(''), 3000);
-    }
-  } else {
-    setSuccess('Recommendation rejected');
-    setTimeout(() => setSuccess(''), 3000);
-  }
-
-  closeAIModal();
-};
-  // ── Helpers ────────────────────────────────────────────────
-
-  const getRiskBadgeColor = (riskLevel) => {
-    const colors = {
-      HIGH: 'bg-red-100 text-red-600 border-red-200',
-      MEDIUM: 'bg-orange-100 text-orange-600 border-orange-200',
-      LOW: 'bg-green-100 text-green-600 border-green-200'
-    };
-    return colors[riskLevel] || colors.LOW;
-  };
-
-  const getRiskBadgeText = (riskLevel) => {
-    const text = {
-      HIGH: 'High',
-      MEDIUM: 'Medium',
-      LOW: 'Low'
-    };
-    return text[riskLevel] || 'Low';
-  };
-
-  const getProductImage = (productName) => {
-    return '🥔';
-  };
-
-  // ── Effects ────────────────────────────────────────────────
-
-  // Auto-load alerts and stats on mount
-  useEffect(() => {
-    loadAlerts();
-    loadStats();
   }, []);
 
-  // Re-filter when dependencies change
-  useEffect(() => {
-    filterAlerts();
-  }, [alerts, searchTerm, selectedFilter]);
+  // ── Close AI modal ──────────────────────────────────────────
+  const closeAIModal = useCallback(() => {
+    setShowAIModal(false);
+    setSelectedAlert(null);
+    setAiInsights(null);
+  }, []);
 
-  // ── Public API ─────────────────────────────────────────────
+  // ── CORE CONNECTION: Admin accepts → creates Inventory Manager approval ─
+  const submitReview = useCallback(async (decision) => {
+    if (!selectedAlert) return;
+
+    try {
+      if (decision === 'accepted') {
+        // Build the AI suggestion string from fetched insights
+        const aiSuggestion = aiInsights?.recommendations?.[0]
+          ? `${aiInsights.recommendations[0]}. ${aiInsights.priority_actions?.[0] || ''}`
+          : `${selectedAlert.risk_level} risk: ${selectedAlert.days_left} days remaining — immediate action required.`;
+
+        // Priority maps from risk_level
+        const priorityMap = { HIGH: 'HIGH', MEDIUM: 'MEDIUM', LOW: 'LOW' };
+
+        // Create a pending approval in the Inventory Manager's queue
+        await approvalService.createFromAlert({
+          alertId:      selectedAlert.id,
+          productName:  selectedAlert.product_name,
+          quantity:     selectedAlert.quantity     || 'N/A',
+          location:     selectedAlert.location     || 'N/A',
+          daysLeft:     selectedAlert.days_left    || 0,
+          riskLevel:    selectedAlert.risk_level   || 'MEDIUM',
+          priority:     priorityMap[selectedAlert.risk_level] || 'MEDIUM',
+          aiSuggestion,
+          requiredRole: 'inventory_manager',
+          approvalType: 'spoilage_action',
+        });
+
+        // Mark the alert as resolved so it leaves the admin's view
+        await alertService.updateAlertStatus(selectedAlert.id, 'resolved');
+        setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
+
+        setSuccess('✓ Recommendations accepted — sent to Inventory Manager for approval');
+      } else {
+        // Admin rejected → just dismiss the alert
+        await alertService.updateAlertStatus(selectedAlert.id, 'dismissed');
+        setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
+        setSuccess('Recommendations dismissed');
+      }
+
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err) {
+      console.error('Submit review error:', err);
+      setError('Failed to submit decision. Please try again.');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      closeAIModal();
+    }
+  }, [selectedAlert, aiInsights, closeAIModal]);
+
+  // ── UI helpers ──────────────────────────────────────────────
+  const getRiskBadgeColor = (level) => ({
+    HIGH:   'bg-red-100 text-red-700 border-red-200',
+    MEDIUM: 'bg-orange-100 text-orange-700 border-orange-200',
+    LOW:    'bg-green-100 text-green-700 border-green-200',
+  }[level] || 'bg-gray-100 text-gray-700 border-gray-200');
+
+  const getRiskBadgeText = (level) => ({
+    HIGH: 'HIGH RISK', MEDIUM: 'MEDIUM RISK', LOW: 'LOW RISK',
+  }[level] || level);
+
+  const getProductImage = (name = '') => {
+    const n = name.toLowerCase();
+    if (n.includes('tomato'))  return '🍅';
+    if (n.includes('lettuce') || n.includes('salad')) return '🥬';
+    if (n.includes('chicken') || n.includes('poultry')) return '🍗';
+    if (n.includes('fish') || n.includes('seafood'))    return '🐟';
+    if (n.includes('milk') || n.includes('dairy'))      return '🥛';
+    if (n.includes('bread'))   return '🍞';
+    if (n.includes('fruit'))   return '🍎';
+    if (n.includes('veg'))     return '🥦';
+    if (n.includes('egg'))     return '🥚';
+    if (n.includes('meat') || n.includes('beef') || n.includes('pork')) return '🥩';
+    return '📦';
+  };
+
   return {
-    // State
     filteredAlerts,
     loading,
     stats,
@@ -202,19 +252,15 @@ const submitReview = async (decision) => {
     selectedAlert,
     aiInsights,
     loadingInsights,
-
-    // Actions
     setSearchTerm,
     setSelectedFilter,
     deleteAlert,
     getAIInsights,
     closeAIModal,
-    submitReview, 
-
-    // Helpers
+    submitReview,
     getRiskBadgeColor,
     getRiskBadgeText,
-    getProductImage
+    getProductImage,
   };
 };
 
