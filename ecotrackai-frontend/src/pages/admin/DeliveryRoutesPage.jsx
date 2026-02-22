@@ -528,13 +528,12 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
 
         <div className="p-6 space-y-6">
           {/* Savings Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <SavingCard label="Distance" value={`${savings.distance} km`} icon={<Navigation />} />
-            <SavingCard label="Time" value={`${savings.time} min`} icon={<Clock />} />
-            <SavingCard label="Fuel" value={`${savings.fuel} L`} icon={<Fuel />} />
-            <SavingCard label="Emissions" value={`${savings.emissions} kg`} icon={<Leaf />} />
-            <SavingCard label="Cost" value={`₱${savings.cost}`} icon={<TrendingDown />} />
-          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  <SavingCard label="Distance" value={`${savings.distance} km`} icon={<Navigation />} />
+  <SavingCard label="Time" value={`${savings.time} min`} icon={<Clock />} />
+  <SavingCard label="Fuel" value={`${savings.fuel} L`} icon={<Fuel />} />
+  <SavingCard label="Emissions" value={`${savings.emissions} kg`} icon={<Leaf />} />
+</div>
 
           {/* Route Comparison */}
           <div className="grid md:grid-cols-2 gap-6">

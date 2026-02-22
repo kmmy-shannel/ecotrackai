@@ -10,62 +10,57 @@ const DeliveryModel = {
 
   // Get all deliveries for a business
   async findAllByBusiness(businessId) {
-    const query = `
-      SELECT
-        route_id         AS id,
-        route_name       AS delivery_code,  -- Using route_name as delivery code
-        -- No date field, using created_at
-        created_at       AS date,
-        -- No driver field, using placeholder
-        'Driver Not Assigned' AS driver,
-        vehicle_type,
-        -- No estimated_load field, using 0
-        0 AS estimated_load,
-        -- Combine origin and destination as stops
-        jsonb_build_array(
-          origin_location,
-          destination_location
-        ) AS stops,
-        total_distance_km              AS total_distance,
-        estimated_duration_minutes     AS estimated_duration,
-        estimated_fuel_consumption_liters AS fuel_consumption,
-        estimated_carbon_kg            AS carbon_emissions,
-        -- No route_geometry, using null
-        NULL AS route_geometry,
-        status,
-        created_at
-      FROM delivery_routes
-      WHERE business_id = $1
-      ORDER BY created_at DESC
-    `;
+   const query = `
+  SELECT
+    route_id                          AS id,
+    route_name                        AS delivery_code,
+    created_at                        AS date,
+    driver_name                       AS driver,
+    vehicle_type,
+    0                                 AS estimated_load,
+    jsonb_build_array(
+      origin_location,
+      destination_location
+    )                                 AS stops,
+    total_distance_km                 AS total_distance,
+    estimated_duration_minutes        AS estimated_duration,
+    estimated_fuel_consumption_liters AS fuel_consumption,
+    estimated_carbon_kg               AS carbon_emissions,
+    NULL                              AS route_geometry,
+    status,
+    created_at
+  FROM delivery_routes
+  WHERE business_id = $1
+  ORDER BY created_at DESC
+`;
     const { rows } = await pool.query(query, [businessId]);
     return rows;
   },
 
   // Get single delivery by ID
   async findById(routeId) {
-    const query = `
-      SELECT
-        route_id         AS id,
-        route_name       AS delivery_code,
-        created_at       AS date,
-        'Driver Not Assigned' AS driver,
-        vehicle_type,
-        0 AS estimated_load,
-        jsonb_build_array(
-          origin_location,
-          destination_location
-        ) AS stops,
-        total_distance_km              AS total_distance,
-        estimated_duration_minutes     AS estimated_duration,
-        estimated_fuel_consumption_liters AS fuel_consumption,
-        estimated_carbon_kg            AS carbon_emissions,
-        NULL AS route_geometry,
-        status,
-        created_at
-      FROM delivery_routes
-      WHERE route_id = $1
-    `;
+   const query = `
+  SELECT
+    route_id                          AS id,
+    route_name                        AS delivery_code,
+    created_at                        AS date,
+    driver_name                       AS driver,
+    vehicle_type,
+    0                                 AS estimated_load,
+    jsonb_build_array(
+      origin_location,
+      destination_location
+    )                                 AS stops,
+    total_distance_km                 AS total_distance,
+    estimated_duration_minutes        AS estimated_duration,
+    estimated_fuel_consumption_liters AS fuel_consumption,
+    estimated_carbon_kg               AS carbon_emissions,
+    NULL                              AS route_geometry,
+    status,
+    created_at
+  FROM delivery_routes
+  WHERE route_id = $1
+`;
     const { rows } = await pool.query(query, [routeId]);
     return rows[0] || null;
   },
@@ -80,30 +75,32 @@ const DeliveryModel = {
   // Insert new delivery - UPDATED to match actual schema
   async create(businessId, deliveryData) {
     const query = `
-      INSERT INTO delivery_routes (
-        business_id,
-        route_name,
-        origin_location,
-        destination_location,
-        vehicle_type,
-        total_distance_km,
-        estimated_duration_minutes,
-        estimated_fuel_consumption_liters,
-        estimated_carbon_kg,
-        status
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING
-        route_id AS id,
-        route_name AS delivery_code,
-        created_at AS date,
-        vehicle_type,
-        total_distance_km AS total_distance,
-        estimated_duration_minutes AS estimated_duration,
-        estimated_fuel_consumption_liters AS fuel_consumption,
-        estimated_carbon_kg AS carbon_emissions,
-        status
-    `;
+  INSERT INTO delivery_routes (
+    business_id,
+    route_name,
+    driver_name,
+    origin_location,
+    destination_location,
+    vehicle_type,
+    total_distance_km,
+    estimated_duration_minutes,
+    estimated_fuel_consumption_liters,
+    estimated_carbon_kg,
+    status
+  )
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  RETURNING
+    route_id AS id,
+    route_name AS delivery_code,
+    created_at AS date,
+    driver_name AS driver,
+    vehicle_type,
+    total_distance_km AS total_distance,
+    estimated_duration_minutes AS estimated_duration,
+    estimated_fuel_consumption_liters AS fuel_consumption,
+    estimated_carbon_kg AS carbon_emissions,
+    status
+`;
 
     // Extract origin and destination from stops array
     const origin = deliveryData.stops && deliveryData.stops[0] ? {
@@ -118,18 +115,19 @@ const DeliveryModel = {
       lng: deliveryData.stops[deliveryData.stops.length - 1].lng
     } : { location: 'Unknown', lat: 0, lng: 0 };
 
-    const { rows } = await pool.query(query, [
-      businessId,
-      deliveryData.deliveryCode || `Route-${Date.now()}`,
-      JSON.stringify(origin),
-      JSON.stringify(destination),
-      deliveryData.vehicleType || 'van',
-      deliveryData.totalDistance || 0,
-      deliveryData.estimatedDuration || 0,
-      deliveryData.fuelConsumption || 0,
-      deliveryData.carbonEmissions || 0,
-      'pending'
-    ]);
+   const { rows } = await pool.query(query, [
+  businessId,
+  deliveryData.deliveryCode || `Route-${Date.now()}`,
+  deliveryData.driver || 'Driver Not Assigned',
+  JSON.stringify(origin),
+  JSON.stringify(destination),
+  deliveryData.vehicleType || 'van',
+  deliveryData.totalDistance || 0,
+  deliveryData.estimatedDuration || 0,
+  deliveryData.fuelConsumption || 0,
+  deliveryData.carbonEmissions || 0,
+  'pending'
+]);
 
     return rows[0];
   },

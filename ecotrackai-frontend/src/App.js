@@ -14,10 +14,10 @@ import CarbonFootprintPage from './pages/admin/CarbonFootprintPage';
 import ManagerPage from './pages/ManagerPage'; 
 import EcoScorePage from './pages/admin/EcoScorePage';  
 // Manager pages
-import InventoryManagerPage from './pages/manager/InventoryManagerPage';
-import LogisticsManagerPage from './pages/manager/LogisticsManagerPage';
-import SustainabilityManagerPage from './pages/manager/SustainabilityManagerPage';
-import FinanceManagerPage from './pages/manager/FinanceManagerPage';
+import InventoryManagerPage from './pages/manager/inventory/InventoryManagerPage';
+import LogisticsManagerPage from './pages/manager/logistics/LogisticsManagerPage';
+import SustainabilityManagerPage from './pages/manager/sustainability/SustainabilityManagerPage';
+// FinanceManagerPage line — DELETE IT ENTIRELY
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   return authService.isAuthenticated() ? <>{children}</> : <Navigate to="/" />;

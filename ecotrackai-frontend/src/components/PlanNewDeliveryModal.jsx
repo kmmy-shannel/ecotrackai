@@ -112,7 +112,7 @@ const LocationSearch = ({ onLocationSelect, stopIndex }) => {
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
         <input
           type="text"
-          placeholder="Search location..."
+          placeholder="Name location location..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
@@ -297,17 +297,20 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
     try {
       setLoading(true);
       const deliveryData = {
-        ...formData,
-        stops: stops.map(s => ({
-          location: s.location,
-          lat: s.lat,
-          lng: s.lng,
-          type: s.type,
-          products: s.products
-        })),
-        estimatedDistance: estimatedDistance?.distance,
-        estimatedDuration: estimatedDistance?.duration
-      };
+  deliveryDate: formData.deliveryDate,
+  driver: formData.driver.trim(),
+  vehicleType: formData.vehicleType,
+  estimatedLoad: formData.estimatedLoad,
+  stops: stops.map(s => ({
+    location: s.location,
+    lat: s.lat,
+    lng: s.lng,
+    type: s.type,
+    products: s.products
+  })),
+  totalDistance: estimatedDistance?.distance,
+  estimatedDuration: estimatedDistance?.duration
+};
       
       await deliveryService.createDelivery(deliveryData);
       onSuccess();
@@ -447,7 +450,7 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
                       </div>
                       <span className="text-xs font-semibold text-gray-700">
                         {stop.type === 'origin' ? 'Origin' : 
-                         stop.type === 'destination' ? 'Destination' : `Stop ${index}`}
+                         stop.type === 'destination' ? 'Destination' : `Stop ${index -1}`}
                       </span>
                       {stop.type === 'stop' && (
                         <button

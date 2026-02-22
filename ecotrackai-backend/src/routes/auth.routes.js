@@ -22,6 +22,11 @@ const registerValidation = [
   body('businessName')
     .trim()
     .notEmpty().withMessage('Business name is required'),
+    body('contactPhone')
+  .trim()
+  .notEmpty().withMessage('Contact phone is required')
+  .matches(/^\d+$/).withMessage('Contact phone must contain numbers only')
+  .isLength({ min: 7, max: 15 }).withMessage('Contact phone must be 7-15 digits'),
   body('firstName')
     .trim()
     .notEmpty().withMessage('First name is required')

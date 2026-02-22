@@ -81,7 +81,29 @@ const RegisterPage = () => {
           delete errors.confirmPassword;
         }
         break;
-      
+      case 'businessName':
+  if (value.length > 0 && value.length < 2) {
+    errors.businessName = 'Business name must be at least 2 characters';
+  } else {
+    delete errors.businessName;
+  }
+  break;
+
+case 'address':
+  if (value.length > 0 && value.length < 2) {
+    errors.address = 'Address must be at least 2 characters';
+  } else {
+    delete errors.address;
+  }
+  break;
+
+case 'contactPhone':
+  if (value.length > 0 && !/^\d+$/.test(value)) {
+    errors.contactPhone = 'Contact phone must contain numbers only';
+  } else {
+    delete errors.contactPhone;
+  }
+  break;
       default:
         break;
     }
@@ -200,16 +222,21 @@ const RegisterPage = () => {
           {/* Business Information */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <input
-                type="text"
-                name="businessName"
-                placeholder="Business Name *"
-                value={formData.businessName}
-                onChange={handleChange}
-                className="w-full px-6 py-4 bg-gray-100 rounded-full"
-                required
-              />
-            </div>
+  <input
+    type="text"
+    name="businessName"
+    placeholder="Business Name *"
+    value={formData.businessName}
+    onChange={handleChange}
+    className={`w-full px-6 py-4 bg-gray-100 rounded-full ${
+      validationErrors.businessName ? 'border-2 border-red-500' : ''
+    }`}
+    required
+  />
+  {validationErrors.businessName && (
+    <p className="text-red-500 text-xs mt-1 ml-4">{validationErrors.businessName}</p>
+  )}
+</div>
             <div>
               <input
                 type="text"
@@ -245,16 +272,28 @@ const RegisterPage = () => {
               />
             </div>
             <div>
-              <input
-                type="tel"
-                name="contactPhone"
-                placeholder="Contact Phone *"
-                value={formData.contactPhone}
-                onChange={handleChange}
-                className="w-full px-6 py-4 bg-gray-100 rounded-full"
-                required
-              />
-            </div>
+  <input
+    type="tel"
+    name="contactPhone"
+    placeholder="Contact Phone *"
+    value={formData.contactPhone}
+    onChange={handleChange}
+    onKeyDown={(e) => {
+      // Allow: backspace, delete, tab, escape, enter, arrow keys
+      const allowedKeys = ['Backspace','Delete','Tab','Escape','Enter','ArrowLeft','ArrowRight','Home','End'];
+      if (allowedKeys.includes(e.key)) return;
+      // Block non-numeric keys
+      if (!/^\d$/.test(e.key)) e.preventDefault();
+    }}
+    className={`w-full px-6 py-4 bg-gray-100 rounded-full ${
+      validationErrors.contactPhone ? 'border-2 border-red-500' : ''
+    }`}
+    required
+  />
+  {validationErrors.contactPhone && (
+    <p className="text-red-500 text-xs mt-1 ml-4">{validationErrors.contactPhone}</p>
+  )}
+</div>
           </div>
 
           <div className="h-px bg-gray-300 my-6"></div>

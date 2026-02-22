@@ -27,6 +27,7 @@ const AlertsPage = () => {
     deleteAlert,
     getAIInsights,
     closeAIModal,
+    submitReview,
     getRiskBadgeColor,
     getRiskBadgeText,
     getProductImage
@@ -41,6 +42,11 @@ const AlertsPage = () => {
     }
     setUser(currentUser);
   }, [navigate]);
+
+  const handleReview = (decision) => {
+  submitReview(decision);
+};
+
 
   if (!user) return null;
 
@@ -115,14 +121,13 @@ const AlertsPage = () => {
         </div>
 
         {/* Table Header - Green */}
-        <div className="bg-green-100 rounded-t-2xl px-4 py-3 grid grid-cols-6 gap-4 font-semibold text-gray-700 text-sm border border-green-200">
-          <div>Product</div>
-          <div className="text-center">Quantity</div>
-          <div className="text-center">Shelf Life</div>
-          <div className="text-center">Risk</div>
-          <div className="text-right">Value</div>
-          <div className="text-right">Actions</div>
-        </div>
+        <div className="bg-green-100 rounded-t-2xl px-4 py-3 grid grid-cols-5 gap-4 font-semibold text-gray-700 text-sm border border-green-200">
+  <div>Product</div>
+  <div className="text-center">Quantity</div>
+  <div className="text-center">Shelf Life</div>
+  <div className="text-center">Risk</div>
+  <div className="text-right">Actions</div>
+</div>
 
         {/* Product Cards */}
         <div className="bg-white border-x border-b border-gray-200 rounded-b-2xl">
@@ -152,32 +157,19 @@ const AlertsPage = () => {
         </div>
 
         {/* Get AI Insights Button */}
-        {filteredAlerts.length > 0 && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                if (filteredAlerts.length > 0) {
-                  getAIInsights(filteredAlerts[0]);
-                }
-              }}
-              className="inline-flex items-center gap-2 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-full transition-colors shadow-lg shadow-purple-200"
-            >
-              <Sparkles size={20} />
-              Get AI insights
-            </button>
-          </div>
-        )}
+           
       </div>
 
       {/* AI Insights Modal */}
       {showAIModal && (
-        <AIInsightsModal
-          alert={selectedAlert}
-          insights={aiInsights}
-          loading={loadingInsights}
-          onClose={closeAIModal}
-        />
-      )}
+  <AIInsightsModal
+    alert={selectedAlert}
+    insights={aiInsights}
+    loading={loadingInsights}
+    onClose={closeAIModal}
+    onReview={handleReview}
+  />
+)}
     </Layout>
   );
 };
@@ -209,7 +201,7 @@ const ProductCard = ({
   isLast 
 }) => {
   return (
-    <div className={`px-4 py-4 grid grid-cols-6 gap-4 items-center hover:bg-gray-50 transition-colors ${
+   <div className={`px-4 py-4 grid grid-cols-5 gap-4 items-center hover:bg-gray-50 transition-colors ${
       !isLast ? 'border-b border-gray-100' : ''
     }`}>
       {/* Product with Image */}
@@ -245,12 +237,7 @@ const ProductCard = ({
         </span>
       </div>
 
-      {/* Value */}
-      <div className="text-right">
-        <p className="text-sm font-bold text-gray-800">
-          ₱{alert.value || '8000.00'}
-        </p>
-      </div>
+     
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-2">
@@ -275,7 +262,7 @@ const ProductCard = ({
 };
 
 // AI Insights Modal Component
-const AIInsightsModal = ({ alert, insights, loading, onClose }) => {
+const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
@@ -323,9 +310,7 @@ const AIInsightsModal = ({ alert, insights, loading, onClose }) => {
                 <p className="text-gray-700 text-sm mb-2">
                   <strong>Days Until Expiry:</strong> {alert?.days_left || 4} days
                 </p>
-                <p className="text-gray-700 text-sm">
-                  <strong>Estimated Loss:</strong> ₱{alert?.value || '8000.00'}
-                </p>
+              
               </div>
 
               {/* Recommendations */}
@@ -370,16 +355,7 @@ const AIInsightsModal = ({ alert, insights, loading, onClose }) => {
               </div>
 
               {/* Cost Impact */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-5 border border-green-200">
-                <h3 className="font-bold text-gray-800 mb-2">Potential Cost Savings</h3>
-                <p className="text-gray-700 text-sm">
-                  By following these recommendations, you could potentially save{' '}
-                  <strong className="text-green-600">
-                    ₱{insights.cost_impact || (parseFloat(alert?.value || 8000) * 0.8).toFixed(2)}
-                  </strong>
-                  {' '}in product loss prevention.
-                </p>
-              </div>
+              
             </div>
           ) : (
             <div className="text-center py-12">
@@ -388,15 +364,31 @@ const AIInsightsModal = ({ alert, insights, loading, onClose }) => {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 p-4 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-semibold rounded-lg transition-colors"
-          >
-            Close
-          </button>
-        </div>
+       {/* Footer */}
+<div className="border-t border-gray-200 p-4 bg-gray-50 space-y-3">
+  {!loading && insights && (
+    <div className="flex gap-3">
+      <button
+        onClick={() => onReview('accepted')}
+        className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+      >
+        ✓ Accept Recommendations
+      </button>
+      <button
+        onClick={() => onReview('rejected')}
+        className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors"
+      >
+        ✗ Reject Recommendations
+      </button>
+    </div>
+  )}
+  <button
+    onClick={onClose}
+    className="w-full py-3 bg-gray-800 hover:bg-gray-900 text-white font-semibold rounded-lg transition-colors"
+  >
+    Close
+  </button>
+</div>
       </div>
     </div>
   );

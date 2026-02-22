@@ -127,17 +127,18 @@ const useDelivery = () => {
   // ── Computed Values ────────────────────────────────────────
 
   // Filter deliveries by search term
-  const filteredDeliveries = deliveries.filter(delivery =>
-    delivery.deliveryCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    delivery.driver?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+const filteredDeliveries = deliveries.filter(delivery =>
+  delivery.deliveryCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  delivery.driver?.toLowerCase().includes(searchTerm.toLowerCase())
+);
 
-  // Summary statistics
-  const summaryStats = {
-    totalDeliveries: deliveries.length,
-    inProgress: deliveries.filter(d => d.status === 'in_progress').length,
-    totalDistance: deliveries.reduce((sum, d) => sum + (parseFloat(d.totalDistance) || 0), 0).toFixed(1)
-  };
+const summaryStats = {
+  totalDeliveries: deliveries.length,
+  inProgress: deliveries.filter(d => d.status === 'in_progress').length,
+  totalDistance: deliveries.reduce((sum, d) => sum + (parseFloat(d.totalDistance) || 0), 0).toFixed(1),
+  fuelSaved: deliveries.reduce((sum, d) => sum + (parseFloat(d.fuelConsumption) || 0), 0).toFixed(1),
+  co2Reduced: deliveries.reduce((sum, d) => sum + (parseFloat(d.carbonEmissions) || 0), 0).toFixed(1),
+};
 
   // ── Effects ────────────────────────────────────────────────
 
