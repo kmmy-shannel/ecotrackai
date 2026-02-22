@@ -24,8 +24,8 @@ pool.connect((err, client, release) => {
   } else {
     console.log(
       process.env.DATABASE_URL
-        ? '✅ Connected to Neon PostgreSQL'
-        : '✅ Connected to Local PostgreSQL'
+        ? 'Connected to Neon PostgreSQL'
+        : 'Connected to Local PostgreSQL'
     );
     release();
   }

@@ -1,10 +1,19 @@
 import api from './api';
 
 class ApprovalService {
+
   // Get approvals for logged-in manager's role
-  async getMyApprovals(status = 'pending') {
-    const response = await api.get(`/approvals?status=${status}`);
+  async getMyApprovals(status = 'pending', role = null) {
+    const params = { status };
+    if (role) params.role = role;
+    const response = await api.get('/approvals', { params });
     return response.data;
+  }
+
+  // Used by InventoryManagerPage
+  async getInventoryApprovals(viewerRole = null) {
+    const role = viewerRole === 'admin' ? 'inventory_manager' : null;
+    return this.getMyApprovals('pending', role);
   }
 
   // Approve an item
@@ -19,29 +28,30 @@ class ApprovalService {
     return response.data;
   }
 
-  // Get approval counts (for badge/notification)
-  async getPendingCount() {
-    const response = await api.get('/approvals/count');
+  // submitDecision — used by InventoryManagerPage handleDecision
+  async submitDecision(approvalId, decision, comments = '') {
+    if (decision === 'approved') return this.approve(approvalId, comments);
+    return this.reject(approvalId, comments);
+  }
+
+  // Get pending count for badge
+  async getPendingCount(role = null) {
+    const params = role ? { role } : {};
+    const response = await api.get('/approvals/count', { params });
     return response.data;
   }
 
-  
-
-  async getInventoryApprovals() {
-    const response = await api.get('/approvals/inventory');
+  // Get history
+  async getApprovalHistory(limit = 50, role = null) {
+    const params = { limit };
+    if (role) params.role = role;
+    const response = await api.get('/approvals/history', { params });
     return response.data;
   }
 
-  async submitDecision(id, decision, comments) {
-    const response = await api.put(`/approvals/${id}/decision`, {
-      decision,
-      comments
-    });
-    return response.data;
-  }
-
-  async getApprovalHistory() {
-    const response = await api.get('/approvals/history');
+  // Called when admin clicks Accept in AI modal
+  async createFromAlert(alertData) {
+    const response = await api.post('/approvals/from-alert', alertData);
     return response.data;
   }
 }

@@ -1,8 +1,3 @@
-// ============================================================
-// FILE LOCATION: backend/src/services/delivery.service.js
-// UPDATED to work with corrected model
-// ============================================================
-
 const DeliveryModel  = require('../models/delivery.model');
 const aiService      = require('./ai.service');
 
@@ -41,11 +36,9 @@ const DeliveryService = {
       routeGeometry
     } = body;
 
-    // Generate delivery code based on business delivery count
     const count        = await DeliveryModel.countByBusiness(businessId);
     const deliveryCode = `DLV-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
 
-    // Calculate estimated metrics if not provided
     const distance  = totalDistance      || (stops && stops.length ? (stops.length * 15) : 15);
     const duration  = estimatedDuration  || Math.round(distance * 2.5);
     const fuel      = fuelConsumption    || parseFloat((distance * 0.2).toFixed(1));
@@ -73,7 +66,6 @@ const DeliveryService = {
     return { delivery: newDelivery };
   },
 
-
   // Optimize route using AI service
   async optimizeRoute(routeId) {
     const delivery = await DeliveryModel.findById(routeId);
@@ -82,35 +74,42 @@ const DeliveryService = {
     }
 
     console.log('Optimizing route with AI service for:', delivery.delivery_code || delivery.id);
-    
-    // Call AI service
+
     const aiOptimization = await aiService.optimizeDeliveryRoute(delivery);
-    
     console.log('AI Optimization result:', aiOptimization);
 
-    // Create optimized route object with proper structure
-    const optimizedRoute = {
+    // Normalize raw DB row (snake_case) to camelCase
+    const originalRoute = {
       id: delivery.id,
-      deliveryCode: delivery.deliveryCode || `DLV-${delivery.id}`,
+      deliveryCode: delivery.delivery_code,
       stops: delivery.stops || [],
-      totalDistance: aiOptimization.optimizedDistance || delivery.totalDistance || 0,
-      estimatedDuration: aiOptimization.optimizedDuration || delivery.estimatedDuration || 0,
-      fuelConsumption: aiOptimization.optimizedFuel || delivery.fuelConsumption || 0,
-      carbonEmissions: aiOptimization.optimizedEmissions || delivery.carbonEmissions || 0
+      totalDistance: parseFloat(delivery.total_distance) || 0,
+      estimatedDuration: parseInt(delivery.estimated_duration) || 0,
+      fuelConsumption: parseFloat(delivery.fuel_consumption) || 0,
+      carbonEmissions: parseFloat(delivery.carbon_emissions) || 0,
+      routeGeometry: delivery.route_geometry || null,
     };
 
-    // Calculate savings if not provided
-    const savings = aiOptimization.savings || {
-      distance: ((delivery.totalDistance || 0) - optimizedRoute.totalDistance).toFixed(1),
-      time: ((delivery.estimatedDuration || 0) - optimizedRoute.estimatedDuration).toString(),
-      fuel: ((delivery.fuelConsumption || 0) - optimizedRoute.fuelConsumption).toFixed(1),
-      emissions: ((delivery.carbonEmissions || 0) - optimizedRoute.carbonEmissions).toFixed(1),
-      cost: (((delivery.fuelConsumption || 0) - optimizedRoute.fuelConsumption) * 55.50).toFixed(2)
+    const optimizedRoute = {
+      id: delivery.id,
+      deliveryCode: delivery.delivery_code,
+      stops: delivery.stops || [],
+      totalDistance: aiOptimization.optimizedDistance || originalRoute.totalDistance,
+      estimatedDuration: aiOptimization.optimizedDuration || originalRoute.estimatedDuration,
+      fuelConsumption: aiOptimization.optimizedFuel || originalRoute.fuelConsumption,
+      carbonEmissions: aiOptimization.optimizedEmissions || originalRoute.carbonEmissions,
     };
+
+    const savings = aiOptimization.savings || {
+  distance: (originalRoute.totalDistance - optimizedRoute.totalDistance).toFixed(1),
+  time: (originalRoute.estimatedDuration - optimizedRoute.estimatedDuration).toString(),
+  fuel: (originalRoute.fuelConsumption - optimizedRoute.fuelConsumption).toFixed(1),
+  emissions: (originalRoute.carbonEmissions - optimizedRoute.carbonEmissions).toFixed(1)
+};
 
     return {
       data: {
-        originalRoute: delivery,
+        originalRoute,
         optimizedRoute,
         savings,
         aiRecommendations: aiOptimization.aiRecommendations || [
@@ -122,7 +121,6 @@ const DeliveryService = {
       }
     };
   },
-
 
   // Apply optimization to a delivery
   async applyOptimization(routeId, optimizedRoute) {

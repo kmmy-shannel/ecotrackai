@@ -1,9 +1,3 @@
-// ============================================================
-// FILE LOCATION: backend/src/controllers/approval.controller.js
-// LAYER: Controller (View) — HTTP handling ONLY
-// No DB queries. No business logic. Only req/res.
-// ============================================================
-
 const ApprovalService = require('../services/approval.service');
 const { sendSuccess, sendError } = require('../utils/response.utils');
 
@@ -12,10 +6,10 @@ const getApprovals = async (req, res) => {
   try {
     const result = await ApprovalService.getApprovals(
       req.user,
-      req.query.status || 'pending'
+      req.query.status || 'pending',
+      req.query.role || null
     );
     sendSuccess(res, 200, 'Approvals retrieved', result);
-
   } catch (error) {
     console.error('Get approvals error:', error);
     sendError(res, error.status || 500, error.message || 'Failed to get approvals');
@@ -25,16 +19,33 @@ const getApprovals = async (req, res) => {
 // GET /api/approvals/pending-count
 const getPendingCount = async (req, res) => {
   try {
-    const result = await ApprovalService.getPendingCount(req.user);
+    const result = await ApprovalService.getPendingCount(
+      req.user,
+      req.query.role || null
+    );
     sendSuccess(res, 200, 'Pending count retrieved', result);
-
   } catch (error) {
     console.error('Get pending count error:', error);
     sendError(res, error.status || 500, error.message || 'Failed to get count');
   }
 };
 
-// POST /api/approvals/:approvalId/approve
+// GET /api/approvals/history?limit=50
+const getApprovalHistory = async (req, res) => {
+  try {
+    const result = await ApprovalService.getApprovalHistory(
+      req.user,
+      req.query.limit || 50,
+      req.query.role || null
+    );
+    sendSuccess(res, 200, 'Approval history retrieved', result);
+  } catch (error) {
+    console.error('Get approval history error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to get approval history');
+  }
+};
+
+// PUT /api/approvals/:approvalId/approve
 const approveItem = async (req, res) => {
   try {
     await ApprovalService.approveItem(
@@ -43,14 +54,13 @@ const approveItem = async (req, res) => {
       req.body.notes
     );
     sendSuccess(res, 200, 'Item approved successfully');
-
   } catch (error) {
     console.error('Approve error:', error);
     sendError(res, error.status || 500, error.message || 'Failed to approve item');
   }
 };
 
-// POST /api/approvals/:approvalId/reject
+// PUT /api/approvals/:approvalId/reject
 const rejectItem = async (req, res) => {
   try {
     await ApprovalService.rejectItem(
@@ -59,51 +69,28 @@ const rejectItem = async (req, res) => {
       req.body.notes
     );
     sendSuccess(res, 200, 'Item rejected');
-
   } catch (error) {
     console.error('Reject error:', error);
     sendError(res, error.status || 500, error.message || 'Failed to reject item');
   }
 };
-// GET all pending approvals for inventory manager
-const getInventoryApprovals = async (req, res) => {
+
+// POST /api/approvals/from-alert
+const createFromAlert = async (req, res) => {
   try {
-    const approvals = await approvalService.getByType('inventory');
-    return res.json({ success: true, data: approvals });
+    const result = await ApprovalService.createFromAlert(req.user, req.body);
+    sendSuccess(res, 201, 'Approval request created', result);
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error('Create from alert error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to create approval');
   }
 };
-
-// POST approve or decline
-const submitApprovalDecision = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { decision, comments } = req.body; // decision = 'approved' | 'declined'
-    const managerId = req.user.id;
-    const result = await approvalService.submitDecision(id, decision, comments, managerId);
-    return res.json({ success: true, data: result });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// GET approval history for this manager
-const getApprovalHistory = async (req, res) => {
-  try {
-    const managerId = req.user.id;
-    const history = await approvalService.getHistoryByManager(managerId);
-    return res.json({ success: true, data: history });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-
 
 module.exports = {
   getApprovals,
   getPendingCount,
+  getApprovalHistory,
   approveItem,
-  rejectItem, getInventoryApprovals, submitApprovalDecision, getApprovalHistory
+  rejectItem,
+  createFromAlert
 };

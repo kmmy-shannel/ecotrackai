@@ -348,66 +348,7 @@ const AddProductModal = ({ onClose, onSuccess }) => {
             </div>
           </div>
 
-          {/* Financial Details Section */}
-          <div className="px-6 pb-4">
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-              <h3 className="text-base font-semibold text-gray-800 mb-4">Financial Details</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Unit price:
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">₱</span>
-                    <input
-                      type="number"
-                      name="unitPrice"
-                      value={formData.unitPrice}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.01"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-green-500 focus:border-green-500"
-                      placeholder="0.00"
-                    />
-                    <span className="text-sm text-gray-600">per {formData.unitOfMeasure}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Total Value:
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">₱</span>
-                    <input
-                      type="number"
-                      name="totalValue"
-                      value={formData.totalValue}
-                      readOnly
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded bg-gray-100 text-gray-700"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Notes:
-                </label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-green-500 focus:border-green-500 resize-none"
-                  placeholder="Any additional notes or description..."
-                />
-                <p className="text-xs text-gray-400 mt-1">Optional product description</p>
-              </div>
-            </div>
-          </div>
+         
 
           {/* Footer Buttons */}
           <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex gap-3">

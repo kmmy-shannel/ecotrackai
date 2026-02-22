@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import alertService from '../services/alert.service';
+import approvalService from '../services/approval.service';
 
 const useAlerts = () => {
   // ── State ──────────────────────────────────────────────────
@@ -122,7 +123,34 @@ const useAlerts = () => {
     setSelectedAlert(null);
     setAIInsights(null);
   };
+// Called when admin clicks Accept or Reject in AI modal
+const submitReview = async (decision) => {
+  if (!selectedAlert) return;
 
+  if (decision === 'accepted') {
+    try {
+      await approvalService.createFromAlert({
+        product_name:  selectedAlert.product_name,
+        quantity:      selectedAlert.quantity,
+        location:      selectedAlert.location || 'Warehouse',
+        days_left:     selectedAlert.days_left,
+        risk_level:    selectedAlert.risk_level,
+        ai_suggestion: aiInsights?.recommendations?.join(' | ') || '',
+      });
+      setSuccess('Sent to Inventory Manager for review');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Submit review error:', err);
+      setError('Failed to send to manager');
+      setTimeout(() => setError(''), 3000);
+    }
+  } else {
+    setSuccess('Recommendation rejected');
+    setTimeout(() => setSuccess(''), 3000);
+  }
+
+  closeAIModal();
+};
   // ── Helpers ────────────────────────────────────────────────
 
   const getRiskBadgeColor = (riskLevel) => {
@@ -181,6 +209,7 @@ const useAlerts = () => {
     deleteAlert,
     getAIInsights,
     closeAIModal,
+    submitReview, 
 
     // Helpers
     getRiskBadgeColor,

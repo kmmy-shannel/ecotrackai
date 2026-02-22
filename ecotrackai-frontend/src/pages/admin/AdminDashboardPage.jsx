@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../../services/auth.service';
 import aiService from '../../services/ai.service';
+import productService from '../../services/product.service';
+import alertService from '../../services/alert.service';
+import deliveryService from '../../services/delivery.service';
+import approvalService from '../../services/approval.service';
 import Navigation from '../../components/Navigation';
 
 import { 
@@ -21,14 +25,99 @@ const DashboardPage = () => {
     ecoScore: 0,
     profit: 0
   });
+  const [spoilageStats, setSpoilageStats] = useState({
+    high: 0,
+    medium: 0,
+    low: 0,
+    pendingInventoryApprovals: 0
+  });
+
+  const toCount = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const getMonthlyDeliveryCount = (deliveries = []) => {
+    const now = new Date();
+    const monthly = deliveries.filter((delivery) => {
+      const rawDate =
+        delivery.created_at ||
+        delivery.delivery_date ||
+        delivery.scheduled_date ||
+        delivery.date;
+      if (!rawDate) return false;
+
+      const deliveryDate = new Date(rawDate);
+      return (
+        !Number.isNaN(deliveryDate.getTime()) &&
+        deliveryDate.getMonth() === now.getMonth() &&
+        deliveryDate.getFullYear() === now.getFullYear()
+      );
+    });
+
+    return monthly.length > 0 ? monthly.length : deliveries.length;
+  };
+
+  const loadDashboardStats = useCallback(async () => {
+    try {
+      await alertService.syncAlerts().catch(() => null);
+
+      const [productsRes, deliveriesRes, alertStatsRes, pendingQueueRes] = await Promise.allSettled([
+        productService.getAllProducts(),
+        deliveryService.getAllDeliveries(),
+        alertService.getAlertStats(),
+        approvalService.getPendingCount('inventory_manager')
+      ]);
+
+      const products =
+        productsRes.status === 'fulfilled'
+          ? productsRes.value?.data?.products || productsRes.value?.products || []
+          : [];
+
+      const deliveries =
+        deliveriesRes.status === 'fulfilled'
+          ? deliveriesRes.value?.data?.deliveries || deliveriesRes.value?.deliveries || []
+          : [];
+
+      const alertStats =
+        alertStatsRes.status === 'fulfilled'
+          ? alertStatsRes.value?.data || {}
+          : {};
+
+      const pendingInventoryApprovals =
+        pendingQueueRes.status === 'fulfilled'
+          ? toCount(pendingQueueRes.value?.data?.count ?? pendingQueueRes.value?.count)
+          : 0;
+
+      const high = toCount(alertStats.high_risk);
+      const medium = toCount(alertStats.medium_risk);
+      const low = toCount(alertStats.low_risk);
+
+      setStats((prev) => ({
+        ...prev,
+        totalProducts: products.length,
+        totalDeliveries: getMonthlyDeliveryCount(deliveries),
+        totalAlerts: high + medium + low
+      }));
+
+      setSpoilageStats({
+        high,
+        medium,
+        low,
+        pendingInventoryApprovals
+      });
+    } catch (error) {
+      console.error('Failed to load dashboard stats:', error);
+    }
+  }, []);
 
   // Single loadAIInsights function with useCallback
-  const loadAIInsights = useCallback(async () => {
+  const loadAIInsights = useCallback(async (statsSnapshot = stats) => {
     try {
       setLoadingInsights(true);
-      console.log('Requesting AI insights with stats:', stats);
+      console.log('Requesting AI insights with stats:', statsSnapshot);
       
-      const response = await aiService.getDashboardInsights(stats);
+      const response = await aiService.getDashboardInsights(statsSnapshot);
       console.log('AI insights received:', response);
       
       if (response.success) {
@@ -89,8 +178,13 @@ const DashboardPage = () => {
       return;
     }
     setUser(currentUser);
-    loadAIInsights();
-  }, [navigate, loadAIInsights]);
+    loadDashboardStats();
+  }, [navigate, loadDashboardStats]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadAIInsights(stats);
+  }, [user, stats, loadAIInsights]);
 
   const handleLogout = async () => {
     try {
@@ -163,6 +257,18 @@ const DashboardPage = () => {
         <div className="flex gap-3">
   {user && user.role === 'admin' && (
     <button
+      onClick={() => navigate('/inventory-manager')}
+      className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5"
+    >
+      <AlertTriangle size={20} />
+      <span className="font-medium">
+        Inventory Queue ({spoilageStats.pendingInventoryApprovals})
+      </span>
+    </button>
+  )}
+
+  {user && user.role === 'admin' && (
+    <button
       onClick={() => navigate('/managers')}
       className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
     >
@@ -207,8 +313,8 @@ const DashboardPage = () => {
 
           <StatCard
             title="Alerts"
-            value={`0${stats.totalAlerts}`}
-            subtitle="Decreased from last week"
+            value={stats.totalAlerts}
+            subtitle={`${spoilageStats.high} high risk, ${spoilageStats.medium} medium risk`}
             cardType="white"
           />
 
@@ -228,6 +334,21 @@ const DashboardPage = () => {
 />
         </div>
 
+        <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3 text-sm">
+          <span className="px-3 py-1 rounded-full bg-red-50 text-red-700 font-semibold">
+            High risk: {spoilageStats.high}
+          </span>
+          <span className="px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-semibold">
+            Medium risk: {spoilageStats.medium}
+          </span>
+          <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold">
+            Low risk: {spoilageStats.low}
+          </span>
+          <span className="ml-auto text-gray-600 font-medium">
+            Pending inventory manager approvals: {spoilageStats.pendingInventoryApprovals}
+          </span>
+        </div>
+
         <div className="grid grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
             <div className="flex items-center justify-between mb-4">
@@ -237,7 +358,7 @@ const DashboardPage = () => {
               </div>
               
               <button 
-                onClick={loadAIInsights}
+                onClick={() => loadAIInsights(stats)}
                 disabled={loadingInsights}
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
