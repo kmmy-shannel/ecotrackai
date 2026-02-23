@@ -23,7 +23,6 @@ const DashboardPage = () => {
     totalDeliveries: 0,
     totalAlerts: 0,
     ecoScore: 0,
-    profit: 0
   });
   const [spoilageStats, setSpoilageStats] = useState({
     high: 0,
@@ -295,7 +294,7 @@ const DashboardPage = () => {
 </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-4 mb-6">
+       <div className="grid grid-cols-4 gap-4 mb-6">
           <StatCard
             title="Total product"
             value={stats.totalProducts}
@@ -325,13 +324,7 @@ const DashboardPage = () => {
             cardType="split-design-reverse"
           />
 
-          <StatCard
-  title="Monthly Profit"
-  value={`₱ ${stats.profit.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
-  subtitle="Decreased from Last Month"
-  cardType="split-design-with-graph"
-  graphImage="/images/graph.png"
-/>
+         
         </div>
 
         <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3 text-sm">
@@ -539,7 +532,7 @@ const StatCard = ({ title, value, subtitle, cardType, backgroundImage, graphImag
           subtitleText: 'text-green-100',
           titleText: 'text-green-100'
         };
-      case 'split-design-with-graph':
+      
   return {
     container: 'bg-white overflow-hidden flex flex-col relative',
     header: 'bg-white px-5 pt-5 pb-3 relative z-10',
@@ -586,19 +579,7 @@ if (cardType === 'split-design' || cardType === 'split-design-reverse' || cardTy
       {/* Body section */}
       <div className={styles.body}>
         {/* Graph decoration for profit card */}
-        {cardType === 'split-design-with-graph' && graphImage && (
-          <div className="absolute inset-0 flex items-center justify-center opacity-20">
-            <img 
-              src={graphImage} 
-              alt="" 
-              className="w-full h-full object-cover"
-              style={{ 
-                filter: 'brightness(1.5) contrast(1.2)',
-                mixBlendMode: 'overlay'
-              }}
-            />
-          </div>
-        )}
+       
         
         <p className={styles.valueText}>
           {value}

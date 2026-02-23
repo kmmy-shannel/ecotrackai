@@ -270,11 +270,23 @@ const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => {
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                <Sparkles size={24} />
-              </div>
-              <h2 className="text-2xl font-bold">AI Insights</h2>
-            </div>
+  <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+    <Sparkles size={24} />
+  </div>
+  <div>
+    <h2 className="text-2xl font-bold">AI Insights</h2>
+    {/* Shows whether response is real Groq AI or fallback */}
+    {insights && (
+      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+        insights._source === 'groq'
+          ? 'bg-green-400 text-green-900'
+          : 'bg-yellow-400 text-yellow-900'
+      }`}>
+        {insights._source === 'groq' ? '✓ Real Groq AI' : '⚠ Fallback Data'}
+      </span>
+    )}
+  </div>
+</div>
             <button
               onClick={onClose}
               className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"

@@ -92,6 +92,7 @@ const useAlerts = () => {
   }, []);
 
   // ── Open AI modal and fetch insights ───────────────────────
+ // ── Open AI modal and fetch insights ───────────────────────
   const getAIInsights = useCallback(async (alert) => {
     setSelectedAlert(alert);
     setAiInsights(null);
@@ -101,11 +102,15 @@ const useAlerts = () => {
     try {
       const response = await alertService.getAIInsights(alert.id);
       const insights = response?.data || response;
+
+      // ✅ Mark as real Groq AI response
+      insights._source = 'groq';
+
       setAiInsights(insights);
     } catch {
       // Fallback — rule-based insights so UI never stays empty
-      const daysLeft   = alert.days_left || 0;
-      const riskLevel  = alert.risk_level;
+      const daysLeft  = alert.days_left || 0;
+      const riskLevel = alert.risk_level;
 
       const fallbackMap = {
         HIGH: {
@@ -151,7 +156,12 @@ const useAlerts = () => {
         },
       };
 
-      setAiInsights(fallbackMap[riskLevel] || fallbackMap.LOW);
+      const fallbackData = fallbackMap[riskLevel] || fallbackMap.LOW;
+
+      // Mark as fallback
+      fallbackData._source = 'fallback';
+
+      setAiInsights(fallbackData);
     } finally {
       setLoadingInsights(false);
     }
