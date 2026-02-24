@@ -171,7 +171,7 @@ async delete(productId) {
 // Delete all inventory rows for a product (called before product delete)
 async deleteInventoryByProduct(productId) {
   await pool.query('DELETE FROM inventory WHERE product_id = $1', [productId]);
-}
+} 
 
 };
 
