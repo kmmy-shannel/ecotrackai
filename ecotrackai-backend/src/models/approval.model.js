@@ -126,6 +126,46 @@ const ApprovalModel = {
       [status, reviewedBy, notes || '', decidedByRole || '', approvalId]
     );
   },
+  // Manager escalates to Admin — sets status to 'pending_admin'
+async requestAdminReview(approvalId, managerComment) {
+  await pool.query(
+    `UPDATE manager_approvals
+     SET status           = 'pending_admin',
+         manager_comment  = $1,
+         escalated_at     = NOW()
+     WHERE approval_id    = $2`,
+    [managerComment || '', approvalId]
+  );
+},
+
+// Admin fetches all escalated requests for their business
+async findAdminRequests(businessId) {
+  const { rows } = await pool.query(
+    `SELECT *, approval_id AS id
+     FROM manager_approvals
+     WHERE business_id = $1
+       AND status      = 'pending_admin'
+     ORDER BY escalated_at DESC NULLS LAST`,
+    [businessId]
+  );
+  return rows;
+},
+
+// Admin approves or declines an escalated request
+async adminReviewRequest(approvalId, decision, adminComment, adminUserId) {
+  await pool.query(
+    `UPDATE manager_approvals
+     SET status          = $1,
+         admin_comment   = $2,
+         reviewed_by     = $3,
+         reviewed_at     = NOW(),
+         review_notes    = $2,
+         decision        = $1,
+         decision_date   = NOW()
+     WHERE approval_id   = $4`,
+    [decision, adminComment || '', adminUserId, approvalId]
+  );
+},
 };
 
 module.exports = ApprovalModel;

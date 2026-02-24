@@ -85,12 +85,55 @@ const createFromAlert = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to create approval');
   }
 };
+// POST /api/approvals/:approvalId/request-admin
+const requestAdminReview = async (req, res) => {
+  try {
+    const result = await ApprovalService.requestAdminReview(
+      req.user,
+      req.params.approvalId,
+      req.body.manager_comment || ''
+    );
+    sendSuccess(res, 200, result.message);
+  } catch (error) {
+    console.error('Request admin review error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to escalate to admin');
+  }
+};
 
+// GET /api/approvals/admin-requests
+const getAdminRequests = async (req, res) => {
+  try {
+    const result = await ApprovalService.getAdminRequests(req.user);
+    sendSuccess(res, 200, 'Admin requests retrieved', result);
+  } catch (error) {
+    console.error('Get admin requests error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to get admin requests');
+  }
+};
+
+// PUT /api/approvals/:approvalId/admin-review
+const adminReviewRequest = async (req, res) => {
+  try {
+    const result = await ApprovalService.adminReviewRequest(
+      req.user,
+      req.params.approvalId,
+      req.body.decision,
+      req.body.admin_comment || ''
+    );
+    sendSuccess(res, 200, result.message);
+  } catch (error) {
+    console.error('Admin review error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to submit admin review');
+  }
+};
 module.exports = {
   getApprovals,
   getPendingCount,
   getApprovalHistory,
   approveItem,
   rejectItem,
-  createFromAlert
+  createFromAlert,
+   requestAdminReview,   
+  getAdminRequests,     
+  adminReviewRequest,
 };

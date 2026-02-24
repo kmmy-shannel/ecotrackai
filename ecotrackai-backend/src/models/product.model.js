@@ -146,11 +146,32 @@ const ProductModel = {
 
     return rows[0];
   },
+  // Called after product creation to store initial quantity in inventory
+// Insert initial inventory row after product creation
+async createInventoryEntry(productId, businessId, quantity, unitOfMeasure) {
+  await pool.query(
+    `INSERT INTO inventory (
+       product_id,
+       business_id,
+       quantity,
+       unit_of_measure,
+       current_condition,
+       date_received
+     ) VALUES ($1, $2, $3, $4, 'good', NOW())`,
+    [productId, businessId, quantity, unitOfMeasure || 'kg']
+  );
+},
 
   // Hard delete product
-  async delete(productId) {
-    await pool.query('DELETE FROM products WHERE product_id = $1', [productId]);
-  }
+ // Hard delete product
+async delete(productId) {
+  await pool.query('DELETE FROM products WHERE product_id = $1', [productId]);
+},
+
+// Delete all inventory rows for a product (called before product delete)
+async deleteInventoryByProduct(productId) {
+  await pool.query('DELETE FROM inventory WHERE product_id = $1', [productId]);
+}
 
 };
 

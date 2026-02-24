@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 
-// ✅ Always use DATABASE_URL if it exists (Neon)
+// Always use DATABASE_URL if it exists (Neon)
 // Otherwise fall back to individual vars (local)
 const pool = new Pool(
   process.env.DATABASE_URL
@@ -20,7 +20,7 @@ const pool = new Pool(
 
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('❌ Database connection error:', err.message);
+    console.error('Database connection error:', err.message);
   } else {
     console.log(
       process.env.DATABASE_URL

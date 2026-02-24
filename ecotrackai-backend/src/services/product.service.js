@@ -57,19 +57,32 @@ const ProductService = {
     console.log('Creating product for businessId:', businessId);
 
     const newProduct = await ProductModel.create(businessId, {
-      productName,
-      productType,
-      storageCategory,
-      shelfLifeDays,
-      optimalTempMin,
-      optimalTempMax,
-      optimalHumidityMin,
-      optimalHumidityMax,
-      unitOfMeasure
-    }, imageUrl);
+  productName,
+  productType,
+  storageCategory,
+  shelfLifeDays,
+  optimalTempMin,
+  optimalTempMax,
+  optimalHumidityMin,
+  optimalHumidityMax,
+  unitOfMeasure
+}, imageUrl);
 
-    console.log('Product created with ID:', newProduct.product_id);
-    return { product: newProduct };
+console.log('Product created with ID:', newProduct.product_id);
+
+// ── Insert initial inventory entry so quantity shows correctly ──
+const quantity = parseFloat(body.quantity) || 0;
+if (quantity > 0) {
+  await ProductModel.createInventoryEntry(
+    newProduct.product_id,
+    businessId,
+    quantity,
+    body.unitOfMeasure || 'kg'
+  );
+  console.log('Inventory entry created with quantity:', quantity);
+}
+
+return { product: newProduct };
   },
 
   // Update product — verifies ownership first
@@ -85,21 +98,18 @@ const ProductService = {
   },
 
   // Delete product — checks inventory + ownership
-  async deleteProduct(productId, businessId) {
-    // Check if product has inventory records first
-    const inventoryCount = await ProductModel.countInventory(productId);
-    if (inventoryCount > 0) {
-      throw { status: 400, message: 'Cannot delete product with existing inventory records' };
-    }
-
-    // Verify ownership
-    const owned = await ProductModel.findOwnership(productId, businessId);
-    if (!owned) {
-      throw { status: 404, message: 'Product not found or access denied' };
-    }
-
-    await ProductModel.delete(productId);
+// Delete product — clears inventory first, then deletes
+async deleteProduct(productId, businessId) {
+  // Verify ownership first
+  const owned = await ProductModel.findOwnership(productId, businessId);
+  if (!owned) {
+    throw { status: 404, message: 'Product not found or access denied' };
   }
+
+  // Delete inventory records first (cascade), then the product
+  await ProductModel.deleteInventoryByProduct(productId);
+  await ProductModel.delete(productId);
+}
 
 };
 

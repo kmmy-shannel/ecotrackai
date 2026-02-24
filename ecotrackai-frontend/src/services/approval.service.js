@@ -46,6 +46,31 @@ class ApprovalService {
     const response = await api.post('/approvals/from-alert', alertData);
     return response.data;
   }
+
+  // ── New: Manager escalates to Admin ────────────────────────
+  // Called when manager clicks "Request to Admin"
+  async requestAdminReview(approvalId, managerComment = '') {
+    const response = await api.post(`/approvals/${approvalId}/request-admin`, {
+      manager_comment: managerComment,
+    });
+    return response.data;
+  }
+
+  // ── New: Admin fetches all escalated requests ───────────────
+  // Used in AlertsPage to show "Pending Admin Review" section
+  async getRequestsForAdmin() {
+    const response = await api.get('/approvals/admin-requests');
+    return response.data;
+  }
+
+  // ── New: Admin approves or declines an escalated request ───
+  async adminReviewRequest(requestId, decision, adminComment = '') {
+    const response = await api.put(`/approvals/${requestId}/admin-review`, {
+      decision,          // 'approved' | 'declined'
+      admin_comment: adminComment,
+    });
+    return response.data;
+  }
 }
 
 const approvalServiceInstance = new ApprovalService();

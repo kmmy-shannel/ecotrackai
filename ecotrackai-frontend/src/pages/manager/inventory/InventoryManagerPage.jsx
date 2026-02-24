@@ -1,7 +1,5 @@
 // ============================================================
 // FILE LOCATION: src/pages/manager/inventory/InventoryManagerPage.jsx
-// REDESIGN: Clean dark green theme, tab-based views,
-//           no "Back to Dashboard" button anywhere
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -77,7 +75,7 @@ const InventoryManagerPage = () => {
     }
   };
 
-  // ── Handle tab switch (also fetch history when switching) ───
+  // ── Handle tab switch ───────────────────────────────────────
   const handleViewChange = (view) => {
     setActiveView(view);
     if (view === 'history') fetchHistory();
@@ -128,6 +126,20 @@ const InventoryManagerPage = () => {
     }
   };
 
+  // ── Request to Admin ────────────────────────────────────────
+  const handleRequestToAdmin = async (approvalId, comment = '') => {
+    try {
+      await approvalService.requestAdminReview(approvalId, comment);
+      showSuccess('Request sent to Admin for review.');
+      // Remove from pending list — it's now escalated
+      setApprovals(prev => prev.filter(a => (a.approval_id || a.id) !== approvalId));
+      setStats(prev => ({ ...prev, pending: Math.max(0, prev.pending - 1) }));
+      setSelectedApproval(null);
+    } catch {
+      showError('Failed to send request to Admin. Please try again.');
+    }
+  };
+
   const showError   = (msg) => { setError(msg);   setTimeout(() => setError(''),   4000); };
   const showSuccess = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(''), 4000); };
 
@@ -175,7 +187,7 @@ const InventoryManagerPage = () => {
             <p className="text-sm text-gray-500 mt-0.5">
               {isReadOnlyView
                 ? 'Admin oversight — view only mode'
-                : 'Review and action pending spoilage approvals from admin'}
+                : 'Review and action pending spoilage approvals'}
             </p>
           </div>
           <button
@@ -195,6 +207,15 @@ const InventoryManagerPage = () => {
           </div>
         )}
 
+        {/* Workflow Info Banner (manager only) */}
+        {!isReadOnlyView && (
+          <div className="px-4 py-3 bg-[#f0f7f2] border border-[#c3dfc9] rounded-xl text-sm text-[#1a4d2e]">
+            <span className="font-semibold">How it works: </span>
+            You can <strong>Approve</strong> or <strong>Decline</strong> AI suggestions directly.
+            If you need higher-level input, use <strong>Request to Admin</strong> — the admin will review and return a decision.
+          </div>
+        )}
+
         {/* ── Stat Cards ─────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-4">
           {[
@@ -202,24 +223,20 @@ const InventoryManagerPage = () => {
             { label: 'Approved', value: stats.approvedToday, sub: 'Actions taken',    accent: false },
             { label: 'Declined', value: stats.declined,      sub: 'Rejected items',   accent: true  },
           ].map((s, i) => (
-            <div
-              key={i}
-              className="rounded-2xl overflow-hidden shadow-sm border border-gray-100"
-              style={{ background: '#fff' }}
-            >
+            <div key={i} className="rounded-2xl overflow-hidden shadow-sm border border-gray-100 bg-white">
               {s.accent ? (
                 <>
                   <div className="px-5 pt-5 pb-2">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{s.label}</p>
                   </div>
-                  <div className="px-5 pb-5" style={{ background: '#1a4d2e' }} >
+                  <div className="px-5 pb-5 bg-[#1a4d2e]">
                     <p className="text-4xl font-bold text-white pt-3">{s.value}</p>
-                    <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{s.sub}</p>
+                    <p className="text-xs mt-1 text-white/60">{s.sub}</p>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="px-5 pt-4 pb-2 rounded-t-2xl" style={{ background: '#1a4d2e' }}>
+                  <div className="px-5 pt-4 pb-2 bg-[#1a4d2e] rounded-t-2xl">
                     <p className="text-xs font-semibold uppercase tracking-wider text-white">{s.label}</p>
                   </div>
                   <div className="px-5 pb-5 pt-3">
@@ -252,7 +269,7 @@ const InventoryManagerPage = () => {
             </button>
           </div>
 
-          <div className="rounded-xl p-5 min-h-36 flex flex-col justify-center" style={{ background: '#f8faf8', border: '1px solid #e4ede6' }}>
+          <div className="rounded-xl p-5 min-h-36 flex flex-col justify-center bg-[#f8faf8] border border-[#e4ede6]">
             {loadingAI ? (
               <div className="text-center">
                 <Sparkles size={28} className="text-purple-500 animate-pulse mx-auto mb-2" />
@@ -282,7 +299,7 @@ const InventoryManagerPage = () => {
               </div>
             ) : (
               <div className="text-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: '#dcfce7' }}>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 bg-green-100">
                   <CheckCircle size={24} className="text-green-600" />
                 </div>
                 <p className="text-sm font-medium text-gray-600">No urgent recommendations</p>
@@ -307,12 +324,12 @@ const InventoryManagerPage = () => {
 
           {loading ? (
             <div className="text-center py-16 text-gray-400">
-              <Loader size={28} className="mx-auto mb-3 animate-spin" style={{ color: '#1a4d2e' }} />
+              <Loader size={28} className="mx-auto mb-3 animate-spin text-[#1a4d2e]" />
               <p className="text-sm">Loading approvals…</p>
             </div>
           ) : sorted.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: '#dcfce7' }}>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 bg-green-100">
                 <InboxIcon size={28} className="text-green-600" />
               </div>
               <p className="font-semibold text-gray-700">All caught up!</p>
@@ -326,6 +343,7 @@ const InventoryManagerPage = () => {
                   approval={approval}
                   onApprove={(id) => handleDecision(id, 'approved')}
                   onDecline={(id) => handleDecision(id, 'declined')}
+                  onRequestToAdmin={handleRequestToAdmin}
                   onViewDetails={setSelectedApproval}
                   submitting={submitting}
                   readOnly={isReadOnlyView}
@@ -343,6 +361,7 @@ const InventoryManagerPage = () => {
           approval={selectedApproval}
           onClose={() => setSelectedApproval(null)}
           onDecision={handleDecision}
+          onRequestToAdmin={handleRequestToAdmin}
           submitting={submitting}
           readOnly={isReadOnlyView}
         />

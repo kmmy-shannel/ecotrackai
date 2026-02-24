@@ -5,7 +5,10 @@ const {
   getApprovalHistory,
   approveItem,
   rejectItem,
-  createFromAlert
+  createFromAlert,
+  requestAdminReview,   
+  getAdminRequests,    
+  adminReviewRequest,
 } = require('../controllers/approval.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
@@ -20,5 +23,7 @@ router.put('/:approvalId/approve', approveItem);
 router.put('/:approvalId/reject', rejectItem);
 router.post('/from-alert', createFromAlert);
 
-
+router.get('/admin-requests',              getAdminRequests);
+router.post('/:approvalId/request-admin',  requestAdminReview);
+router.put('/:approvalId/admin-review',    adminReviewRequest);
 module.exports = router;
