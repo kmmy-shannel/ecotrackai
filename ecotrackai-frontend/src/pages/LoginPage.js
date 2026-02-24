@@ -10,15 +10,14 @@ const LoginPage = () => {
     password: ''
   });
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState({ email: false, password: false });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
+    setFieldError({ email: false, password: false });
   };
 
   const handleSubmit = async (e) => {
@@ -63,15 +62,26 @@ const LoginPage = () => {
         console.error('VALIDATION ERRORS:', err.response.data.error);
       }
       
-      let errorMessage = 'Login failed. Please try again.';
-      
-      if (err.response?.data?.error && Array.isArray(err.response.data.error)) {
-        errorMessage = err.response.data.error.join(', ');
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
+      const serverMessage = err.response?.data?.message || '';
+
+      if (serverMessage.toLowerCase().includes('invalid credentials')) {
+        // We don't know if it's email or password, so highlight password
+        // and show a helpful specific message
+        setFieldError({ email: false, password: true });
+        setError('Incorrect password. Please try again or reset your password.');
+      } else if (serverMessage.toLowerCase().includes('not found') || serverMessage.toLowerCase().includes('no user')) {
+        setFieldError({ email: true, password: false });
+        setError('No account found with this email address.');
+      } else if (serverMessage.toLowerCase().includes('inactive')) {
+        setFieldError({ email: false, password: false });
+        setError('This account has been deactivated. Contact your administrator.');
+      } else if (err.response?.data?.error && Array.isArray(err.response.data.error)) {
+        setError(err.response.data.error.join(', '));
+      } else if (serverMessage) {
+        setError(serverMessage);
+      } else {
+        setError('Login failed. Please check your connection and try again.');
       }
-      
-      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -96,24 +106,46 @@ const LoginPage = () => {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
-              {error}
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm flex items-start gap-3">
+              <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-white text-xs font-bold">!</span>
+              </div>
+              <div>
+                <p className="font-semibold text-red-700">Login failed</p>
+                <p className="text-red-600 mt-0.5">{error}</p>
+                {fieldError.password && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/forgot-password')}
+                    className="mt-1.5 text-red-700 underline font-medium hover:text-red-900 transition-colors"
+                  >
+                    Reset your password →
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input
+           <input
               type="email"
               name="email"
               placeholder="Email"
               value={formData.email}
               onChange={handleChange}
-              className="w-full px-6 py-4 bg-gray-100 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-green-400"
+              className={`w-full px-6 py-4 bg-gray-100 rounded-full border-2 focus:outline-none focus:ring-2 transition-all ${
+                fieldError.email
+                  ? 'border-red-400 bg-red-50 focus:ring-red-300'
+                  : 'border-transparent focus:ring-green-400'
+              }`}
               required
             />
+            {fieldError.email && (
+              <p className="text-red-500 text-xs mt-1 pl-4">No account found with this email</p>
+            )}
             
-            {/* Password Field with Eye Icon */}
+       {/* Password Field with Eye Icon */}
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -121,18 +153,26 @@ const LoginPage = () => {
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full px-6 py-4 bg-gray-100 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-green-400 pr-12"
+                className={`w-full px-6 py-4 bg-gray-100 rounded-full border-2 focus:outline-none focus:ring-2 pr-12 transition-all ${
+                  fieldError.password
+                    ? 'border-red-400 bg-red-50 focus:ring-red-300'
+                    : 'border-transparent focus:ring-green-400'
+                }`}
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${
+                  fieldError.password ? 'text-red-400 hover:text-red-600' : 'text-gray-500 hover:text-gray-700'
+                }`}
               >
                 {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
               </button>
             </div>
-
+            {fieldError.password && (
+              <p className="text-red-500 text-xs mt-1 pl-4">Incorrect password</p>
+            )}
             {/* Forgot Password Link */}
             <div className="flex justify-end">
               <button

@@ -126,6 +126,15 @@ const adminReviewRequest = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to submit admin review');
   }
 };
+const createFromDelivery = async (req, res) => {
+  try {
+    const result = await ApprovalService.createFromDelivery(req.user, req.body);
+    sendSuccess(res, 201, 'Route approval request created', result);
+  } catch (error) {
+    console.error('Create from delivery error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to create route approval');
+  }
+};
 module.exports = {
   getApprovals,
   getPendingCount,
@@ -136,4 +145,5 @@ module.exports = {
    requestAdminReview,   
   getAdminRequests,     
   adminReviewRequest,
+  createFromDelivery 
 };

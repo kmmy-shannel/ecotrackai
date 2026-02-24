@@ -7,6 +7,9 @@ import alertService from '../../services/alert.service';
 import deliveryService from '../../services/delivery.service';
 import approvalService from '../../services/approval.service';
 import Navigation from '../../components/Navigation';
+import AddProductModal from '../../components/AddProductModal';
+import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
+import ManageAccountsModal from '../../components/admin/ManageAccountsModal';
 
 import { 
   TrendingUp, ChevronRight, Check,
@@ -24,6 +27,9 @@ const DashboardPage = () => {
     totalAlerts: 0,
     ecoScore: 0,
   });
+  const [showAddProduct, setShowAddProduct]       = useState(false);
+const [showPlanRoute, setShowPlanRoute]         = useState(false);
+const [showManageAccounts, setShowManageAccounts] = useState(false);
   const [spoilageStats, setSpoilageStats] = useState({
     high: 0,
     medium: 0,
@@ -268,7 +274,7 @@ const DashboardPage = () => {
 
   {user && user.role === 'admin' && (
     <button
-      onClick={() => navigate('/managers')}
+      onClick={() => setShowManageAccounts(true)}
       className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
     >
       <Users size={20} />
@@ -277,7 +283,7 @@ const DashboardPage = () => {
   )}
 
   <button
-    onClick={() => navigate('/deliveries')}
+    onClick={() => setShowPlanRoute(true)}
     className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5"
   >
     <Map size={20} />
@@ -285,7 +291,7 @@ const DashboardPage = () => {
   </button>
 
   <button
-    onClick={() => navigate('/products')}
+    onClick={() => setShowAddProduct(true)}
     className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
   >
     <span className="text-xl font-semibold">+</span>
@@ -487,9 +493,34 @@ const DashboardPage = () => {
             </div>
           </div>
         </div>
-      </main>
+   </main>
 
-     
+      {showAddProduct && (
+        <AddProductModal
+          onClose={() => setShowAddProduct(false)}
+          onSuccess={() => {
+            setShowAddProduct(false);
+            loadDashboardStats();
+          }}
+        />
+      )}
+
+      {showPlanRoute && (
+        <PlanNewDeliveryModal
+          onClose={() => setShowPlanRoute(false)}
+          onSuccess={() => {
+            setShowPlanRoute(false);
+            loadDashboardStats();
+          }}
+        />
+      )}
+
+      {showManageAccounts && (
+        <ManageAccountsModal
+          onClose={() => setShowManageAccounts(false)}
+        />
+      )}
+
     </div>
   );
 };

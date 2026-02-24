@@ -86,29 +86,30 @@ const ApprovalModel = {
   },
 
   async create(data) {
-    const { rows } = await pool.query(
-      `INSERT INTO manager_approvals (
-         business_id, product_name, quantity, location,
-         days_left, risk_level, ai_suggestion, priority,
-         status, required_role, approval_type, submitted_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10,$11)
-       RETURNING *, approval_id AS id`,
-      [
-        data.businessId,
-        data.productName,
-        data.quantity     || 'N/A',
-        data.location     || 'N/A',
-        data.daysLeft     || 0,
-        data.riskLevel    || 'MEDIUM',
-        data.aiSuggestion || '',
-        data.priority     || 'MEDIUM',
-        data.requiredRole || 'inventory_manager',
-        data.approvalType || 'spoilage_action',
-        data.submittedBy  || null,
-      ]
-    );
-    return rows[0];
-  },
+  const query = `
+    INSERT INTO manager_approvals (
+      business_id, product_name, quantity, location,
+      days_left, risk_level, ai_suggestion, priority,
+      status, required_role, approval_type, submitted_by, extra_data
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10,$11,$12)
+    RETURNING *
+  `;
+  const { rows } = await pool.query(query, [
+    data.businessId,
+    data.productName,
+    data.quantity    || 'N/A',
+    data.location    || 'N/A',
+    data.daysLeft    || 0,
+    data.riskLevel   || 'MEDIUM',
+    data.aiSuggestion || '',
+    data.priority    || 'MEDIUM',
+    data.requiredRole || 'inventory_manager',
+    data.approvalType || 'spoilage_action',
+    data.submittedBy,
+    data.extraData   || null
+  ]);
+  return rows[0];
+},
 
   async updateStatusWithRole(approvalId, status, reviewedBy, notes, decidedByRole) {
     await pool.query(

@@ -17,7 +17,7 @@ const register = async (req, res) => {
       result
     );
   } catch (error) {
-    console.error('❌ REGISTRATION ERROR:', error.message);
+    console.error('REGISTRATION ERROR:', error.message);
     sendError(res, error.status || 500, error.message || 'Registration failed');
   }
 };
