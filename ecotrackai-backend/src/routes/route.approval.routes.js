@@ -79,12 +79,17 @@ const approveRouteOptimization = async (req, res) => {
 
     // Route → approved so driver can start
     if (rows[0].delivery_id) {
-      await pool.query(
-        `UPDATE delivery_routes SET status = 'approved', updated_at = NOW()
-         WHERE route_id = $1 AND business_id = $2`,
-        [rows[0].delivery_id, businessId]
-      );
-    }
+  const driverUserId = req.body.driverUserId || req.body.driver_user_id || null;
+
+  await pool.query(
+    `UPDATE delivery_routes
+     SET status = 'approved',
+         driver_user_id = COALESCE($3, driver_user_id),
+         updated_at = NOW()
+     WHERE route_id = $1 AND business_id = $2`,
+    [rows[0].delivery_id, businessId, driverUserId]
+  );
+}
 
     sendSuccess(res, 200, 'Route approved — driver has been notified');
   } catch (error) {

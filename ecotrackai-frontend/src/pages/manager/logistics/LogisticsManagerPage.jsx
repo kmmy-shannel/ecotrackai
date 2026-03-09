@@ -8,6 +8,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import authService from '../../../services/auth.service';
 import LogisticsDashboardView from './LogisticsDashboardView';
 import LogisticsHistoryView    from './LogisticsHistoryView';
+import LogisticsDriverMonitorView from './LogisticsDriverMonitorView';
 import useLogisticsApprovals   from '../../../hooks/useLogisticsApprovals';
 
 // ── Match admin Layout.js structure exactly ──────────────────
@@ -132,14 +133,11 @@ export default function LogisticsManagerPage() {
               onViewChange={setActiveView}
             />
           )}
-          {activeView === 'drivers' && (
-            <LogisticsDashboardView
-              pending={pending} history={history} drivers={drivers} stats={stats}
-              loading={loading} error={error} success={success}
-              approveRoute={approveRoute} declineRoute={declineRoute}
+              {activeView === 'drivers' && (
+            <LogisticsDriverMonitorView
+              drivers={drivers}
+              loading={loading}
               refresh={refresh}
-              onViewChange={setActiveView}
-              defaultTab="drivers"
             />
           )}
           {activeView === 'history' && (

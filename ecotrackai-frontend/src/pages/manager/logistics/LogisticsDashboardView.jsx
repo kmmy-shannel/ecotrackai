@@ -39,11 +39,15 @@ const MetricRow = ({ label, original, optimized, unit }) => {
   );
 };
 
-function ApprovalCard({ item, onApprove, onDecline }) {
-  const [open,      setOpen]      = useState(false);
-  const [comment,   setComment]   = useState('');
-  const [declining, setDeclining] = useState(false);
-  const [busy,      setBusy]      = useState(false);
+function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
+  const [open,             setOpen]       = useState(false);
+  const [comment,          setComment]    = useState('');
+  const [declining,        setDeclining]  = useState(false);
+  const [busy,             setBusy]       = useState(false);
+  const [selectedDriver,   setSelectedDriver] = useState('');
+
+  // Only show drivers without an active ongoing delivery
+  const availableDrivers = drivers.filter(d => !d.route_status);
 
   const origin = (() => {
     try {
@@ -123,18 +127,47 @@ function ApprovalCard({ item, onApprove, onDecline }) {
               className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none" />
           </div>
 
-          {!declining ? (
-            <div className="flex gap-2">
-              <button
-                onClick={async () => { setBusy(true); await onApprove(item.approval_id, comment); setBusy(false); }}
-                disabled={busy}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors">
-                {busy ? 'Processing…' : '✓ Accept Optimization'}
-              </button>
-              <button onClick={() => setDeclining(true)}
-                className="flex-1 border border-red-300 hover:bg-red-50 text-red-600 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                ✕ Decline
-              </button>
+         {!declining ? (
+            <div className="space-y-3">
+              {/* Step 4-5: Jose must select a driver before approving */}
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                  Assign Driver <span className="text-red-500">*</span>
+                </label>
+                {availableDrivers.length === 0 ? (
+                  <p className="text-xs text-orange-500 py-1">
+                    No available drivers. All drivers have active deliveries.
+                  </p>
+                ) : (
+                  <select
+                    value={selectedDriver}
+                    onChange={e => setSelectedDriver(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  >
+                    <option value="">Select available driver…</option>
+                    {availableDrivers.map(d => (
+                      <option key={d.user_id} value={d.user_id}>{d.full_name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!selectedDriver) return;
+                    setBusy(true);
+                    await onApprove(item.approval_id, comment, selectedDriver);
+                    setBusy(false);
+                  }}
+                  disabled={busy || !selectedDriver}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {busy ? 'Processing…' : '✓ Approve & Assign Driver'}
+                </button>
+                <button onClick={() => setDeclining(true)}
+                  className="flex-1 border border-red-300 hover:bg-red-50 text-red-600 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                  ✕ Decline
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex gap-2">
@@ -223,37 +256,21 @@ export default function LogisticsDashboardView({
       {loading && <div className="text-center py-12 text-gray-400">Loading…</div>}
 
       {/* ── Pending Approvals ─────────────────────────────── */}
-      {!loading && (
-        <div className="space-y-3">
-          {pending.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-gray-200 text-gray-400">
-              <p className="font-medium">No pending route approvals</p>
-              <p className="text-sm mt-1">New submissions from admin will appear here</p>
-            </div>
-          ) : pending.map(item => (
-            <ApprovalCard key={item.approval_id} item={item} onApprove={approveRoute} onDecline={declineRoute} />
-          ))}
-        </div>
-      )}
-
-      {/* ── Driver Monitor ────────────────────────────────── */}
-      {!loading && (
+     {!loading && drivers.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-700">
-              Driver Monitor
-            </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700">Driver Monitor</h3>
             <span className="text-xs text-gray-400">
-              {drivers.filter(d => d.route_status).length} of {drivers.length} on route
+              {drivers.filter(d => d.route_status).length} of {drivers.length} active
             </span>
           </div>
-          {drivers.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <p className="text-sm">No drivers registered in this business</p>
-              <p className="text-xs mt-1 text-gray-300">Real-time GPS tracking will appear here once drivers are active</p>
-            </div>
-          ) : (
-            drivers.map(d => <DriverRow key={d.user_id} driver={d} />)
+          <div className="space-y-2">
+            {drivers.slice(0, 3).map(d => <DriverRow key={d.user_id} driver={d} />)}
+          </div>
+          {drivers.length > 3 && (
+            <p className="text-xs text-gray-400 text-center mt-2">
+              +{drivers.length - 3} more · open Driver Monitor for full view
+            </p>
           )}
         </div>
       )}

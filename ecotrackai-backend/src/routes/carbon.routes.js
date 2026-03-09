@@ -1,10 +1,11 @@
+// FINAL FILE should look like this:
 const { Router } = require('express');
 const { 
   getCarbonFootprint,
   getMonthlyComparison,
   finalizeCarbonVerification
 } = require('../controllers/carbon.controller');
-const { authenticate } = require('../middleware/auth.middleware');
+const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/', authenticate, getCarbonFootprint);
 // Get monthly comparison
 router.get('/monthly', authenticate, getMonthlyComparison);
 
-// Verify or request revision for carbon record
-router.patch('/:id/verify', authenticate, finalizeCarbonVerification);
+// Step 10: Only Sustainability Manager can verify carbon records
+router.patch('/:id/verify', authenticate, authorize('sustainability_manager'), finalizeCarbonVerification);
 
 module.exports = router;

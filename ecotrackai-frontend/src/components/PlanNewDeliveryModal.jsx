@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Plus, Trash2, MapPin, Search, Navigation, X, Layers, Truck, AlertCircle, CheckCircle } from 'lucide-react';
 import deliveryService from '../services/delivery.service';
+import inventoryService from '../services/inventory.service';
 
 // ── Leaflet icon fix ──────────────────────────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -144,14 +145,14 @@ const LocationSearch = ({ onLocationSelect, stopIndex }) => {
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
 const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
+  // REPLACE WITH:
   const [formData, setFormData] = useState({
     deliveryDate:  new Date().toISOString().split('T')[0],
-    driverUserId:  '',
     vehicleType:   'van',
     estimatedLoad: ''
   });
-  const [drivers,        setDrivers]        = useState([]);
-  const [driversLoading, setDriversLoading] = useState(true);
+  const [inventory,        setInventory]        = useState([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
   const [stops, setStops] = useState([
     { name: '', fullAddress: '', lat: null, lng: null, type: 'origin',      products: [] },
     { name: '', fullAddress: '', lat: null, lng: null, type: 'destination', products: [] }
@@ -172,11 +173,15 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
     { value: 'motorcycle',         label: 'Motorcycle' },
   ];
 
+  // REPLACE WITH:
   useEffect(() => {
-    deliveryService.getDrivers()
-      .then(res => setDrivers(res?.data?.data || res?.data || []))
-      .catch(() => setDrivers([]))
-      .finally(() => setDriversLoading(false));
+    inventoryService.getAllInventory()
+      .then(res => {
+        const list = res?.data || res || [];
+        setInventory(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setInventory([]))
+      .finally(() => setInventoryLoading(false));
   }, []);
 
   const calculateRoute = async () => {
@@ -217,9 +222,9 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
 
   const removeStop = (index) => { if (stops.length > 2) setStops(stops.filter((_, i) => i !== index)); };
 
+  // REPLACE WITH:
   const validateForm = () => {
     const errs = {};
-    if (!formData.driverUserId)                                  errs.driverUserId  = 'Please select a driver';
     if (!formData.estimatedLoad || +formData.estimatedLoad <= 0) errs.estimatedLoad = 'Valid load weight required';
     stops.forEach((s, i) => { if (!s.lat || !s.lng) errs[`stop_${i}`] = 'Set this location on the map'; });
     setErrors(errs);
@@ -230,7 +235,7 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
     if (!validateForm()) return;
     try {
       setLoading(true);
-      await deliveryService.createDelivery({
+     await deliveryService.createDelivery({
         routeName:    `Route-${Date.now()}`,
         deliveryDate: formData.deliveryDate,
         vehicleType:  formData.vehicleType,
@@ -314,24 +319,10 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-700 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500" />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Assign Driver *</label>
-                  {driversLoading ? (
-                    <div className="flex items-center gap-2 py-2 text-xs text-gray-400">
-                      <div className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" /> Loading drivers…
-                    </div>
-                  ) : (
-                    <select value={formData.driverUserId}
-                      onChange={e => setFormData({ ...formData, driverUserId: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-lg text-gray-700 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 ${errors.driverUserId ? 'border-red-300' : 'border-gray-200'}`}>
-                      <option value="">Select a driver…</option>
-                      {drivers.map(d => <option key={d.user_id} value={d.user_id}>{d.full_name}</option>)}
-                    </select>
-                  )}
-                  {drivers.length === 0 && !driversLoading && <p className="text-orange-500 text-[10px] mt-1">No drivers found. Create a driver account first.</p>}
-                  {errors.driverUserId && <p className="text-red-500 text-[10px] mt-1">{errors.driverUserId}</p>}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-1">Driver Assignment</p>
+                  <p className="text-[11px] text-blue-600">Driver will be assigned by the Logistics Manager when approving this route.</p>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5">Vehicle *</label>
@@ -415,15 +406,53 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
                       </p>
                     )}
 
-                    {stop.type !== 'origin' && (
-                      <input type="text" placeholder="Products to deliver (optional)"
-                        value={stop.products.join(', ')}
-                        onChange={e => {
-                          const ns = [...stops];
-                          ns[index].products = e.target.value.split(',').map(p => p.trim()).filter(Boolean);
-                          setStops(ns);
-                        }}
-                        className="w-full mt-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-700 text-[11px] placeholder-gray-400 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400" />
+                     {stop.type !== 'origin' && (
+                      <div className="mt-2 space-y-1.5">
+                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Assign Fruits to this Stop</p>
+                        {inventoryLoading ? (
+                          <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 border border-green-500 border-t-transparent rounded-full animate-spin inline-block" /> Loading inventory…
+                          </p>
+                        ) : inventory.length === 0 ? (
+                          <p className="text-[10px] text-orange-500">No available inventory. Add fruits first.</p>
+                        ) : (
+                          inventory.map(item => {
+                            const existing = (stop.products || []).find(p => p.inventoryId === item.inventory_id);
+                            return (
+                              <div key={item.inventory_id} className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-2.5 py-1.5">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[11px] font-semibold text-gray-700 truncate">{item.product_name}</p>
+                                  <p className="text-[10px] text-gray-400">{item.quantity} {item.unit_of_measure} available</p>
+                                </div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={item.quantity}
+                                  placeholder="0"
+                                  value={existing?.quantityAssigned || ''}
+                                  onChange={e => {
+                                    const qty = parseFloat(e.target.value) || 0;
+                                    const ns = [...stops];
+                                    const products = [...(ns[index].products || [])];
+                                    const idx2 = products.findIndex(p => p.inventoryId === item.inventory_id);
+                                    if (qty > 0) {
+                                      const entry = { inventoryId: item.inventory_id, productName: item.product_name, quantityAssigned: qty, unit: item.unit_of_measure };
+                                      if (idx2 >= 0) products[idx2] = entry;
+                                      else products.push(entry);
+                                    } else {
+                                      if (idx2 >= 0) products.splice(idx2, 1);
+                                    }
+                                    ns[index] = { ...ns[index], products };
+                                    setStops(ns);
+                                  }}
+                                  className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-[11px] text-center focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400"
+                                />
+                                <span className="text-[10px] text-gray-400 w-6">{item.unit_of_measure}</span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}

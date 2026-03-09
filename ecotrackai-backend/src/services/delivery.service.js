@@ -108,8 +108,8 @@ const DeliveryService = {
     const { routeName, originLocation, destinationLocation,
             vehicleType, driverUserId, stops = [] } = body;
 
-    if (!routeName || !originLocation || !destinationLocation || !vehicleType || !driverUserId)
-      return this._fail('routeName, originLocation, destinationLocation, vehicleType, driverUserId are required');
+   if (!routeName || !originLocation || !destinationLocation || !vehicleType)
+  return this._fail('routeName, originLocation, destinationLocation, vehicleType are required');
 
     const stopCount                      = stops.length;
     const estimatedDistanceKm            = parseFloat(body.totalDistanceKm)                || (10 + stopCount * 5);
@@ -272,7 +272,7 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
     }
 
     const opt = {
-      originalDistance,
+      originalDistance: original.distance,
       optimizedDistance,
       originalDuration:  original.duration,
       optimizedDuration,

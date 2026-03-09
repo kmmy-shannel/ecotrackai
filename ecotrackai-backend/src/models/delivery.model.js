@@ -4,6 +4,15 @@
 const pool = require('../config/database');
 
 const DeliveryModel = {
+  async _getTableColumns(tableName) {
+    const result = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = $1
+    `, [tableName]);
+    return result.rows.map((row) => row.column_name);
+  },
 
   // ── List all routes for a business ──────────────────────
   async findAllByBusiness(businessId) {
@@ -127,21 +136,44 @@ const DeliveryModel = {
         || locObj.address || locObj.name
         || `Stop ${stopSequence}`;
 
+      const columns = await this._getTableColumns('route_stops');
+      const valueByColumn = {
+        route_id: routeId,
+        delivery_id: routeId,
+        stop_sequence: stopSequence,
+        sequence: stopSequence,
+        sequence_no: stopSequence,
+        stop_order: stopSequence,
+        location_name: name,
+        stop_name: name,
+        location: JSON.stringify(locObj),
+        location_json: JSON.stringify(locObj),
+        stop_type: stopType,
+        planned_arrival_time: plannedArrivalTime || null,
+        notes: notes || null,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+
+      const insertColumns = columns.filter((column) =>
+        Object.prototype.hasOwnProperty.call(valueByColumn, column)
+      );
+
+      if (
+        !(insertColumns.includes('route_id') || insertColumns.includes('delivery_id')) ||
+        !(insertColumns.includes('stop_sequence') || insertColumns.includes('sequence') || insertColumns.includes('sequence_no') || insertColumns.includes('stop_order'))
+      ) {
+        return { success: false, error: 'route_stops required columns not found' };
+      }
+
+      const placeholders = insertColumns.map((_, i) => `$${i + 1}`).join(', ');
+      const values = insertColumns.map((column) => valueByColumn[column]);
+
       const result = await pool.query(`
-        INSERT INTO route_stops (
-          route_id, stop_sequence, location_name, location,
-          stop_type, planned_arrival_time, notes, created_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        INSERT INTO route_stops (${insertColumns.join(', ')})
+        VALUES (${placeholders})
         RETURNING *
-      `, [
-        routeId,
-        stopSequence,
-        name,
-        JSON.stringify(locObj),
-        stopType,
-        plannedArrivalTime || null,
-        notes || null,
-      ]);
+      `, values);
 
       return { success: true, data: result.rows[0] };
     } catch (err) {
@@ -158,7 +190,21 @@ const DeliveryModel = {
         WHERE route_id = $1
         ORDER BY stop_sequence ASC
       `, [routeId]);
-      return { success: true, data: result.rows };
+
+      const normalized = result.rows.map((row) => {
+        let location = row.location ?? row.location_json ?? null;
+        if (location && typeof location !== 'string') {
+          location = JSON.stringify(location);
+        }
+        return {
+          ...row,
+          location,
+          location_name: row.location_name || row.stop_name || null,
+          stop_sequence: row.stop_sequence ?? row.sequence_no ?? row.sequence ?? row.stop_order ?? 0
+        };
+      }).sort((a, b) => Number(a.stop_sequence || 0) - Number(b.stop_sequence || 0));
+
+      return { success: true, data: normalized };
     } catch (err) {
       console.error('[DeliveryModel.getStops]', err.message);
       return { success: true, data: [] };

@@ -15,7 +15,7 @@ const LogisticsService = {
           ma.*,
           dr.status        AS route_status,
           dr.vehicle_type,
-          dr.driver_name,
+          drv.full_name    AS driver_full_name,
           dr.total_distance_km,
           dr.estimated_fuel_consumption_liters,
           dr.estimated_carbon_kg,
@@ -29,9 +29,10 @@ const LogisticsService = {
           ro.ai_recommendation,
           u.full_name AS submitted_by_name
         FROM manager_approvals ma
-        LEFT JOIN delivery_routes dr  ON dr.route_id   = ma.delivery_id
-        LEFT JOIN route_optimizations ro ON ro.route_id = ma.delivery_id
-        LEFT JOIN users u              ON u.user_id     = ma.submitted_by
+        LEFT JOIN delivery_routes    dr  ON dr.route_id   = ma.delivery_id
+        LEFT JOIN route_optimizations ro  ON ro.route_id   = ma.delivery_id
+        LEFT JOIN users               u   ON u.user_id     = ma.submitted_by
+        LEFT JOIN users               drv ON drv.user_id   = dr.driver_user_id
         WHERE ma.business_id  = $1
           AND ma.approval_type = 'route_optimization'
           AND ma.status        = 'pending'
@@ -47,19 +48,20 @@ const LogisticsService = {
   // ── History ──────────────────────────────────────────────
   async getRouteHistory(user) {
     try {
-      const { rows } = await pool.query(`
+       const { rows } = await pool.query(`
         SELECT
           ma.*,
           dr.vehicle_type,
-          dr.driver_name,
+          drv.full_name    AS driver_full_name,
           dl.actual_distance_km,
           dl.actual_fuel_used_liters,
           dl.actual_carbon_kg,
           u.full_name AS reviewed_by_name
         FROM manager_approvals ma
-        LEFT JOIN delivery_routes dr ON dr.route_id   = ma.delivery_id
-        LEFT JOIN delivery_logs   dl ON dl.route_id   = ma.delivery_id
-        LEFT JOIN users           u  ON u.user_id     = ma.reviewed_by
+       LEFT JOIN delivery_routes dr  ON dr.route_id  = ma.delivery_id
+        LEFT JOIN delivery_logs   dl  ON dl.route_id  = ma.delivery_id
+        LEFT JOIN users           u   ON u.user_id    = ma.reviewed_by
+        LEFT JOIN users           drv ON drv.user_id  = dr.driver_user_id
         WHERE ma.business_id   = $1
           AND ma.approval_type = 'route_optimization'
           AND ma.status       <> 'pending'
@@ -76,14 +78,26 @@ const LogisticsService = {
   // ── Approve ──────────────────────────────────────────────
   async approveRoute(approvalId, user, body = {}) {
     try {
+      const businessId = user.businessId || user.business_id;
+      const reviewerUserId = user.userId || user.user_id;
+
       // Get the approval record
       const { rows: approvals } = await pool.query(
         `SELECT * FROM manager_approvals WHERE approval_id=$1 AND business_id=$2`,
-        [approvalId, user.businessId]
+        [approvalId, businessId]
       );
       if (!approvals[0]) return this._fail('Approval not found');
       const approval = approvals[0];
       if (approval.status !== 'pending') return this._fail('Already reviewed');
+
+      const parsedDriverUserId = Number(body.driverUserId || body.driver_user_id || 0) || null;
+      if (parsedDriverUserId) {
+        const { rowCount } = await pool.query(
+          `SELECT 1 FROM users WHERE user_id = $1 AND business_id = $2 AND role = 'driver' AND is_active = TRUE`,
+          [parsedDriverUserId, businessId]
+        );
+        if (rowCount === 0) return this._fail('Selected driver is invalid or inactive');
+      }
 
       // Update approval
       await pool.query(`
@@ -92,13 +106,17 @@ const LogisticsService = {
             reviewed_by=$1, reviewed_at=NOW(),
             manager_comment=$2, decided_by_role=$3, decision_date=NOW()
         WHERE approval_id=$4
-      `, [user.userId, body.comment || '', user.role, approvalId]);
+      `, [reviewerUserId, body.comment || '', user.role, approvalId]);
 
       // Update route status → approved
-      await pool.query(
-        `UPDATE delivery_routes SET status='approved' WHERE route_id=$1 AND business_id=$2`,
-        [approval.delivery_id, user.businessId]
-      );
+await pool.query(
+  `UPDATE delivery_routes
+   SET status = 'approved',
+       driver_user_id = COALESCE($3, driver_user_id),
+       updated_at = NOW()
+   WHERE route_id = $1 AND business_id = $2`,
+  [approval.delivery_id, businessId, parsedDriverUserId]
+);
 
       // Mark optimization as approved
       await pool.query(
@@ -107,14 +125,19 @@ const LogisticsService = {
       );
 
       // Award EcoTrust points
-      await pool.query(`
-        INSERT INTO ecotrust_transactions
-          (business_id, action_id, action_type, points_earned,
-           related_record_type, related_record_id, verification_status, transaction_date, created_at)
-        SELECT $1, action_id, 'Route Optimization Approved', points_value,
-               'delivery', $2, 'pending', CURRENT_DATE, NOW()
-        FROM sustainable_actions WHERE action_name='Route Optimization Approved' LIMIT 1
-      `, [user.businessId, approval.delivery_id]);
+      try {
+        await pool.query(`
+          INSERT INTO ecotrust_transactions
+            (business_id, action_id, action_type, points_earned,
+             related_record_type, related_record_id, verification_status, transaction_date, created_at)
+          SELECT $1, action_id, 'Route Optimization Approved', points_value,
+                 'delivery', $2, 'pending', CURRENT_DATE, NOW()
+          FROM sustainable_actions WHERE action_name='Route Optimization Approved' LIMIT 1
+        `, [businessId, approval.delivery_id]);
+      } catch (ecotrustError) {
+        // Keep the core route-approval flow successful even if optional points logging fails.
+        console.error('[LogisticsService.approveRoute][ecotrust]', ecotrustError.message);
+      }
 
       return this._ok({ message: 'Route approved. Driver has been notified.' });
     } catch (e) {

@@ -48,10 +48,13 @@ export default function useLogisticsApprovals() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  const approveRoute = async (approvalId, comment = '') => {
+   const approveRoute = async (approvalId, comment = '', driverUserId = null) => {
     setError('');
     try {
-      await api.patch(`/logistics/${approvalId}/approve`, { comment });
+      await api.patch(`/logistics/${approvalId}/approve`, { 
+        comment, 
+        driverUserId: driverUserId ? parseInt(driverUserId, 10) : null 
+      });
       flash(setSuccess, '✓ Route approved — driver has been notified');
       await loadAll();
     } catch (err) {

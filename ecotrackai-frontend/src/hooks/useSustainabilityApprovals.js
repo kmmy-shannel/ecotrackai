@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import approvalService from '../services/approval.service';
+import carbonService   from '../services/carbon.service';
 
 export const useSustainabilityApprovals = (businessId) => {
   const [pendingVerifications, setPendingVerifications] = useState([]);
@@ -40,10 +41,10 @@ export const useSustainabilityApprovals = (businessId) => {
     }
   }, [businessId]);
 
-  const verify = async (approvalId, notes = '') => {
+   const verify = async (carbonRecordId, notes = '') => {
     clearMessages();
     try {
-      await approvalService.approveItem(approvalId, { notes });
+      await carbonService.verifyCarbonRecord(carbonRecordId, 'verified', notes);
       setSuccess('Carbon record verified successfully');
       await loadPending();
       return true;
@@ -53,11 +54,11 @@ export const useSustainabilityApprovals = (businessId) => {
     }
   };
 
-  const requestRevision = async (approvalId, reason) => {
+  const requestRevision = async (carbonRecordId, reason = '') => {
     clearMessages();
     try {
-      await approvalService.declineItem(approvalId, { reason });
-      setSuccess('Revision requested');
+      await carbonService.verifyCarbonRecord(carbonRecordId, 'revision_requested', reason);
+      setSuccess('Revision requested — admin will be notified');
       await loadPending();
       return true;
     } catch (e) {
