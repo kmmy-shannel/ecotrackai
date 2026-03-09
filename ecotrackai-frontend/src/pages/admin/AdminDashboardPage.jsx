@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../../services/auth.service';
+import { useAuth } from '../../hooks/useAuth';
 import aiService from '../../services/ai.service';
+import productService from '../../services/product.service';
+import alertService from '../../services/alert.service';
+import deliveryService from '../../services/delivery.service';
+import approvalService from '../../services/approval.service';
 import Navigation from '../../components/Navigation';
-import ManagerManagement from '../../components/admin/ManagerManagement';
+import AddProductModal from '../../components/AddProductModal';
+import Layout from '../../components/Layout';
+import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
+import ManageAccountsModal from '../../components/admin/ManageAccountsModal';
+
 import { 
   TrendingUp, ChevronRight, Check,
   Users, Sparkles, Clock, AlertCircle, Package, Truck, AlertTriangle, DollarSign, Map
@@ -11,8 +19,7 @@ import {
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [showManagerModal, setShowManagerModal] = useState(false);
+  const { user, logout } = useAuth();
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [aiInsights, setAiInsights] = useState(null);
   const [stats, setStats] = useState({
@@ -20,16 +27,103 @@ const DashboardPage = () => {
     totalDeliveries: 0,
     totalAlerts: 0,
     ecoScore: 0,
-    profit: 0
+  });
+  const [showAddProduct, setShowAddProduct]       = useState(false);
+const [showPlanRoute, setShowPlanRoute]         = useState(false);
+const [showManageAccounts, setShowManageAccounts] = useState(false);
+  const [spoilageStats, setSpoilageStats] = useState({
+    high: 0,
+    medium: 0,
+    low: 0,
+    pendingInventoryApprovals: 0
   });
 
+  const toCount = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const getMonthlyDeliveryCount = (deliveries = []) => {
+    const now = new Date();
+    const monthly = deliveries.filter((delivery) => {
+      const rawDate =
+        delivery.created_at ||
+        delivery.delivery_date ||
+        delivery.scheduled_date ||
+        delivery.date;
+      if (!rawDate) return false;
+
+      const deliveryDate = new Date(rawDate);
+      return (
+        !Number.isNaN(deliveryDate.getTime()) &&
+        deliveryDate.getMonth() === now.getMonth() &&
+        deliveryDate.getFullYear() === now.getFullYear()
+      );
+    });
+
+    return monthly.length > 0 ? monthly.length : deliveries.length;
+  };
+
+  const loadDashboardStats = useCallback(async () => {
+    try {
+      await alertService.syncAlerts().catch(() => null);
+
+      const [productsRes, deliveriesRes, alertStatsRes, pendingQueueRes] = await Promise.allSettled([
+        productService.getAllProducts(),
+        deliveryService.getAllDeliveries(),
+        alertService.getAlertStats(),
+        approvalService.getPendingCount('inventory_manager')
+      ]);
+
+      const products =
+        productsRes.status === 'fulfilled'
+          ? productsRes.value?.data?.products || productsRes.value?.products || []
+          : [];
+
+      const deliveries =
+        deliveriesRes.status === 'fulfilled'
+          ? deliveriesRes.value?.data?.deliveries || deliveriesRes.value?.deliveries || []
+          : [];
+
+      const alertStats =
+        alertStatsRes.status === 'fulfilled'
+          ? alertStatsRes.value?.data || {}
+          : {};
+
+      const pendingInventoryApprovals =
+        pendingQueueRes.status === 'fulfilled'
+          ? toCount(pendingQueueRes.value?.data?.count ?? pendingQueueRes.value?.count)
+          : 0;
+
+      const high = toCount(alertStats.high_risk);
+      const medium = toCount(alertStats.medium_risk);
+      const low = toCount(alertStats.low_risk);
+
+      setStats((prev) => ({
+        ...prev,
+        totalProducts: products.length,
+        totalDeliveries: getMonthlyDeliveryCount(deliveries),
+        totalAlerts: high + medium + low
+      }));
+
+      setSpoilageStats({
+        high,
+        medium,
+        low,
+        pendingInventoryApprovals
+      });
+    } catch (error) {
+      console.error('Failed to load dashboard stats:', error);
+    }
+  }, []);
+
   // Single loadAIInsights function with useCallback
-  const loadAIInsights = useCallback(async () => {
+  const loadAIInsights = useCallback(async (statsSnapshot = stats) => {
     try {
       setLoadingInsights(true);
-      console.log('Requesting AI insights with stats:', stats);
+      console.log('Requesting AI insights with stats:', statsSnapshot);
       
-      const response = await aiService.getDashboardInsights(stats);
+      const response = await aiService.getDashboardInsights(statsSnapshot);
       console.log('AI insights received:', response);
       
       if (response.success) {
@@ -84,19 +178,18 @@ const DashboardPage = () => {
   }, [stats]);
 
   useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      navigate('/');
-      return;
-    }
-    setUser(currentUser);
-    loadAIInsights();
-  }, [navigate, loadAIInsights]);
+    if (user) loadDashboardStats();
+  }, [user, loadDashboardStats]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadAIInsights(stats);
+  }, [user, stats, loadAIInsights]);
 
   const handleLogout = async () => {
     try {
-      await authService.logout();
-      navigate('/');
+      await logout();
+      navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -126,256 +219,271 @@ const DashboardPage = () => {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50 flex">
-      <aside className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col shadow-sm">
-        <div className="flex items-center gap-3 mb-10">
-          <img 
-            src="/logo.jpg" 
-            alt="EcoTrackAI Logo" 
-            className="w-10 h-10 rounded-xl shadow-md object-cover"
-          />
-          <h1 className="text-lg font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-            ECO-TRACKAI
-          </h1>
-        </div>
-
-        <Navigation onLogout={handleLogout} />
-      </aside>
-
-      <main className="flex-1 p-8 overflow-auto">
-        <header className="bg-gradient-to-r from-white to-gray-50 rounded-2xl p-6 mb-6 flex items-center justify-between shadow-sm border border-gray-100">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">Welcome back, {user.fullName.split(' ')[0]}!</h2>
-            <p className="text-sm text-gray-500 mt-1">Here's what's happening with your eco-tracking today</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right mr-3">
-              <p className="text-sm font-medium text-gray-700">{user.fullName}</p>
-              <p className="text-xs text-gray-500">{user.email}</p>
-            </div>
-            <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-md">
-              <span className="text-white font-semibold text-lg">{user.fullName.charAt(0)}</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">DASHBOARD</h1>
-          <div className="flex gap-3">
-            {user && user.role === 'admin' && (
-              <button
-                onClick={() => setShowManagerModal(true)}
-                className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-              >
-                <Users size={20} />
-                <span className="font-medium">Manage Accounts</span>
-              </button>
-            )}
-
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5">
-              <Map size={20} />
-              <span className="font-medium">Plan Route</span>
+    <Layout currentPage="DASHBOARD" user={user}>
+      {/* Main content - NO SIDEBAR HERE because Layout already provides it */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">DASHBOARD</h1>
+        <div className="flex gap-3">
+          {user && user.role === 'admin' && (
+            <button
+              onClick={() => navigate('/inventory-manager')}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5"
+            >
+              <AlertTriangle size={20} />
+              <span className="font-medium">
+                Inventory Queue ({spoilageStats.pendingInventoryApprovals})
+              </span>
             </button>
-
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-              <span className="text-xl font-semibold">+</span>
-              <span className="font-medium">Add Product</span>
+          )}
+  
+          {user && user.role === 'admin' && (
+            <button
+              onClick={() => setShowManageAccounts(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            >
+              <Users size={20} />
+              <span className="font-medium">Manage Accounts</span>
             </button>
-          </div>
+          )}
+  
+          <button
+            onClick={() => setShowPlanRoute(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-green-700 text-green-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:bg-green-50 transform hover:-translate-y-0.5"
+          >
+            <Map size={20} />
+            <span className="font-medium">Plan Route</span>
+          </button>
+  
+          <button
+            onClick={() => setShowAddProduct(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-800 hover:bg-green-900 text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+          >
+            <span className="text-xl font-semibold">+</span>
+            <span className="font-medium">Add Product</span>
+          </button>
         </div>
-
-        <div className="grid grid-cols-5 gap-4 mb-6">
-          <StatCard
-            title="Total product"
-            value={stats.totalProducts}
-            subtitle="Today"
-            cardType="split-design" 
-          />
-
-          <StatCard
-            title="Total delivery"
-            value={stats.totalDeliveries}
-            subtitle="Today"
-            cardType="white-with-image"
-            backgroundImage="/images/van_total_delivery.jpg"
-          />
-
-          <StatCard
-            title="Alerts"
-            value={`0${stats.totalAlerts}`}
-            subtitle="Decreased from last week"
-            cardType="white"
-          />
-
-          <StatCard
-            title="Eco Score"
-            value={stats.ecoScore}
-            subtitle="Increase from this week"
-            cardType="split-design-reverse"
-          />
-
-          <StatCard
-  title="Monthly Profit"
-  value={`₱ ${stats.profit.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
-  subtitle="Decreased from Last Month"
-  cardType="split-design-with-graph"
-  graphImage="/images/graph.png"
-/>
-        </div>
-
-        <div className="grid grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Sparkles size={20} className="text-purple-600" />
-                <h3 className="text-lg font-bold text-gray-800">URGENT AI RECOMMENDATIONS</h3>
-              </div>
-              
-              <button 
-                onClick={loadAIInsights}
-                disabled={loadingInsights}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Sparkles size={16} className={loadingInsights ? 'animate-spin' : ''} />
-                <span className="text-sm font-medium">{loadingInsights ? 'Analyzing...' : 'Get AI Insights'}</span>
-              </button>
+      </div>
+  
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <StatCard
+          title="Total product"
+          value={stats.totalProducts}
+          subtitle="Today"
+          cardType="split-design" 
+        />
+  
+        <StatCard
+          title="Total delivery"
+          value={stats.totalDeliveries}
+          subtitle="Today"
+          cardType="white-with-image"
+          backgroundImage="/images/van_total_delivery.jpg"
+        />
+  
+        <StatCard
+          title="Alerts"
+          value={stats.totalAlerts}
+          subtitle={`${spoilageStats.high} high risk, ${spoilageStats.medium} medium risk`}
+          cardType="white"
+        />
+  
+        <StatCard
+          title="Eco Score"
+          value={stats.ecoScore}
+          subtitle="Increase from this week"
+          cardType="split-design-reverse"
+        />
+      </div>
+  
+      <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3 text-sm">
+        <span className="px-3 py-1 rounded-full bg-red-50 text-red-700 font-semibold">
+          High risk: {spoilageStats.high}
+        </span>
+        <span className="px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-semibold">
+          Medium risk: {spoilageStats.medium}
+        </span>
+        <span className="px-3 py-1 rounded-full bg-green-50 text-green-700 font-semibold">
+          Low risk: {spoilageStats.low}
+        </span>
+        <span className="ml-auto text-gray-600 font-medium">
+          Pending inventory manager approvals: {spoilageStats.pendingInventoryApprovals}
+        </span>
+      </div>
+  
+      <div className="grid grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles size={20} className="text-purple-600" />
+              <h3 className="text-lg font-bold text-gray-800">URGENT AI RECOMMENDATIONS</h3>
             </div>
             
-            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 min-h-[300px] flex flex-col justify-between border border-gray-100">
-              {loadingInsights ? (
-                <div className="text-center text-gray-400 flex-1 flex flex-col items-center justify-center">
-                  <Sparkles size={32} className="text-purple-600 animate-pulse mb-3" />
-                  <p className="font-medium">AI is analyzing your data...</p>
-                  <p className="text-sm mt-1">This may take a few moments</p>
-                </div>
-              ) : aiInsights?.urgentRecommendations?.length > 0 ? (
-                <div className="space-y-3 flex-1 overflow-auto">
-                  {aiInsights.urgentRecommendations.map((rec, index) => (
-                    <div key={index} className={`border rounded-lg p-4 ${getPriorityColor(rec.priority)}`}>
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-1">
-                          {getTypeIcon(rec.type)}
+            <button 
+              onClick={() => loadAIInsights(stats)}
+              disabled={loadingInsights}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Sparkles size={16} className={loadingInsights ? 'animate-spin' : ''} />
+              <span className="text-sm font-medium">{loadingInsights ? 'Analyzing...' : 'Get AI Insights'}</span>
+            </button>
+          </div>
+          
+          <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 min-h-[300px] flex flex-col justify-between border border-gray-100">
+            {/* ... AI insights content ... */}
+            {loadingInsights ? (
+              <div className="text-center text-gray-400 flex-1 flex flex-col items-center justify-center">
+                <Sparkles size={32} className="text-purple-600 animate-pulse mb-3" />
+                <p className="font-medium">AI is analyzing your data...</p>
+                <p className="text-sm mt-1">This may take a few moments</p>
+              </div>
+            ) : aiInsights?.urgentRecommendations?.length > 0 ? (
+              <div className="space-y-3 flex-1 overflow-auto">
+                {aiInsights.urgentRecommendations.map((rec, index) => (
+                  <div key={index} className={`border rounded-lg p-4 ${getPriorityColor(rec.priority)}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-1">
+                        {getTypeIcon(rec.type)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className="font-semibold">{rec.title}</h4>
+                          <span className="text-xs font-semibold px-2 py-1 bg-white rounded">
+                            {rec.priority}
+                          </span>
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-semibold">{rec.title}</h4>
-                            <span className="text-xs font-semibold px-2 py-1 bg-white rounded">
-                              {rec.priority}
-                            </span>
+                        <p className="text-sm mb-2">{rec.description}</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="font-medium">Financial:</span> {rec.estimatedImpact.financial}
                           </div>
-                          <p className="text-sm mb-2">{rec.description}</p>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <span className="font-medium">Financial:</span> {rec.estimatedImpact.financial}
-                            </div>
-                            <div>
-                              <span className="font-medium">Timeline:</span> {rec.estimatedImpact.timeframe}
-                            </div>
+                          <div>
+                            <span className="font-medium">Timeline:</span> {rec.estimatedImpact.timeframe}
                           </div>
-                          <div className="mt-2 pt-2 border-t border-current border-opacity-20">
-                            <p className="text-xs font-medium">Action: {rec.actionRequired}</p>
-                          </div>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-current border-opacity-20">
+                          <p className="text-xs font-medium">Action: {rec.actionRequired}</p>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center text-gray-400 flex-1 flex flex-col items-center justify-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-3">
-                    <Check size={32} className="text-green-600" />
                   </div>
-                  <p className="font-medium">No urgent recommendations</p>
-                  <p className="text-sm mt-1">Everything is running smoothly!</p>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-gray-400 flex-1 flex flex-col items-center justify-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                  <Check size={32} className="text-green-600" />
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">TODAY'S OVERVIEW</h3>
-              <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-semibold rounded-full">
-                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
-            </div>
-            
-            <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 min-h-[300px] border border-gray-100">
-              {loadingInsights ? (
-                <div className="text-center text-gray-400 flex items-center justify-center h-full">
-                  <Clock size={32} className="animate-pulse" />
-                </div>
-              ) : aiInsights?.todayOverview ? (
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      Key Metrics
-                    </h4>
-                    <ul className="space-y-1 pl-4">
-                      {aiInsights.todayOverview.keyMetrics.map((metric, i) => (
-                        <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                          {metric}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  
-                  <div>
-                    <h4 className="font-semibold text-green-700 mb-2 flex items-center gap-2">
-                      <TrendingUp size={16} className="text-green-500" />
-                      Opportunities
-                    </h4>
-                    <ul className="space-y-1 pl-4">
-                      {aiInsights.todayOverview.opportunities.map((opp, i) => (
-                        <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                          {opp}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  
-                  {aiInsights.todayOverview.warnings.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold text-orange-700 mb-2 flex items-center gap-2">
-                        <AlertTriangle size={16} className="text-orange-500" />
-                        Warnings
-                      </h4>
-                      <ul className="space-y-1 pl-4">
-                        {aiInsights.todayOverview.warnings.map((warning, i) => (
-                          <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                            {warning}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-gray-400 flex items-center justify-center h-full">
-                  <div>
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3 mx-auto">
-                      <span className="text-3xl">📊</span>
-                    </div>
-                    <p className="font-medium">No activities today</p>
-                    <p className="text-sm mt-1">Start tracking your eco-activities</p>
-                  </div>
-                </div>
-              )}
-            </div>
+                <p className="font-medium">No urgent recommendations</p>
+                <p className="text-sm mt-1">Everything is running smoothly!</p>
+              </div>
+            )}
           </div>
         </div>
-      </main>
-
-      {showManagerModal && (
-        <ManagerManagement onClose={() => setShowManagerModal(false)} />
+  
+        <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-800">TODAY'S OVERVIEW</h3>
+            <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-semibold rounded-full">
+              {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
+          </div>
+          
+          <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 min-h-[300px] border border-gray-100">
+            {loadingInsights ? (
+              <div className="text-center text-gray-400 flex items-center justify-center h-full">
+                <Clock size={32} className="animate-pulse" />
+              </div>
+            ) : aiInsights?.todayOverview ? (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    Key Metrics
+                  </h4>
+                  <ul className="space-y-1 pl-4">
+                    {aiInsights.todayOverview.keyMetrics.map((metric, i) => (
+                      <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                        {metric}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold text-green-700 mb-2 flex items-center gap-2">
+                    <TrendingUp size={16} className="text-green-500" />
+                    Opportunities
+                  </h4>
+                  <ul className="space-y-1 pl-4">
+                    {aiInsights.todayOverview.opportunities.map((opp, i) => (
+                      <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                        {opp}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {aiInsights.todayOverview.warnings.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-orange-700 mb-2 flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-orange-500" />
+                      Warnings
+                    </h4>
+                    <ul className="space-y-1 pl-4">
+                      {aiInsights.todayOverview.warnings.map((warning, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                          {warning}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center text-gray-400 flex items-center justify-center h-full">
+                <div>
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3 mx-auto">
+                    <span className="text-3xl">KP</span>
+                  </div>
+                  <p className="font-medium">No activities today</p>
+                  <p className="text-sm mt-1">Start tracking your eco-activities</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+  
+      {showAddProduct && (
+        <AddProductModal
+          onClose={() => setShowAddProduct(false)}
+          onSuccess={() => {
+            setShowAddProduct(false);
+            loadDashboardStats();
+          }}
+        />
       )}
-    </div>
-  );
-};
+  
+      {showPlanRoute && (
+        <PlanNewDeliveryModal
+          onClose={() => setShowPlanRoute(false)}
+          onSuccess={() => {
+            setShowPlanRoute(false);
+            loadDashboardStats();
+          }}
+        />
+      )}
+  
+      {showManageAccounts && (
+        <ManageAccountsModal
+          onClose={() => setShowManageAccounts(false)}
+        />
+      )}
+    </Layout>
+  );};
 
 const StatCard = ({ title, value, subtitle, cardType, backgroundImage, graphImage }) => {
   const getCardStyle = () => {
@@ -415,7 +523,7 @@ const StatCard = ({ title, value, subtitle, cardType, backgroundImage, graphImag
           subtitleText: 'text-green-100',
           titleText: 'text-green-100'
         };
-      case 'split-design-with-graph':
+      
   return {
     container: 'bg-white overflow-hidden flex flex-col relative',
     header: 'bg-white px-5 pt-5 pb-3 relative z-10',
@@ -462,19 +570,7 @@ if (cardType === 'split-design' || cardType === 'split-design-reverse' || cardTy
       {/* Body section */}
       <div className={styles.body}>
         {/* Graph decoration for profit card */}
-        {cardType === 'split-design-with-graph' && graphImage && (
-          <div className="absolute inset-0 flex items-center justify-center opacity-20">
-            <img 
-              src={graphImage} 
-              alt="" 
-              className="w-full h-full object-cover"
-              style={{ 
-                filter: 'brightness(1.5) contrast(1.2)',
-                mixBlendMode: 'overlay'
-              }}
-            />
-          </div>
-        )}
+       
         
         <p className={styles.valueText}>
           {value}

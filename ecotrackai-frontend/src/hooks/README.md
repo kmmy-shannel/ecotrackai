@@ -1,0 +1,1 @@
+Hooks: view-model hooks such as useAlerts, useApprovalHistory, useCarbon, useDelivery, useInventoryApprovals, useLogisticsApprovals, useSustainabilityApprovals, useProducts.

@@ -61,13 +61,30 @@ const updateAlertStatus = async (req, res) => {
     const result = await AlertService.updateAlertStatus(
       req.params.id,
       req.user.businessId,
-      req.body.status
+      req.body.status,
+      req.user
     );
     sendSuccess(res, 200, 'Alert status updated', result);
 
   } catch (error) {
     console.error('Update alert status error:', error);
     sendError(res, error.status || 500, error.message || 'Failed to update alert status');
+  }
+};
+
+// POST /api/alerts/:id/submit  (admin wants manager approval)
+const submitAlertForApproval = async (req, res) => {
+  try {
+    const result = await AlertService.submitAlertForApproval(
+      req.params.id,
+      req.user.businessId,
+      req.user,
+      req.body || {}
+    );
+    sendSuccess(res, 201, 'Alert submitted for approval', result);
+  } catch (error) {
+    console.error('Submit alert for approval error:', error);
+    sendError(res, error.status || 500, error.message || 'Failed to submit alert');
   }
 };
 
@@ -85,12 +102,22 @@ const getAIInsights = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to generate insights');
   }
 };
-
+const generateAlerts = async (req, res) => {
+  try {
+    const businessId = req.user.businessId;
+    const result = await AlertService.generateAlertsForBusiness(businessId);
+    sendSuccess(res, 200, 'Alerts generated', result);
+  } catch (error) {
+    sendError(res, 500, error.message || 'Failed to generate alerts');
+  }
+};
 module.exports = {
   syncAlertsFromProducts,
   getAllAlerts,
   getAlertStats,
   deleteAlert,
   updateAlertStatus,
-  getAIInsights
+  submitAlertForApproval,
+  getAIInsights,
+  generateAlerts 
 };

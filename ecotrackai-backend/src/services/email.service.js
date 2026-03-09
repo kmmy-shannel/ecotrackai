@@ -298,7 +298,36 @@ const sendPasswordResetEmail = async (email, resetToken, name) => {
   }
 };
 
+/**
+ * Send a simple text email (utility for approval notifications)
+ * @param {string} to
+ * @param {string} subject
+ * @param {string} text
+ */
+const sendSimpleEmail = async (to, subject, text) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      console.warn('Email not configured - simple email skipped');
+      return { messageId: 'dev-mode-no-email' };
+    }
+
+    const transporter = createTransporter();
+    const info = await transporter.sendMail({
+      from: `"EcoTrack AI" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      text
+    });
+
+    return info;
+  } catch (error) {
+    console.error('Error sending simple email:', error);
+    throw new Error('Failed to send email');
+  }
+};
+
 module.exports = {
   sendVerificationEmail,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendSimpleEmail
 };

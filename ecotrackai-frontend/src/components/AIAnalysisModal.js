@@ -88,7 +88,7 @@ const AIAnalysisModal = ({ analysis, productName, onClose }) => {
 
           {/* Timeline */}
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-            <h4 className="font-semibold text-gray-800 mb-2">📅 Optimal Usage Timeline</h4>
+            <h4 className="font-semibold text-gray-800 mb-2">Optimal Usage Timeline</h4>
             <p className="text-sm text-gray-700">{analysis.optimalUsageTimeline}</p>
           </div>
 
@@ -104,7 +104,7 @@ const AIAnalysisModal = ({ analysis, productName, onClose }) => {
 
           {/* AI Reasoning */}
           <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-            <h4 className="font-semibold text-gray-800 mb-2">🤖 AI Reasoning</h4>
+            <h4 className="font-semibold text-gray-800 mb-2">AI Reasoning</h4>
             <p className="text-sm text-gray-600 leading-relaxed">{analysis.reasoning}</p>
           </div>
         </div>

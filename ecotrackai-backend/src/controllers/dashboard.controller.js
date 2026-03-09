@@ -4,6 +4,17 @@ const { sendSuccess, sendError } = require('../utils/response.utils');
 // POST /api/dashboard/insights
 const getDashboardInsights = async (req, res) => {
   try {
+    // CRITICAL FIX-3: Validate request body and stats parameter
+    if (!req.user) {
+      return sendError(res, 401, 'Not authenticated');
+    }
+    if (!req.body || typeof req.body !== 'object') {
+      return sendError(res, 400, 'Request body is required');
+    }
+    if (!Array.isArray(req.body.stats) || req.body.stats.length === 0) {
+      return sendError(res, 400, 'stats array is required and must not be empty');
+    }
+
     const insights = await DashboardService.getDashboardInsights(req.body.stats);
     sendSuccess(res, 200, 'AI insights generated successfully', insights);
 

@@ -38,15 +38,15 @@ Respond ONLY with this JSON (no other text):
   "cost_impact": "3200.00"
 }`;
 
-      console.log('🤖 Calling Ollama for alert insights...');
+      console.log('Calling Ollama for alert insights...');
       
       const response = await axios.post(OLLAMA_API_URL, {
         model: OLLAMA_MODEL,
         prompt: prompt,
         stream: false,
-        format: 'json',  // ✅ Force JSON format
+        format: 'json',  // Force JSON format
         options: {
-          temperature: 0.3,  // ✅ Lower = more consistent
+          temperature: 0.3,  // Lower = more consistent
           top_p: 0.9,
           num_predict: 800,
           stop: ["<|end|>", "```"]
@@ -60,10 +60,10 @@ Respond ONLY with this JSON (no other text):
       return this.parseOllamaResponse(response.data.response, () => this.getFallbackAlertInsights(alertData));
       
     } catch (error) {
-      console.error('🤖 Ollama AI Service Error:', error.message);
+      console.error('Ollama AI Service Error:', error.message);
       
       if (error.code === 'ECONNREFUSED') {
-        console.warn('⚠️ Ollama not running. Using fallback.');
+        console.warn('Ollama not running. Using fallback.');
       }
       
       return this.getFallbackAlertInsights(alertData);

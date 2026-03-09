@@ -15,15 +15,15 @@ const ForgotPasswordPage = () => {
     setError('');
     setSuccess(false);
 
-    console.log('📤 FRONTEND: Requesting password reset for:', email);
+    console.log('FRONTEND: Requesting password reset for:', email);
 
     try {
       await authService.forgotPassword(email);
-      console.log('✅ FRONTEND: Password reset email sent');
+      console.log(' FRONTEND: Password reset email sent');
       
       setSuccess(true);
     } catch (err) {
-      console.error('❌ FRONTEND: Forgot password error:', err);
+      console.error('FRONTEND: Forgot password error:', err);
       setError(err.response?.data?.message || 'Failed to send reset email. Please try again.');
     } finally {
       setLoading(false);
@@ -31,7 +31,7 @@ const ForgotPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-100 via-green-50 to-green-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-12">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
@@ -110,7 +110,7 @@ const ForgotPasswordPage = () => {
                 <li>Create a new password</li>
               </ol>
               <p className="text-xs text-gray-500 mt-3">
-                ⏰ The reset link will expire in 1 hour
+                The reset link will expire in 1 hour
               </p>
             </div>
 

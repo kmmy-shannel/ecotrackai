@@ -84,6 +84,13 @@ const login = async (req, res) => {
       req.ip,
       req.get('user-agent')
     );
+
+    if (!result?.success) {
+      const errorMessage = result?.error || 'Login failed';
+      const statusCode = errorMessage === 'Invalid credentials' ? 401 : 400;
+      return sendError(res, statusCode, errorMessage);
+    }
+
     sendSuccess(res, 200, 'Login successful', result);
   } catch (error) {
     console.error('LOGIN ERROR:', error.message);

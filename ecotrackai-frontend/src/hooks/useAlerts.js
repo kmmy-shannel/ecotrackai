@@ -1,168 +1,171 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import alertService from '../services/alert.service';
+import approvalService from '../services/approval.service';
+import { canTransitionSpoilage } from '../utils/statusMachines';
 
 const useAlerts = () => {
-  // ── State ──────────────────────────────────────────────────
   const [alerts, setAlerts] = useState([]);
-  const [filteredAlerts, setFilteredAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('All');
-  const [stats, setStats] = useState({
-    total: 0,
-    high_risk: 0,
-    medium_risk: 0,
-    low_risk: 0
-  });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState('All');
   const [showAIModal, setShowAIModal] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState(null);
-  const [aiInsights, setAIInsights] = useState(null);
+  const [aiInsights, setAiInsights] = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
 
-  // ── Business Logic ─────────────────────────────────────────
-
-  // Load all alerts from API
-  const loadAlerts = async () => {
+  const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
+      try {
+        await alertService.syncAlerts();
+      } catch (_error) {
+        // Non-blocking sync failure.
+      }
+
       const response = await alertService.getAllAlerts();
-      setAlerts(response.data.alerts || []);
-      setError('');
+      const data = response?.data || response?.alerts || response || [];
+      const list = Array.isArray(data) ? data : data.alerts || [];
+      setAlerts(list);
     } catch (err) {
-      console.error('Load alerts error:', err);
-      setError(err.response?.data?.message || 'Failed to load alerts');
+      setError(err?.response?.data?.message || 'Failed to load alerts');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Load alert statistics
-  const loadStats = async () => {
-    try {
-      const response = await alertService.getAlertStats();
-      setStats(response.data);
-    } catch (err) {
-      console.error('Load stats error:', err);
-    }
-  };
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
 
-  // Filter alerts based on search term and risk level
-  const filterAlerts = () => {
-    let filtered = alerts;
-
-    // Filter by risk level
-    if (selectedFilter !== 'All') {
-      filtered = filtered.filter(alert => {
-        if (selectedFilter === 'High') return alert.risk_level === 'HIGH';
-        if (selectedFilter === 'Medium') return alert.risk_level === 'MEDIUM';
-        if (selectedFilter === 'Low') return alert.risk_level === 'LOW';
-        return true;
-      });
-    }
-
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(alert =>
-        alert.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        alert.details.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAlerts = useMemo(() => {
+    let result = [...alerts];
+    if (searchTerm.trim()) {
+      const text = searchTerm.toLowerCase();
+      result = result.filter((alert) =>
+        String(alert.product_name || '').toLowerCase().includes(text)
       );
     }
-
-    setFilteredAlerts(filtered);
-  };
-
-  // Delete alert with confirmation
-  const deleteAlert = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this alert?')) {
-      return;
+    if (selectedFilter !== 'All') {
+      result = result.filter(
+        (alert) => String(alert.risk_level || '').toLowerCase() === selectedFilter.toLowerCase()
+      );
     }
+    return result;
+  }, [alerts, searchTerm, selectedFilter]);
 
+  const stats = useMemo(
+    () => ({
+      total: alerts.length,
+      high_risk: alerts.filter((item) => item.risk_level === 'HIGH').length,
+      medium_risk: alerts.filter((item) => item.risk_level === 'MEDIUM').length,
+      low_risk: alerts.filter((item) => item.risk_level === 'LOW').length,
+    }),
+    [alerts]
+  );
+
+  const deleteAlert = useCallback(async (id) => {
     try {
       await alertService.deleteAlert(id);
-      setSuccess('Alert deleted successfully');
-      loadAlerts();
-      loadStats();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Delete alert error:', err);
+      setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+      setSuccess('Alert deleted');
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (_err) {
       setError('Failed to delete alert');
       setTimeout(() => setError(''), 3000);
     }
-  };
+  }, []);
 
-  // Get AI insights for an alert
-  const getAIInsights = async (alert) => {
+  const getAIInsights = useCallback(async (alert) => {
     setSelectedAlert(alert);
+    setAiInsights(null);
     setShowAIModal(true);
     setLoadingInsights(true);
-
     try {
       const response = await alertService.getAIInsights(alert.id);
-      setAIInsights(response.data);
-    } catch (err) {
-      console.error('Get AI insights error:', err);
-      setAIInsights({
-        recommendations: [
-          'Unable to generate insights at this time',
-          'Please try again later'
-        ],
-        priority_actions: [],
-        cost_impact: 'Unknown'
+      setAiInsights(response?.data || response);
+    } catch (_err) {
+      const daysLeft = alert.days_left || 0;
+      setAiInsights({
+        recommendations: [`Schedule redistribution within ${daysLeft} days`],
+        priority_actions: ['Move to next available delivery plan'],
+        cost_impact: String((Number(alert.value || 0) * 0.5).toFixed(2)),
+        _source: 'fallback',
       });
     } finally {
       setLoadingInsights(false);
     }
-  };
-
-  // Close AI modal
-  const closeAIModal = () => {
-    setShowAIModal(false);
-    setSelectedAlert(null);
-    setAIInsights(null);
-  };
-
-  // ── Helpers ────────────────────────────────────────────────
-
-  const getRiskBadgeColor = (riskLevel) => {
-    const colors = {
-      HIGH: 'bg-red-100 text-red-600 border-red-200',
-      MEDIUM: 'bg-orange-100 text-orange-600 border-orange-200',
-      LOW: 'bg-green-100 text-green-600 border-green-200'
-    };
-    return colors[riskLevel] || colors.LOW;
-  };
-
-  const getRiskBadgeText = (riskLevel) => {
-    const text = {
-      HIGH: 'High',
-      MEDIUM: 'Medium',
-      LOW: 'Low'
-    };
-    return text[riskLevel] || 'Low';
-  };
-
-  const getProductImage = (productName) => {
-    return '🥔';
-  };
-
-  // ── Effects ────────────────────────────────────────────────
-
-  // Auto-load alerts and stats on mount
-  useEffect(() => {
-    loadAlerts();
-    loadStats();
   }, []);
 
-  // Re-filter when dependencies change
-  useEffect(() => {
-    filterAlerts();
-  }, [alerts, searchTerm, selectedFilter]);
+  const closeAIModal = useCallback(() => {
+    setShowAIModal(false);
+    setSelectedAlert(null);
+    setAiInsights(null);
+  }, []);
 
-  // ── Public API ─────────────────────────────────────────────
+  const submitReview = useCallback(
+    async (decision) => {
+      if (!selectedAlert) return;
+      try {
+        if (decision === 'accepted') {
+          if (!canTransitionSpoilage(selectedAlert.status || 'active', 'pending_review')) {
+            throw new Error('Alert cannot move to pending_review from its current status');
+          }
+          // use new submit endpoint which handles approval creation and status change
+          await alertService.submitForApproval(selectedAlert.id, {
+            aiSuggestion:
+              aiInsights?.recommendations?.[0] ||
+              `${selectedAlert.risk_level} risk with ${selectedAlert.days_left} days remaining`,
+          });
+          // local sync of status
+          setAlerts((prev) =>
+            prev.map((alert) =>
+              alert.id === selectedAlert.id ? { ...alert, status: 'pending_review' } : alert
+            )
+          );
+          setSuccess('Alert submitted to Inventory Manager');
+        } else {
+          await alertService.updateAlertStatus(selectedAlert.id, 'dismissed');
+          setAlerts((prev) => prev.filter((alert) => alert.id !== selectedAlert.id));
+          setSuccess('Alert dismissed');
+        }
+        setTimeout(() => setSuccess(''), 3000);
+      } catch (err) {
+        setError(err?.response?.data?.message || err.message || 'Failed to submit review');
+        setTimeout(() => setError(''), 4000);
+      } finally {
+        closeAIModal();
+      }
+    },
+    [selectedAlert, aiInsights, closeAIModal]
+  );
+
+  const getRiskBadgeColor = (level) =>
+    (
+      {
+        HIGH: 'bg-red-100 text-red-700 border-red-200',
+        MEDIUM: 'bg-orange-100 text-orange-700 border-orange-200',
+        LOW: 'bg-green-100 text-green-700 border-green-200',
+      }[level] || 'bg-gray-100 text-gray-700 border-gray-200'
+    );
+
+  const getRiskBadgeText = (level) =>
+    (
+      {
+        HIGH: 'HIGH RISK',
+        MEDIUM: 'MEDIUM RISK',
+        LOW: 'LOW RISK',
+      }[level] || level
+    );
+
+  const getProductImage = (name = '') => {
+    const cleaned = String(name).trim();
+    return cleaned ? cleaned.slice(0, 3).toUpperCase() : 'PRD';
+  };
+
   return {
-    // State
     filteredAlerts,
     loading,
     stats,
@@ -174,18 +177,15 @@ const useAlerts = () => {
     selectedAlert,
     aiInsights,
     loadingInsights,
-
-    // Actions
     setSearchTerm,
     setSelectedFilter,
     deleteAlert,
     getAIInsights,
     closeAIModal,
-
-    // Helpers
+    submitReview,
     getRiskBadgeColor,
     getRiskBadgeText,
-    getProductImage
+    getProductImage,
   };
 };
 

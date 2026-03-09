@@ -1,366 +1,321 @@
 const axios = require('axios');
 
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434/api/generate';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:7b';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const REQUEST_TIMEOUT_MS = 10000;
+
+const PROMPT_VERSIONS = {
+  ALERT_INSIGHTS: 'alert-insights-v1',
+  DASHBOARD_INSIGHTS: 'dashboard-insights-v1',
+  ROUTE_OPTIMIZATION: 'route-optimization-v1'
+};
 
 class AIService {
-  /**
-   * Generate AI insights for alert spoilage
-   */
-  async generateAlertInsights(alertData) {
-    try {
-      const prompt = `IMPORTANT: Respond with ONLY valid JSON. No thinking process, no markdown, no explanations.
+  _sanitizeText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/[\u0000-\u001F\u007F]/g, ' ')
+      .replace(/[<>`]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
-You are an expert supply chain analyst. Analyze this spoilage alert and provide recommendations.
-
-ALERT:
-- Product: ${alertData.product_name}
-- Risk: ${alertData.risk_level}
-- Days Left: ${alertData.days_left}
-- Temp: ${alertData.temperature}°C
-- Humidity: ${alertData.humidity}%
-- Location: ${alertData.location}
-- Quantity: ${alertData.quantity}
-- Value: ₱${alertData.value}
-
-Context: Perishable food in Philippines, tropical climate.
-
-Provide:
-1. 3-5 specific actionable recommendations
-2. 3 priority actions with timeframes
-3. Cost savings estimate (number only)
-
-Respond ONLY with this JSON (no other text):
-{
-  "recommendations": ["rec 1", "rec 2", "rec 3"],
-  "priority_actions": ["Immediate: action", "Short-term: action", "Medium: action"],
-  "cost_impact": "3200.00"
-}`;
-
-      console.log('Calling Ollama for alert insights...');
-      
-      const response = await axios.post(OLLAMA_API_URL, {
-        model: OLLAMA_MODEL,
-        prompt: prompt,
-        stream: false,
-        format: 'json',
-        options: {
-          temperature: 0.3,
-          top_p: 0.9,
-          num_predict: 800,
-          stop: ["<|end|>", "```"]
-        }
-      }, {
-        timeout: 60000
-      });
-
-      console.log('Raw Ollama response:', response.data.response?.substring(0, 200));
-      
-      return this.parseOllamaResponse(response.data.response, () => this.getFallbackAlertInsights(alertData));
-      
-    } catch (error) {
-      console.error('Ollama AI Service Error:', error.message);
-      
-      if (error.code === 'ECONNREFUSED') {
-        console.warn('Ollama not running. Using fallback.');
+  _sanitizeObject(input) {
+    if (Array.isArray(input)) {
+      return input.map((item) => this._sanitizeObject(item));
+    }
+    if (input && typeof input === 'object') {
+      const output = {};
+      for (const [key, value] of Object.entries(input)) {
+        output[key] = this._sanitizeObject(value);
       }
-      
-      return this.getFallbackAlertInsights(alertData);
+      return output;
     }
+    if (typeof input === 'string') {
+      return this._sanitizeText(input);
+    }
+    return input;
   }
 
-  /**
-   * Generate AI insights for dashboard
-   */
-  async generateDashboardInsights(stats) {
+  _safeNumber(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  _safeString(value, fallback = '') {
+    const text = this._sanitizeText(value);
+    return text || fallback;
+  }
+
+  _strictJsonParse(text) {
+    if (typeof text !== 'string') return null;
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+
     try {
-      const prompt = `IMPORTANT: Respond with ONLY valid JSON. No thinking, no markdown, no extra text.
-
-You are a business analyst. Analyze these metrics and provide urgent recommendations.
-
-METRICS:
-- Products: ${stats.totalProducts}
-- Deliveries: ${stats.totalDeliveries}
-- Alerts: ${stats.totalAlerts}
-- Eco Score: ${stats.ecoScore}/100
-- Profit: ₱${stats.profit}
-
-Provide:
-1. 2-3 urgent recommendations (priority: HIGH/MEDIUM/LOW, type: SPOILAGE/ROUTE/ENERGY/FINANCIAL)
-2. Today's overview with key metrics, opportunities, warnings
-
-Respond ONLY with this JSON:
-{
-  "urgentRecommendations": [
-    {
-      "priority": "HIGH",
-      "type": "SPOILAGE",
-      "title": "Brief title",
-      "description": "Issue description",
-      "estimatedImpact": {
-        "financial": "₱15,000",
-        "timeframe": "24 hours"
-      },
-      "actionRequired": "Specific action"
-    }
-  ],
-  "todayOverview": {
-    "keyMetrics": ["metric 1", "metric 2"],
-    "opportunities": ["opp 1"],
-    "warnings": ["warning 1"]
-  }
-}`;
-
-      console.log('🤖 Calling Ollama for dashboard insights...');
-      
-      const response = await axios.post(OLLAMA_API_URL, {
-        model: OLLAMA_MODEL,
-        prompt: prompt,
-        stream: false,
-        format: 'json',
-        options: {
-          temperature: 0.3,
-          top_p: 0.9,
-          num_predict: 1200,
-          stop: ["<|end|>", "```"]
-        }
-      }, {
-        timeout: 60000
-      });
-
-      console.log('📝 Raw dashboard response:', response.data.response?.substring(0, 200));
-      
-      return this.parseOllamaResponse(response.data.response, () => this.getFallbackDashboardInsights(stats));
-      
-    } catch (error) {
-      console.error('🤖 Dashboard AI Error:', error.message);
-      return this.getFallbackDashboardInsights(stats);
-    }
-  }
-
-  /**
-   * Optimize delivery route with AI
-   * NEW: Consistent with alerts and dashboard
-   */
-  async optimizeDeliveryRoute(delivery) {
-    try {
-      const prompt = `IMPORTANT: Respond with ONLY valid JSON. No thinking, no markdown, no extra text.
-
-You are a logistics optimization expert. Analyze this delivery route and provide optimization.
-
-DELIVERY:
-- Code: ${delivery.deliveryCode}
-- Vehicle: ${delivery.vehicleType}
-- Driver: ${delivery.driver}
-- Stops: ${delivery.stops?.length || 0}
-- Current Distance: ${delivery.totalDistance} km
-- Current Duration: ${delivery.estimatedDuration} min
-- Fuel: ${delivery.fuelConsumption} L
-- CO₂: ${delivery.carbonEmissions} kg
-
-STOPS:
-${delivery.stops?.map((s, i) => `${i + 1}. ${s.location} (${s.type})`).join('\n')}
-
-TASK:
-1. Analyze the route efficiency
-2. Suggest optimal stop reordering (keep origin first, destination last)
-3. Estimate realistic savings
-4. Provide actionable recommendations
-
-Respond ONLY with this JSON:
-{
-  "optimizedDistance": 38.5,
-  "optimizedDuration": 95,
-  "optimizedFuel": 6.8,
-  "optimizedEmissions": 18.5,
-  "savings": {
-    "distance": "6.7",
-    "time": "25",
-    "fuel": "1.7",
-    "emissions": "3.9",
-    "cost": "94.35"
-  },
-  "aiRecommendations": [
-    "Reorder stops to minimize backtracking",
-    "Avoid peak traffic hours",
-    "Use alternative route"
-  ]
-}`;
-
-      console.log('Calling Ollama for route optimization...');
-      
-      const response = await axios.post(OLLAMA_API_URL, {
-        model: OLLAMA_MODEL,
-        prompt: prompt,
-        stream: false,
-        format: 'json',
-        options: {
-          temperature: 0.3,
-          top_p: 0.9,
-          num_predict: 1000,
-          stop: ["<|end|>", "```"]
-        }
-      }, {
-        timeout: 60000
-      });
-
-      console.log('Raw route optimization response:', response.data.response?.substring(0, 200));
-      
-      return this.parseOllamaResponse(response.data.response, () => this.getFallbackRouteOptimization(delivery));
-      
-    } catch (error) {
-      console.error('Route Optimization AI Error:', error.message);
-      return this.getFallbackRouteOptimization(delivery);
-    }
-  }
-
-  /**
-   * Parse Ollama response - handles DeepSeek thinking tags
-   */
-  parseOllamaResponse(responseText, fallbackFn) {
-    try {
-      if (!responseText) {
-        console.warn('Empty response from Ollama');
-        return fallbackFn();
-      }
-
-      let cleanText = responseText.trim();
-      
-      // Remove markdown code blocks
-      cleanText = cleanText.replace(/```json\n?/gi, '').replace(/```\n?/g, '');
-      
-      // Remove DeepSeek thinking process
-      if (cleanText.includes('<think>') || cleanText.includes('Thinking...')) {
-        const jsonStart = cleanText.indexOf('{');
-        const jsonEnd = cleanText.lastIndexOf('}') + 1;
-        
-        if (jsonStart !== -1 && jsonEnd > jsonStart) {
-          cleanText = cleanText.substring(jsonStart, jsonEnd);
-        }
-      }
-      
-      const parsed = JSON.parse(cleanText);
-      console.log('Ollama response parsed successfully');
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return null;
       return parsed;
-      
-    } catch (parseError) {
-      console.error('❌ Failed to parse Ollama response');
-      console.error('Response preview:', responseText?.substring(0, 300));
-      console.error('Parse error:', parseError.message);
-      return fallbackFn();
+    } catch (error) {
+      return null;
     }
   }
 
-  /**
-   * Fallback insights for alerts (rule-based)
-   */
-  getFallbackAlertInsights(alertData) {
-    console.log('Using fallback alert insights');
-    
-    const daysLeft = alertData.days_left || 0;
-    const riskLevel = alertData.risk_level;
-    const value = parseFloat(alertData.value || 0);
-    
-    let recommendations = [];
-    let priorityActions = [];
-    let costImpact = 0;
-    
+  _logMeta({ context, promptVersion, confidence, usedFallback }) {
+    console.log('[AI_META]', {
+      model: GROQ_MODEL,
+      timestamp: new Date().toISOString(),
+      prompt_version: promptVersion,
+      confidence_score: confidence,
+      context,
+      used_fallback: usedFallback
+    });
+  }
+
+  _buildSystemInstruction() {
+    return [
+      'You are an expert supply chain and logistics analyst for Philippine food distribution.',
+      'Respond with STRICT JSON only.',
+      'No markdown.',
+      'No explanation.',
+      'No extra keys outside the requested schema.'
+    ].join(' ');
+  }
+
+  async _callGroq(prompt) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY; // ← read fresh every call
+  
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not set');
+    }
+  
+    const response = await axios.post(
+      GROQ_API_URL,
+      {
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: this._buildSystemInstruction() },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 900
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: REQUEST_TIMEOUT_MS
+      }
+    );
+  
+    return response?.data?.choices?.[0]?.message?.content || '';
+  }
+
+  _validateAlertInsightsSchema(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    if (!Array.isArray(payload.recommendations)) return false;
+    if (!Array.isArray(payload.priority_actions)) return false;
+    if (!('cost_impact' in payload)) return false;
+    return true;
+  }
+
+  _validateDashboardSchema(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    if (!Array.isArray(payload.urgentRecommendations)) return false;
+    if (!payload.todayOverview || typeof payload.todayOverview !== 'object') return false;
+    if (!Array.isArray(payload.todayOverview.keyMetrics)) return false;
+    if (!Array.isArray(payload.todayOverview.opportunities)) return false;
+    if (!Array.isArray(payload.todayOverview.warnings)) return false;
+    return true;
+  }
+
+  _validateRouteSchema(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    if (!('optimizedDistance' in payload)) return false;
+    if (!('optimizedDuration' in payload)) return false;
+    if (!('optimizedFuel' in payload)) return false;
+    if (!('optimizedEmissions' in payload)) return false;
+    if (!payload.savings || typeof payload.savings !== 'object') return false;
+    if (!Array.isArray(payload.aiRecommendations)) return false;
+    return true;
+  }
+
+  _normalizeAlertInsights(payload) {
+    return this._sanitizeObject({
+      recommendations: Array.isArray(payload.recommendations)
+        ? payload.recommendations.map((v) => this._safeString(v)).filter(Boolean).slice(0, 5)
+        : [],
+      priority_actions: Array.isArray(payload.priority_actions)
+        ? payload.priority_actions.map((v) => this._safeString(v)).filter(Boolean).slice(0, 5)
+        : [],
+      cost_impact: this._safeString(payload.cost_impact, '0.00')
+    });
+  }
+
+  _normalizeDashboard(payload) {
+    const normalizedUrgent = Array.isArray(payload.urgentRecommendations)
+      ? payload.urgentRecommendations.map((rec) => ({
+          priority: this._safeString(rec?.priority, 'LOW').toUpperCase(),
+          type: this._safeString(rec?.type, 'ROUTE').toUpperCase(),
+          title: this._safeString(rec?.title, 'Recommendation'),
+          description: this._safeString(rec?.description, ''),
+          estimatedImpact: {
+            financial: this._safeString(rec?.estimatedImpact?.financial, 'N/A'),
+            timeframe: this._safeString(rec?.estimatedImpact?.timeframe, 'N/A')
+          },
+          actionRequired: this._safeString(rec?.actionRequired, '')
+        }))
+      : [];
+
+    const normalized = {
+      urgentRecommendations: normalizedUrgent,
+      todayOverview: {
+        keyMetrics: Array.isArray(payload?.todayOverview?.keyMetrics)
+          ? payload.todayOverview.keyMetrics.map((v) => this._safeString(v)).filter(Boolean)
+          : [],
+        opportunities: Array.isArray(payload?.todayOverview?.opportunities)
+          ? payload.todayOverview.opportunities.map((v) => this._safeString(v)).filter(Boolean)
+          : [],
+        warnings: Array.isArray(payload?.todayOverview?.warnings)
+          ? payload.todayOverview.warnings.map((v) => this._safeString(v)).filter(Boolean)
+          : []
+      }
+    };
+
+    return this._sanitizeObject(normalized);
+  }
+
+  _normalizeRoute(payload) {
+    const optimizedFuel = parseFloat(this._safeNumber(payload.optimizedFuel, 0).toFixed(2));
+    const optimizedEmissions = parseFloat(this._safeNumber(payload.optimizedEmissions, 0).toFixed(2));
+
+    const normalized = {
+      optimizedDistance: parseFloat(this._safeNumber(payload.optimizedDistance, 0).toFixed(2)),
+      optimizedDuration: Math.round(this._safeNumber(payload.optimizedDuration, 0)),
+      optimizedFuel,
+      optimizedEmissions,
+      fuelEstimate: optimizedFuel,
+      carbonEstimate: optimizedEmissions,
+      savings: {
+        distance: this._safeString(payload?.savings?.distance, '0.0'),
+        time: this._safeString(payload?.savings?.time, '0'),
+        fuel: this._safeString(payload?.savings?.fuel, '0.0'),
+        emissions: this._safeString(payload?.savings?.emissions, '0.0'),
+        cost: this._safeString(payload?.savings?.cost, '0.00')
+      },
+      aiRecommendations: Array.isArray(payload.aiRecommendations)
+        ? payload.aiRecommendations.map((v) => this._safeString(v)).filter(Boolean).slice(0, 6)
+        : []
+    };
+
+    return this._sanitizeObject(normalized);
+  }
+
+  _deterministicAlertFallback(alertData = {}) {
+    const daysLeft = this._safeNumber(alertData.days_left, 0);
+    const riskLevel = this._safeString(alertData.risk_level, 'LOW').toUpperCase();
+    const value = this._safeNumber(alertData.value, 0);
+    const temp = this._safeNumber(alertData.temperature, 0);
+    const humidity = this._safeNumber(alertData.humidity, 0);
+
     if (riskLevel === 'HIGH') {
-      recommendations = [
-        `Immediate delivery recommended - only ${daysLeft} days remaining before expiry`,
-        'Consider promotional pricing (20-30% discount) to accelerate sales',
-        'Prioritize this product for next delivery batch to key buyers',
-        `Monitor temperature (${alertData.temperature}°C) - verify cooling is optimal`,
-        'Alert top 3 customers about limited-time bulk order availability'
-      ];
-      priorityActions = [
-        'Immediate: Schedule delivery within 24-48 hours to prevent spoilage',
-        'Short-term: Contact key buyers for emergency bulk orders with discount',
-        'Medium-term: Review supplier lead times to reduce storage duration'
-      ];
-      costImpact = (value * 0.80).toFixed(2);
-    } else if (riskLevel === 'MEDIUM') {
-      recommendations = [
-        `Product has ${daysLeft} days remaining - schedule delivery within next week`,
-        'Monitor storage conditions daily to ensure optimal preservation',
-        'Consider bundling with faster-moving products to accelerate turnover',
-        `Current humidity ${alertData.humidity}% - ensure within optimal range`
-      ];
-      priorityActions = [
-        'Short-term: Plan delivery route to include this product within 5-7 days',
-        'Medium-term: Optimize storage conditions if suboptimal',
-        'Long-term: Adjust ordering quantities based on demand patterns'
-      ];
-      costImpact = (value * 0.50).toFixed(2);
-    } else {
-      recommendations = [
-        'Product condition is stable - continue regular monitoring',
-        'Maintain current storage conditions to preserve quality',
-        `Shelf life of ${daysLeft} days allows standard distribution`,
-        'No immediate action required - product within safe parameters'
-      ];
-      priorityActions = [
-        'Regular: Continue standard monitoring procedures',
-        'Medium-term: Track shelf life patterns for optimization',
-        'Long-term: Analyze demand cycles for better procurement'
-      ];
-      costImpact = (value * 0.10).toFixed(2);
+      return {
+        recommendations: [
+          `Prioritize immediate dispatch; ${daysLeft} day(s) left before expiry.`,
+          'Apply limited-time discount to reduce spoilage exposure.',
+          'Move high-risk stock to first stop in next delivery cycle.',
+          `Verify storage controls at ${temp}C and ${humidity}% humidity.`
+        ],
+        priority_actions: [
+          'Immediate: Dispatch within 24 hours.',
+          'Short-term: Contact top buyers for quick volume uptake.',
+          'Medium-term: Reduce storage dwell time for this SKU.'
+        ],
+        cost_impact: (value * 0.8).toFixed(2)
+      };
+    }
+
+    if (riskLevel === 'MEDIUM') {
+      return {
+        recommendations: [
+          `Schedule dispatch within 2-4 days; ${daysLeft} day(s) remaining.`,
+          'Bundle with fast-moving inventory for turnover.',
+          `Track storage consistency at ${temp}C and ${humidity}% humidity.`,
+          'Prioritize in upcoming route plans.'
+        ],
+        priority_actions: [
+          'Immediate: Queue for next outbound batch.',
+          'Short-term: Recheck quality status daily.',
+          'Medium-term: Tune reorder levels for this item.'
+        ],
+        cost_impact: (value * 0.5).toFixed(2)
+      };
     }
 
     return {
-      recommendations,
-      priority_actions: priorityActions,
-      cost_impact: costImpact
+      recommendations: [
+        `Maintain regular handling; ${daysLeft} day(s) remaining.`,
+        'Continue routine quality checks.',
+        'Keep standard distribution sequence.',
+        'Monitor trend changes in shelf-life usage.'
+      ],
+      priority_actions: [
+        'Immediate: Continue standard monitoring.',
+        'Short-term: Keep FIFO allocation.',
+        'Medium-term: Review weekly spoilage metrics.'
+      ],
+      cost_impact: (value * 0.1).toFixed(2)
     };
   }
 
-  /**
-   * Fallback insights for dashboard (rule-based)
-   */
-  getFallbackDashboardInsights(stats) {
-    console.log('Using fallback dashboard insights');
-    
+  _deterministicDashboardFallback(stats = {}) {
+    const totalProducts = this._safeNumber(stats.totalProducts, 0);
+    const totalDeliveries = this._safeNumber(stats.totalDeliveries, 0);
+    const totalAlerts = this._safeNumber(stats.totalAlerts, 0);
+    const ecoScore = this._safeNumber(stats.ecoScore, 0);
+
     const urgentRecommendations = [];
-    
-    if (stats.totalAlerts > 5) {
+
+    if (totalAlerts >= 5) {
       urgentRecommendations.push({
         priority: 'HIGH',
         type: 'SPOILAGE',
-        title: 'Multiple Active Alerts Require Attention',
-        description: `You have ${stats.totalAlerts} active alerts. High-risk products need immediate action.`,
+        title: 'High active alert volume',
+        description: `${totalAlerts} active alerts require prioritization.`,
         estimatedImpact: {
-          financial: `₱${(stats.totalAlerts * 5000).toLocaleString()}`,
-          timeframe: 'Within 48 hours'
+          financial: `PHP ${(totalAlerts * 5000).toLocaleString()}`,
+          timeframe: 'Within 24-48 hours'
         },
-        actionRequired: 'Review all HIGH priority alerts and schedule immediate deliveries'
+        actionRequired: 'Prioritize HIGH and MEDIUM risk batches for dispatch.'
       });
     }
 
-    if (stats.ecoScore < 70) {
+    if (ecoScore < 70) {
       urgentRecommendations.push({
         priority: 'MEDIUM',
         type: 'ENERGY',
-        title: 'Eco Score Below Target',
-        description: `Current eco score is ${stats.ecoScore}/100. Improving efficiency reduces costs.`,
+        title: 'Eco score below target',
+        description: `Current eco score is ${ecoScore}/100.`,
         estimatedImpact: {
-          financial: '₱8,500 monthly savings',
+          financial: 'PHP 8,500 monthly potential savings',
           timeframe: 'This week'
         },
-        actionRequired: 'Review energy usage and optimize delivery routes'
+        actionRequired: 'Apply optimized delivery routes consistently.'
       });
     }
 
-    if (stats.totalDeliveries > 0) {
+    if (totalDeliveries > 0) {
       urgentRecommendations.push({
         priority: 'LOW',
         type: 'ROUTE',
-        title: 'Route Optimization Opportunity',
-        description: `With ${stats.totalDeliveries} active deliveries, consolidation could improve efficiency.`,
+        title: 'Route optimization available',
+        description: `${totalDeliveries} active deliveries can be reviewed for optimization.`,
         estimatedImpact: {
-          financial: '₱5,200 fuel savings',
+          financial: 'PHP 5,200 fuel savings estimate',
           timeframe: 'Next delivery cycle'
         },
-        actionRequired: 'Use AI route optimization for upcoming deliveries'
+        actionRequired: 'Run route optimization before manager approval.'
       });
     }
 
@@ -368,49 +323,319 @@ Respond ONLY with this JSON:
       urgentRecommendations,
       todayOverview: {
         keyMetrics: [
-          `Managing ${stats.totalProducts} products across inventory`,
-          `${stats.totalDeliveries} deliveries in progress`,
-          `Eco score at ${stats.ecoScore}/100`
+          `${totalProducts} products in managed inventory.`,
+          `${totalDeliveries} active deliveries in current cycle.`,
+          `${totalAlerts} active alerts across all risk levels.`
         ],
         opportunities: [
-          'Consolidate deliveries to reduce fuel costs',
-          'Monitor high-risk alerts for early intervention'
+          'Consolidate nearby stops to reduce fuel consumption.',
+          'Move nearing-expiry stock into earlier dispatch windows.'
         ],
-        warnings: stats.totalAlerts > 3 ? [
-          `${stats.totalAlerts} active alerts require monitoring`
-        ] : []
+        warnings: totalAlerts > 3 ? [`${totalAlerts} alerts require close monitoring.`] : []
       }
     };
   }
 
-  /**
-   * Fallback route optimization (rule-based)
-   */
-  getFallbackRouteOptimization(delivery) {
-    console.log('Using fallback route optimization');
-    
-    // Simple 15-20% improvement estimate
-    const improvementFactor = 0.15;
-    
+  _deterministicRouteFallback(delivery = {}) {
+    const totalDistance = this._safeNumber(delivery.totalDistance || delivery.total_distance, 50);
+    const estimatedDuration = this._safeNumber(delivery.estimatedDuration || delivery.estimated_duration, 120);
+    const fuelConsumption = this._safeNumber(delivery.fuelConsumption || delivery.fuel_consumption, 10);
+    const carbonEmissions = this._safeNumber(delivery.carbonEmissions || delivery.carbon_emissions, 25);
+
+    const stopsCount = Array.isArray(delivery.stops) ? delivery.stops.length : 2;
+    const improvementFactor = Math.min(0.18, 0.12 + (Math.max(0, stopsCount - 2) * 0.01));
+
+    const optimizedDistance = totalDistance * (1 - improvementFactor);
+    const optimizedDuration = estimatedDuration * (1 - improvementFactor);
+    const optimizedFuel = fuelConsumption * (1 - improvementFactor * 0.9);
+    const optimizedEmissions = carbonEmissions * (1 - improvementFactor * 0.85);
+    const fuelSaved = fuelConsumption - optimizedFuel;
+
     return {
-      optimizedDistance: parseFloat((delivery.totalDistance * (1 - improvementFactor)).toFixed(2)),
-      optimizedDuration: Math.round(delivery.estimatedDuration * (1 - improvementFactor)),
-      optimizedFuel: parseFloat((delivery.fuelConsumption * (1 - improvementFactor * 0.9)).toFixed(2)),
-      optimizedEmissions: parseFloat((delivery.carbonEmissions * (1 - improvementFactor * 0.85)).toFixed(2)),
+      optimizedDistance: parseFloat(optimizedDistance.toFixed(2)),
+      optimizedDuration: Math.round(optimizedDuration),
+      optimizedFuel: parseFloat(optimizedFuel.toFixed(2)),
+      optimizedEmissions: parseFloat(optimizedEmissions.toFixed(2)),
       savings: {
-        distance: (delivery.totalDistance * improvementFactor).toFixed(1),
-        time: Math.round(delivery.estimatedDuration * improvementFactor).toString(),
-        fuel: (delivery.fuelConsumption * improvementFactor * 0.9).toFixed(1),
-        emissions: (delivery.carbonEmissions * improvementFactor * 0.85).toFixed(1),
-        cost: ((delivery.fuelConsumption * improvementFactor * 0.9) * 55.50).toFixed(2)
+        distance: (totalDistance - optimizedDistance).toFixed(1),
+        time: Math.round(estimatedDuration - optimizedDuration).toString(),
+        fuel: fuelSaved.toFixed(1),
+        emissions: (carbonEmissions - optimizedEmissions).toFixed(1),
+        cost: (fuelSaved * 55.5).toFixed(2)
       },
       aiRecommendations: [
-        'Reorder stops to minimize backtracking and total distance',
-        'Avoid peak traffic hours (8-10 AM) to reduce fuel consumption',
-        'Use alternative routes via less congested roads',
-        'Consolidate nearby deliveries for better efficiency'
+        'Reorder stops to minimize backtracking.',
+        'Avoid known peak-hour congestion windows.',
+        'Cluster nearby drop points before final dispatch.',
+        'Review vehicle utilization for current load.'
       ]
     };
+  }
+
+  _buildAlertPrompt(alertData) {
+    return `Analyze this spoilage alert for a Philippine food distribution business.
+
+ALERT DATA:
+- Product: ${this._safeString(alertData.product_name)}
+- Risk Level: ${this._safeString(alertData.risk_level)}
+- Days Left Until Expiry: ${this._safeNumber(alertData.days_left, 0)}
+- Temperature: ${this._safeNumber(alertData.temperature, 0)}C
+- Humidity: ${this._safeNumber(alertData.humidity, 0)}%
+- Location: ${this._safeString(alertData.location)}
+- Quantity: ${this._safeString(alertData.quantity)}
+- Estimated Value: PHP ${this._safeNumber(alertData.value, 0)}
+
+Return STRICT JSON with this exact structure:
+{
+  "recommendations": ["...", "...", "..."],
+  "priority_actions": ["...", "...", "..."],
+  "cost_impact": "0.00"
+}`;
+  }
+
+  _buildDashboardPrompt(stats) {
+    return `Analyze these business metrics for a Philippine food distribution company.
+
+CURRENT METRICS:
+- Total Products in Inventory: ${this._safeNumber(stats.totalProducts, 0)}
+- Active Deliveries This Period: ${this._safeNumber(stats.totalDeliveries, 0)}
+- Active Spoilage Alerts: ${this._safeNumber(stats.totalAlerts, 0)}
+- Eco Score: ${this._safeNumber(stats.ecoScore, 0)}/100
+
+Return STRICT JSON with this exact structure:
+{
+  "urgentRecommendations": [
+    {
+      "priority": "HIGH",
+      "type": "SPOILAGE",
+      "title": "...",
+      "description": "...",
+      "estimatedImpact": { "financial": "...", "timeframe": "..." },
+      "actionRequired": "..."
+    }
+  ],
+  "todayOverview": {
+    "keyMetrics": ["...", "..."],
+    "opportunities": ["...", "..."],
+    "warnings": ["..."]
+  }
+}`;
+  }
+
+  _buildRoutePrompt(delivery) {
+    const stopsList = Array.isArray(delivery.stops) && delivery.stops.length > 0
+      ? delivery.stops.map((stop, index) => `${index + 1}. ${this._safeString(stop.location)} (${this._safeString(stop.type)})`).join('\n')
+      : '1. Origin\n2. Destination';
+
+    return `You are a route optimization analyst for urban Philippine logistics.
+
+CURRENT DELIVERY:
+- Delivery Code: ${this._safeString(delivery.deliveryCode || delivery.delivery_code || 'N/A')}
+- Vehicle Type: ${this._safeString(delivery.vehicleType || delivery.vehicle_type || 'van')}
+- Total Distance: ${this._safeNumber(delivery.totalDistance || delivery.total_distance, 50)} km
+- Estimated Duration: ${this._safeNumber(delivery.estimatedDuration || delivery.estimated_duration, 120)} minutes
+- Fuel Consumption: ${this._safeNumber(delivery.fuelConsumption || delivery.fuel_consumption, 10)} liters
+- CO2 Emissions: ${this._safeNumber(delivery.carbonEmissions || delivery.carbon_emissions, 25)} kg
+
+STOPS:
+${stopsList}
+
+Return STRICT JSON with this exact structure:
+{
+  "optimizedDistance": 0,
+  "optimizedDuration": 0,
+  "optimizedFuel": 0,
+  "optimizedEmissions": 0,
+  "savings": {
+    "distance": "0",
+    "time": "0",
+    "fuel": "0",
+    "emissions": "0",
+    "cost": "0"
+  },
+  "aiRecommendations": ["...", "...", "..."]
+}`;
+  }
+
+  async _generateAlertInsightsInternal(alertData) {
+    const promptVersion = PROMPT_VERSIONS.ALERT_INSIGHTS;
+    try {
+      const prompt = this._buildAlertPrompt(alertData);
+      const responseText = await this._callGroq(prompt);
+
+      const parsed = this._strictJsonParse(responseText);
+      if (!parsed || !this._validateAlertInsightsSchema(parsed)) {
+        const fallback = this._deterministicAlertFallback(alertData);
+        const normalized = this._normalizeAlertInsights(fallback);
+        const meta = {
+          model: GROQ_MODEL,
+          promptVersion,
+          confidence: 0.42,
+          usedFallback: true,
+          timestamp: new Date().toISOString()
+        };
+        this._logMeta({
+          context: 'alert_insights',
+          promptVersion,
+          confidence: meta.confidence,
+          usedFallback: true
+        });
+        return { data: normalized, meta };
+      }
+
+      const normalized = this._normalizeAlertInsights(parsed);
+      const meta = {
+        model: GROQ_MODEL,
+        promptVersion,
+        confidence: 0.9,
+        usedFallback: false,
+        timestamp: new Date().toISOString()
+      };
+      this._logMeta({
+        context: 'alert_insights',
+        promptVersion,
+        confidence: meta.confidence,
+        usedFallback: false
+      });
+      return { data: normalized, meta };
+    } catch (error) {
+      console.error('[AIService.generateAlertInsights]', error.message);
+      const fallback = this._normalizeAlertInsights(this._deterministicAlertFallback(alertData));
+      const meta = {
+        model: GROQ_MODEL,
+        promptVersion,
+        confidence: 0.35,
+        usedFallback: true,
+        timestamp: new Date().toISOString()
+      };
+      this._logMeta({
+        context: 'alert_insights',
+        promptVersion,
+        confidence: meta.confidence,
+        usedFallback: true
+      });
+      return { data: fallback, meta };
+    }
+  }
+
+  async generateAlertInsights(alertData) {
+    const result = await this._generateAlertInsightsInternal(alertData);
+    return result.data;
+  }
+
+  async generateSpoilageRecommendation(alertData) {
+    const result = await this._generateAlertInsightsInternal(alertData);
+    const recommendation = this._safeString(
+      result?.data?.priority_actions?.[0] || result?.data?.recommendations?.[0],
+      'Monitor batch closely and prioritize timely redistribution.'
+    );
+
+    return this._sanitizeObject({
+      recommendation,
+      insights: result.data,
+      meta: result.meta
+    });
+  }
+
+  async generateDashboardInsights(stats) {
+    const promptVersion = PROMPT_VERSIONS.DASHBOARD_INSIGHTS;
+    try {
+      const prompt = this._buildDashboardPrompt(stats);
+      const responseText = await this._callGroq(prompt);
+
+      const parsed = this._strictJsonParse(responseText);
+      if (!parsed || !this._validateDashboardSchema(parsed)) {
+        const fallback = this._deterministicDashboardFallback(stats);
+        const normalized = this._normalizeDashboard(fallback);
+        this._logMeta({
+          context: 'dashboard_insights',
+          promptVersion,
+          confidence: 0.43,
+          usedFallback: true
+        });
+        return normalized;
+      }
+
+      const normalized = this._normalizeDashboard(parsed);
+      this._logMeta({
+        context: 'dashboard_insights',
+        promptVersion,
+        confidence: 0.9,
+        usedFallback: false
+      });
+      return normalized;
+    } catch (error) {
+      console.error('[AIService.generateDashboardInsights]', error.message);
+      const fallback = this._normalizeDashboard(this._deterministicDashboardFallback(stats));
+      this._logMeta({
+        context: 'dashboard_insights',
+        promptVersion,
+        confidence: 0.35,
+        usedFallback: true
+      });
+      return fallback;
+    }
+  }
+
+  async optimizeDeliveryRoute(delivery) {
+    const promptVersion = PROMPT_VERSIONS.ROUTE_OPTIMIZATION;
+    try {
+      const prompt = this._buildRoutePrompt(delivery);
+      const responseText = await this._callGroq(prompt);
+
+      const parsed = this._strictJsonParse(responseText);
+      if (!parsed || !this._validateRouteSchema(parsed)) {
+        const fallback = this._deterministicRouteFallback(delivery);
+        const normalized = this._normalizeRoute(fallback);
+        const confidence = 0.44;
+        this._logMeta({
+          context: 'route_optimization',
+          promptVersion,
+          confidence,
+          usedFallback: true
+        });
+        return this._sanitizeObject({
+          ...normalized,
+          modelName: GROQ_MODEL,
+          promptVersion,
+          confidenceScore: confidence,
+          usedFallback: true
+        });
+      }
+
+      const normalized = this._normalizeRoute(parsed);
+      const confidence = 0.9;
+      this._logMeta({
+        context: 'route_optimization',
+        promptVersion,
+        confidence,
+        usedFallback: false
+      });
+      return this._sanitizeObject({
+        ...normalized,
+        modelName: GROQ_MODEL,
+        promptVersion,
+        confidenceScore: confidence,
+        usedFallback: false
+      });
+    } catch (error) {
+      console.error('[AIService.optimizeDeliveryRoute]', error.message);
+      const fallback = this._normalizeRoute(this._deterministicRouteFallback(delivery));
+      const confidence = 0.35;
+      this._logMeta({
+        context: 'route_optimization',
+        promptVersion,
+        confidence,
+        usedFallback: true
+      });
+      return this._sanitizeObject({
+        ...fallback,
+        modelName: GROQ_MODEL,
+        promptVersion,
+        confidenceScore: confidence,
+        usedFallback: true
+      });
+    }
   }
 }
 

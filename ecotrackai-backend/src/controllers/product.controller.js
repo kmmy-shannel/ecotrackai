@@ -10,16 +10,15 @@ const { sendSuccess, sendError } = require('../utils/response.utils');
 // GET /api/products
 const getProducts = async (req, res) => {
   try {
-    console.log('GET PRODUCTS ENDPOINT HIT!');
-    console.log('User:', req.user);
-    console.log('Query params:', req.query);
-
     if (!req.user) {
       return sendError(res, 401, 'Not authenticated');
     }
 
     const result = await ProductService.getAllProducts(req.user.businessId, req.query);
-    sendSuccess(res, 200, 'Products retrieved successfully', result);
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to retrieve products');
+    }
+    sendSuccess(res, 200, 'Products retrieved successfully', result.data);
 
   } catch (error) {
     console.error('GET PRODUCTS ERROR:', error);
@@ -38,7 +37,10 @@ const getProductById = async (req, res) => {
       req.params.productId,
       req.user.businessId
     );
-    sendSuccess(res, 200, 'Product retrieved successfully', result);
+    if (!result.success) {
+      return sendError(res, 404, result.error || 'Failed to retrieve product');
+    }
+    sendSuccess(res, 200, 'Product retrieved successfully', result.data);
 
   } catch (error) {
     console.error('GET PRODUCT BY ID ERROR:', error);
@@ -49,10 +51,6 @@ const getProductById = async (req, res) => {
 // POST /api/products
 const createProduct = async (req, res) => {
   try {
-    console.log('CREATING PRODUCT');
-    console.log('Request by user:', req.user.userId);
-    console.log('Request data:', req.body);
-
     if (!req.user) {
       return sendError(res, 401, 'Not authenticated');
     }
@@ -65,7 +63,10 @@ const createProduct = async (req, res) => {
       req.body,
       imageUrl
     );
-    sendSuccess(res, 201, 'Product created successfully', result);
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to create product');
+    }
+    sendSuccess(res, 201, 'Product created successfully', result.data);
 
   } catch (error) {
     console.error('CREATE PRODUCT ERROR:', error);
@@ -85,7 +86,10 @@ const updateProduct = async (req, res) => {
       req.user.businessId,
       req.body
     );
-    sendSuccess(res, 200, 'Product updated successfully', result);
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to update product');
+    }
+    sendSuccess(res, 200, 'Product updated successfully', result.data);
 
   } catch (error) {
     console.error('UPDATE PRODUCT ERROR:', error);
@@ -100,10 +104,13 @@ const deleteProduct = async (req, res) => {
       return sendError(res, 401, 'Not authenticated');
     }
 
-    await ProductService.deleteProduct(
+    const result = await ProductService.deleteProduct(
       req.params.productId,
       req.user.businessId
     );
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to delete product');
+    }
     sendSuccess(res, 200, 'Product deleted successfully');
 
   } catch (error) {

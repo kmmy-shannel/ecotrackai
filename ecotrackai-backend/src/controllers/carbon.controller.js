@@ -10,25 +10,62 @@ const { sendSuccess, sendError } = require('../utils/response.utils');
 // GET /api/carbon
 const getCarbonFootprint = async (req, res) => {
   try {
-    const result = await CarbonService.getCarbonFootprint(req.user.businessId);
-    sendSuccess(res, 200, 'Carbon footprint calculated successfully', result);
+    const result = await CarbonService.getCarbonFootprint(req.user);
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to calculate carbon footprint');
+    }
+
+    return sendSuccess(res, 200, 'Carbon footprint calculated successfully', result.data);
 
   } catch (error) {
     console.error('Carbon footprint error:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to calculate carbon footprint');
+    return sendError(res, error.status || 500, error.message || 'Failed to calculate carbon footprint');
   }
 };
 
 // GET /api/carbon/monthly
 const getMonthlyComparison = async (req, res) => {
   try {
-    const result = await CarbonService.getMonthlyComparison(req.user.businessId);
-    sendSuccess(res, 200, 'Monthly comparison retrieved', result);
+    const result = await CarbonService.getMonthlyComparison(req.user);
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to get monthly comparison');
+    }
+
+    return sendSuccess(res, 200, 'Monthly comparison retrieved', result.data);
 
   } catch (error) {
     console.error('Monthly comparison error:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to get monthly comparison');
+    return sendError(res, error.status || 500, error.message || 'Failed to get monthly comparison');
   }
 };
 
-module.exports = { getCarbonFootprint, getMonthlyComparison };
+// PATCH /api/carbon/:id/verify
+const finalizeCarbonVerification = async (req, res) => {
+  try {
+    const decision = req.body?.decision;
+    const notes = req.body?.notes || '';
+    const carbonRecordId = req.params?.id;
+
+    const result = await CarbonService.finalizeVerification(
+      req.user,
+      carbonRecordId,
+      decision,
+      notes
+    );
+
+    if (!result.success) {
+      return sendError(res, 400, result.error || 'Failed to finalize carbon verification');
+    }
+
+    return sendSuccess(res, 200, 'Carbon verification finalized successfully', result);
+  } catch (error) {
+    console.error('Finalize carbon verification error:', error);
+    return sendError(res, error.status || 500, error.message || 'Failed to finalize carbon verification');
+  }
+};
+
+module.exports = {
+  getCarbonFootprint,
+  getMonthlyComparison,
+  finalizeCarbonVerification
+};

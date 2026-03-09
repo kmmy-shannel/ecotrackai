@@ -1,0 +1,1 @@
+Admin pages: AdminDashboardPage, AlertsPage, CarbonFootprintPage, DeliveryRoutesPage, EcoScorePage, ProductsPage.

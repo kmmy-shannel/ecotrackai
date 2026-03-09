@@ -1,0 +1,1 @@
+Inventory manager pages: InventoryManagerPage, InventoryDashboardView, InventoryHistoryView.

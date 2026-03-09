@@ -1,0 +1,1 @@
+Config: configuration modules such as database.js and cloudinary.config.js.
