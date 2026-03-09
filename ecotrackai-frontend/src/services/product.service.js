@@ -33,14 +33,17 @@ class ProductService {
 
     // Append text fields
     data.append('productName', productData.productName);
-    data.append('productType', productData.productType);
-    data.append('storageCategory', productData.storageCategory);
-    data.append('shelfLifeDays', productData.shelfLifeDays);
-    data.append('optimalTempMin', productData.optimalTempMin || '');
-    data.append('optimalTempMax', productData.optimalTempMax || '');
-    data.append('optimalHumidityMin', productData.optimalHumidityMin || '');
-    data.append('optimalHumidityMax', productData.optimalHumidityMax || '');
-    data.append('unitOfMeasure', productData.unitOfMeasure);
+data.append('productType', productData.productType);
+data.append('storageCategory', productData.storageCategory);
+data.append('shelfLifeDays', productData.shelfLifeDays);
+data.append('quantity', productData.quantity || 0);
+data.append('totalQuantity', productData.quantity || 0);
+data.append('optimalTempMin', productData.optimalTempMin || '');
+data.append('optimalTempMax', productData.optimalTempMax || '');
+data.append('optimalHumidityMin', productData.optimalHumidityMin || '');
+data.append('optimalHumidityMax', productData.optimalHumidityMax || '');
+data.append('unitOfMeasure', productData.unitOfMeasure);
+data.append('notes', productData.notes || '');
 
     // Append image if exists
     if (imageFile) {

@@ -93,6 +93,22 @@ class AlertService {
       throw error;
     }
   }
+
+  // Submit active alert for manager approval (will create queue item and update status)
+  async submitForApproval(alertId, body = {}) {
+    try {
+      const response = await axios.post(
+        `${API_URL}/${alertId}/submit`,
+        body,
+        { headers: this.getAuthHeader() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Submit alert for approval error:', error);
+      throw error;
+    }
+  }
 }
+
 
 export default new AlertService();

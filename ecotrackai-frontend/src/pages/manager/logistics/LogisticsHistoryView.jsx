@@ -18,7 +18,7 @@ const LogisticsHistoryView = ({ history, onBack }) => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">APPROVAL HISTORY</h1>
+   
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
@@ -43,7 +43,7 @@ const LogisticsHistoryView = ({ history, onBack }) => {
           <p className="text-lg font-bold text-gray-800">{approvalRate}%</p>
         </div>
         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-[#1a4d2e] rounded-full transition-all duration-500" style={{ width: `${approvalRate}%` }} />
+          <div className="h-full bg-[var(--bg-900)] rounded-full transition-all duration-500" style={{ width: `${approvalRate}%` }} />
         </div>
       </div>
 

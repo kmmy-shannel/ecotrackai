@@ -1,0 +1,1 @@
+Logistics manager components: LogisticsManagerLayout, RouteApprovalCard, RouteDetailModal.

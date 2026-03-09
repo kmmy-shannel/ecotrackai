@@ -15,12 +15,12 @@ const ManagerManagement = ({ onClose }) => {
     fullName: '',
     role: ''
   });
-
   const roleOptions = [
-    { value: 'inventory_manager', label: 'Inventory Manager', description: 'Manages products & stock' },
-    { value: 'logistics_manager', label: 'Logistics Manager', description: 'Manages routes & deliveries' },
-    { value: 'sustainability_manager', label: 'Sustainability Manager', description: 'Reviews environmental impact' },
-    { value: 'finance_manager', label: 'Finance Manager', description: 'Oversees financial tracking' }
+    { value: 'inventory_manager',      label: 'Inventory Manager',      description: 'Reviews spoilage alerts, approves AI actions' },
+    { value: 'logistics_manager',      label: 'Logistics Manager',      description: 'Reviews route optimizations, monitors drivers' },
+    { value: 'sustainability_manager', label: 'Sustainability Manager',  description: 'Verifies carbon records, validates EcoTrust' },
+    { value: 'driver',                 label: 'Driver',                  description: 'Executes delivery routes on mobile app' },
+    // ── REMOVED: finance_manager — does not exist in your DB schema ──
   ];
 
   useEffect(() => {
@@ -64,23 +64,24 @@ const ManagerManagement = ({ onClose }) => {
     setLoading(true);
     setError('');
     setSuccess('');
-
+  
     try {
-      console.log('Creating manager:', formData);
-      await managerService.createManager(formData);
+      // ── CHANGED: map fullName → full_name to match backend validator ──
+      const payload = {
+        username:  formData.username,
+        email:     formData.email,
+        password:  formData.password,
+        fullName: formData.fullName,   // ← was: fullName
+        role:      formData.role
+      };
+  
+      await managerService.createManager(payload);
       setSuccess('Manager account created successfully!');
-      setFormData({
-        username: '',
-        email: '',
-        password: '',
-        fullName: '',
-        role: ''
-      });
+      setFormData({ username: '', email: '', password: '', fullName: '', role: '' });
       setShowForm(false);
       loadManagers();
     } catch (err) {
-      console.error('Create manager error:', err);
-      setError(err.response?.data?.message || 'Failed to create manager account');
+      setError(err.response?.data?.message || err.response?.data?.error?.[0]?.msg || 'Failed to create manager account');
     } finally {
       setLoading(false);
     }

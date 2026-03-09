@@ -1,163 +1,206 @@
-// ============================================================
-// FILE LOCATION: backend/src/services/manager.service.js
-// LAYER: Service (ViewModel) — business logic ONLY, no HTTP/no DB
-// ============================================================
-
-const ManagerModel   = require('../models/manager.model');
+const ManagerModel = require('../models/manager.model');
 const { hashPassword } = require('../utils/password.utils');
 
-const VALID_ROLES = [
+const MANAGED_ROLES = [
   'inventory_manager',
   'logistics_manager',
   'sustainability_manager',
-  'finance_manager'
+  'driver'
 ];
 
 const ManagerService = {
+  _ok(data = null) {
+    return { success: true, data };
+  },
 
-  // Get all managers for a business
+  _fail(error) {
+    return { success: false, error };
+  },
+
+  _isNil(value) {
+    return value === null || value === undefined;
+  },
+
+  _extractAdminContext(adminUser) {
+    if (!adminUser || typeof adminUser !== 'object') {
+      return this._fail('User context is required');
+    }
+
+    const userId = adminUser.userId || adminUser.user_id;
+    const businessId = adminUser.businessId || adminUser.business_id;
+    const role = adminUser.role;
+
+    if (this._isNil(userId) || this._isNil(businessId) || this._isNil(role)) {
+      return this._fail('Invalid user context');
+    }
+
+    if (role !== 'admin') {
+      return this._fail('Only administrators can perform this action');
+    }
+
+    return this._ok({ userId, businessId, role });
+  },
+
   async getManagers(businessId) {
-    const managers = await ManagerModel.findAllByBusiness(businessId);
-    return { count: managers.length, managers };
-  },
-
-  // Create a new manager account
-  async createManager(adminUser, body) {
-    const { username, email, password, fullName, role } = body;
-
-    // Only admin can create managers
-    if (adminUser.role !== 'admin') {
-      console.log('Non-admin user attempted to create manager');
-      throw { status: 403, message: 'Only administrators can create manager accounts' };
-    }
-
-    // Validate required fields
-    if (!username || !email || !password || !fullName || !role) {
-      console.log('Missing required fields');
-      throw { status: 400, message: 'Please provide all required fields' };
-    }
-
-    // Validate role
-    if (!VALID_ROLES.includes(role)) {
-      console.log('Invalid role:', role);
-      throw {
-        status: 400,
-        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`
-      };
-    }
-
-    // Check if user already exists
-    console.log('Checking for existing user...');
-    const existing = await ManagerModel.findByEmailOrUsername(email, username);
-    if (existing) {
-      console.log('User already exists');
-      throw { status: 400, message: 'User with this email or username already exists' };
-    }
-
-    // Hash password
-    console.log('Hashing password...');
-    const hashedPassword = await hashPassword(password);
-
-    // Create manager account
-    console.log('Creating manager account...');
-    const newManager = await ManagerModel.create(
-      adminUser.businessId,
-      username,
-      email,
-      hashedPassword,
-      fullName,
-      role
-    );
-
-    console.log('Manager created successfully with ID:', newManager.user_id);
-
-    return {
-      manager: {
-        userId:    newManager.user_id,
-        username:  newManager.username,
-        email:     newManager.email,
-        fullName:  newManager.full_name,
-        role:      newManager.role,
-        isActive:  newManager.is_active,
-        createdAt: newManager.created_at
+    try {
+      if (this._isNil(businessId)) {
+        return this._fail('businessId is required');
       }
-    };
+
+      const managers = await ManagerModel.findAllByBusiness(businessId);
+      return this._ok({ count: managers.length, managers });
+    } catch (error) {
+      console.error('[ManagerService.getManagers]', error);
+      return this._fail('Failed to retrieve managers');
+    }
   },
 
-  // Update manager account fields
+  async createManager(adminUser, body) {
+    try {
+      const ctxResult = this._extractAdminContext(adminUser);
+      if (!ctxResult.success) return ctxResult;
+      const ctx = ctxResult.data;
+
+      if (!body || typeof body !== 'object') {
+        return this._fail('Request body is required');
+      }
+
+      const { username, email, password, fullName, role } = body;
+
+      if (!username || !email || !password || !fullName || !role) {
+        return this._fail('Please provide all required fields');
+      }
+
+      if (!MANAGED_ROLES.includes(role)) {
+        return this._fail(`Invalid role. Must be one of: ${MANAGED_ROLES.join(', ')}`);
+      }
+
+      const existing = await ManagerModel.findByEmailOrUsername(email, username);
+      if (existing) {
+        return this._fail('User with this email or username already exists');
+      }
+
+      const hashedPassword = await hashPassword(password);
+
+      const newManager = await ManagerModel.create(
+        ctx.businessId,
+        username,
+        email,
+        hashedPassword,
+        fullName,
+        role
+      );
+
+      return this._ok({
+        manager: {
+          userId: newManager.user_id,
+          username: newManager.username,
+          email: newManager.email,
+          fullName: newManager.full_name,
+          role: newManager.role,
+          isActive: newManager.is_active,
+          createdAt: newManager.created_at
+        }
+      });
+    } catch (error) {
+      console.error('[ManagerService.createManager]', error);
+      return this._fail('Failed to create manager account');
+    }
+  },
+
   async updateManager(adminUser, managerId, body) {
-    if (!adminUser || adminUser.role !== 'admin') {
-      throw { status: 403, message: 'Only administrators can update manager accounts' };
+    try {
+      const ctxResult = this._extractAdminContext(adminUser);
+      if (!ctxResult.success) return ctxResult;
+      const ctx = ctxResult.data;
+
+      if (this._isNil(managerId)) {
+        return this._fail('managerId is required');
+      }
+
+      const { fullName, email, username, isActive } = body || {};
+      const hasFields = fullName || email || username || typeof isActive === 'boolean';
+      if (!hasFields) {
+        return this._fail('No fields to update');
+      }
+
+      const manager = await ManagerModel.findNonAdminByIdAndBusiness(managerId, ctx.businessId);
+      if (!manager) {
+        return this._fail('Not found or unauthorized');
+      }
+
+      const updated = await ManagerModel.update(managerId, { fullName, email, username, isActive });
+      if (!updated) {
+        return this._fail('Not found or unauthorized');
+      }
+
+      return this._ok({ manager: updated });
+    } catch (error) {
+      console.error('[ManagerService.updateManager]', error);
+      return this._fail('Failed to update manager');
     }
-
-    const { fullName, email, username, isActive } = body;
-
-    // Verify manager belongs to same business and is not admin
-    const manager = await ManagerModel.findNonAdminByIdAndBusiness(managerId, adminUser.businessId);
-    if (!manager) {
-      throw { status: 404, message: 'Manager not found or cannot be modified' };
-    }
-
-    // Guard: at least one field must be present
-    const hasFields = fullName || email || username || typeof isActive === 'boolean';
-    if (!hasFields) {
-      throw { status: 400, message: 'No fields to update' };
-    }
-
-    const updated = await ManagerModel.update(managerId, { fullName, email, username, isActive });
-    return { manager: updated };
   },
 
-  // Soft delete (deactivate) a manager account
   async deleteManager(adminUser, managerId) {
-    if (!adminUser || adminUser.role !== 'admin') {
-      throw { status: 403, message: 'Only administrators can delete manager accounts' };
-    }
+    try {
+      const ctxResult = this._extractAdminContext(adminUser);
+      if (!ctxResult.success) return ctxResult;
+      const ctx = ctxResult.data;
 
-    // Verify manager belongs to business
-    const manager = await ManagerModel.findByIdAndBusiness(managerId, adminUser.businessId);
-    if (!manager) {
-      throw { status: 404, message: 'Manager not found' };
-    }
+      if (this._isNil(managerId)) {
+        return this._fail('managerId is required');
+      }
 
-    // Prevent deleting another admin
-    if (manager.role === 'admin') {
-      throw { status: 403, message: 'Cannot delete admin account' };
-    }
+      const manager = await ManagerModel.findByIdAndBusiness(managerId, ctx.businessId);
+      if (!manager) {
+        return this._fail('Not found or unauthorized');
+      }
 
-    // Soft delete + kill sessions
-    await ManagerModel.deactivate(managerId);
-    await ManagerModel.deleteSessions(managerId);
+      if (manager.role === 'admin') {
+        return this._fail('Cannot delete admin account');
+      }
+
+      await ManagerModel.deactivate(managerId);
+      await ManagerModel.deleteSessions(managerId);
+
+      return this._ok({ deleted: true });
+    } catch (error) {
+      console.error('[ManagerService.deleteManager]', error);
+      return this._fail('Failed to delete manager');
+    }
   },
 
-  // Reset manager password (admin only)
   async resetManagerPassword(adminUser, managerId, newPassword) {
-    if (!adminUser || adminUser.role !== 'admin') {
-      throw { status: 403, message: 'Only administrators can reset passwords' };
+    try {
+      const ctxResult = this._extractAdminContext(adminUser);
+      if (!ctxResult.success) return ctxResult;
+      const ctx = ctxResult.data;
+
+      if (this._isNil(managerId)) {
+        return this._fail('managerId is required');
+      }
+      if (!newPassword || newPassword.length < 6) {
+        return this._fail('Password must be at least 6 characters');
+      }
+
+      const manager = await ManagerModel.findByIdAndBusiness(managerId, ctx.businessId);
+      if (!manager) {
+        return this._fail('Not found or unauthorized');
+      }
+      if (manager.role === 'admin') {
+        return this._fail('Cannot reset admin password');
+      }
+
+      const hashedPassword = await hashPassword(newPassword);
+      await ManagerModel.updatePassword(managerId, hashedPassword);
+      await ManagerModel.deleteSessions(managerId);
+
+      return this._ok({ reset: true });
+    } catch (error) {
+      console.error('[ManagerService.resetManagerPassword]', error);
+      return this._fail('Failed to reset password');
     }
-
-    if (!newPassword || newPassword.length < 6) {
-      throw { status: 400, message: 'Password must be at least 6 characters' };
-    }
-
-    // Verify manager belongs to business
-    const manager = await ManagerModel.findByIdAndBusiness(managerId, adminUser.businessId);
-    if (!manager) {
-      throw { status: 404, message: 'Manager not found' };
-    }
-
-    // Prevent resetting admin password
-    if (manager.role === 'admin') {
-      throw { status: 403, message: 'Cannot reset admin password' };
-    }
-
-    const hashedPassword = await hashPassword(newPassword);
-
-    // Update password + kill all sessions to force re-login
-    await ManagerModel.updatePassword(managerId, hashedPassword);
-    await ManagerModel.deleteSessions(managerId);
   }
-
 };
 
 module.exports = ManagerService;

@@ -43,6 +43,12 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+/**
+ * CRITICAL SECURITY: authorize() validates that user.role is in the allowed roles.
+ * For super_admin routes, use: authorize('super_admin')
+ * For multi-role routes: authorize('super_admin', 'admin') 
+ * Does NOT check business_id—that's validated in service layer.
+ */
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {

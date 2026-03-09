@@ -19,7 +19,8 @@ const RegisterPage = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    fullName: ''
+    fullName: '',
+    role: 'admin' // Business owner/registrant is always admin
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -203,7 +204,7 @@ case 'contactPhone':
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-100 via-green-50 to-green-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-12">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-12 h-12 bg-gray-200 rounded-full"></div>

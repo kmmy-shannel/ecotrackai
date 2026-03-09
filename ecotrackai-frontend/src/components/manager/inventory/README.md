@@ -1,0 +1,1 @@
+Inventory manager components: InventoryManagerLayout, ApprovalCard, ApprovalDetailModal.

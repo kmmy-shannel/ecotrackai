@@ -95,11 +95,11 @@ const RouteApprovalCard = ({ approval, onViewDetails, onApprove, onDecline, subm
             <>
               <button onClick={() => onApprove(approval.approval_id || approval.id)} disabled={submitting}
                 className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-                ✓ Approve
+                Approve
               </button>
               <button onClick={() => onDecline(approval.approval_id || approval.id)} disabled={submitting}
                 className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-                ✗ Decline
+                Decline
               </button>
             </>
           )}
@@ -109,4 +109,4 @@ const RouteApprovalCard = ({ approval, onViewDetails, onApprove, onDecline, subm
   );
 };
 
-export default RouteApprovalCard;
+export default RouteApprovalCard; 

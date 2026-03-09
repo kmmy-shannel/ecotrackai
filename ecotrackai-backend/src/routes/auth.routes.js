@@ -11,6 +11,7 @@ const {
   forgotPassword,
   resetPassword
 } = require('../controllers/auth.controller');
+const RegistrationController = require('../controllers/registration.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 const { body } = require('express-validator');
 const { validateRequest } = require('../middleware/validation.middleware');
@@ -114,8 +115,46 @@ const changePasswordValidation = [
     .matches(/^(?=.*[a-zA-Z])(?=.*[0-9])/).withMessage('Password must contain both letters and numbers')
 ];
 
+const businessRegistrationValidation = [
+  body('businessName')
+    .trim()
+    .notEmpty().withMessage('Business name is required')
+    .isLength({ min: 2 }).withMessage('Business name must be at least 2 characters'),
+  body('businessType')
+    .trim()
+    .notEmpty().withMessage('Business type is required')
+    .isIn(['production', 'retail', 'distribution', 'transport']).withMessage('Invalid business type'),
+  body('registrationNumber')
+    .trim()
+    .notEmpty().withMessage('Registration number is required')
+    .isLength({ min: 5 }).withMessage('Registration number must be at least 5 characters'),
+  body('contactEmail')
+    .trim()
+    .notEmpty().withMessage('Contact email is required')
+    .isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('contactPhone')
+    .trim()
+    .notEmpty().withMessage('Contact phone is required')
+    .matches(/^\d+$/).withMessage('Contact phone must contain numbers only')
+    .isLength({ min: 7, max: 15 }).withMessage('Contact phone must be 7-15 digits'),
+  body('adminFirstName')
+    .trim()
+    .notEmpty().withMessage('Admin first name is required')
+    .isLength({ min: 2 }).withMessage('Admin first name must be at least 2 characters'),
+  body('adminLastName')
+    .trim()
+    .notEmpty().withMessage('Admin last name is required')
+    .isLength({ min: 2 }).withMessage('Admin last name must be at least 2 characters'),
+  body('adminEmail')
+    .trim()
+    .notEmpty().withMessage('Admin email is required')
+    .isEmail().normalizeEmail().withMessage('Valid admin email is required'),
+  body('address').optional().trim()
+];
+
 // Routes
 router.post('/register', registerValidation, validateRequest, register);
+router.post('/register-business', businessRegistrationValidation, validateRequest, RegistrationController.registerBusinessSelfService);
 router.post('/login', loginValidation, validateRequest, login);
 router.post('/logout', authenticate, logout);
 

@@ -1,0 +1,1 @@
+Shared manager components: `StatCard.jsx`, `PriorityBadge.jsx` used across manager views.

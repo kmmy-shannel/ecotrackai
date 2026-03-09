@@ -1,0 +1,226 @@
+[dotenv@17.2.3] injecting env (20) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+
+Registered API Routes:
+   /api/auth
+   /api/managers
+   /api/products
+   /api/alerts
+   /api/catalog
+   /api/health
+
+Server running on http://localhost:5000
+Connected to Neon PostgreSQL
+[Inventory Create] req.user: { userId: 1, businessId: 1, role: 'admin' }
+[Inventory Create] req.body: {
+  simulated_storage_humidity: 85,
+  unit_of_measure: 'kg',
+  batch_number: 'TEST-20260302-002',
+  product_id: 24,
+  shelf_life_days: 5,
+  quantity: 5,
+  simulated_storage_temp: 13,
+  ripeness_stage: 'Unripe',
+  current_condition: 'Good'
+}
+[Inventory Create] businessId: 1
+Request Body: {
+  "email": "superadmin@ecotrackai.com",
+  "password": "EcoTrack@SuperAdmin2026"
+}
+Request Body: {
+  "email": "sadasdsad@gmail.com",
+  "password": "kimmy123"
+}
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+[Inventory Create] req.user: { userId: 2, businessId: 2, role: 'admin' }
+[Inventory Create] req.body: {
+  product_id: 30,
+  quantity: 45,
+  unit_of_measure: 'kg',
+  batch_number: 'BAYABAS-20260302-001',
+  ripeness_stage: 'Unripe',
+  current_condition: 'Excellent',
+  simulated_storage_temp: null,
+  simulated_storage_humidity: null,
+  shelf_life_days: 6
+}
+[Inventory Create] businessId: 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+[Inventory Create] req.user: { userId: 2, businessId: 2, role: 'admin' }
+[Inventory Create] req.body: {
+  product_id: 30,
+  quantity: 34,
+  unit_of_measure: 'kg',
+  batch_number: 'BAYABAS-20260302-001',
+  ripeness_stage: 'Unripe',
+  current_condition: 'Excellent',
+  simulated_storage_temp: null,
+  simulated_storage_humidity: null,
+  shelf_life_days: 6
+}
+[Inventory Create] businessId: 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+Request Body: {
+  "email": "superadmin@ecotrackai.com",
+  "password": "EcoTrack@SuperAdmin2026"
+}
+Request Body: {
+  "email": "sadasdsad@gmail.com",
+  "password": "kimmy123"
+}
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+[Inventory Create] req.user: { userId: 2, businessId: 2, role: 'admin' }
+[Inventory Create] req.body: {
+  product_id: 31,
+  quantity: 23,
+  unit_of_measure: 'kg',
+  batch_number: 'ATIS-20260302-001',
+  ripeness_stage: 'Unripe',
+  current_condition: 'Good',
+  simulated_storage_temp: null,
+  simulated_storage_humidity: null,
+  shelf_life_days: 4
+}
+[Inventory Create] businessId: 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+[AlertService.syncAlertsFromProducts] businessId = 2
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}
+GET PRODUCTS ENDPOINT HIT!
+User: { userId: 2, businessId: 2, role: 'admin' }
+Query params: [Object: null prototype] {
+  search: '',
+  sortBy: 'created_at',
+  sortOrder: 'desc'
+}

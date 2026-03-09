@@ -41,7 +41,7 @@ const InventoryHistoryView = ({ history = [] }) => {
           <p className="text-xs text-gray-500 mt-1 font-medium uppercase tracking-wide">Total Decisions</p>
         </div>
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-          <p className="text-3xl font-bold" style={{ color: '#1a4d2e' }}>{totalApproved}</p>
+          <p className="text-3xl font-bold text-[var(--bg-900)]">{totalApproved}</p>
           <p className="text-xs text-green-600 mt-1 font-medium uppercase tracking-wide">Approved</p>
         </div>
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
@@ -59,7 +59,7 @@ const InventoryHistoryView = ({ history = [] }) => {
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${approvalRate}%`, background: '#1a4d2e' }}
+            style={{ width: `${approvalRate}%`, background: 'var(--bg-900)' }}
           />
         </div>
         <div className="flex justify-between mt-2">
@@ -150,7 +150,7 @@ const HistoryItem = ({ item }) => {
             </p>
 
             {item.location && (
-              <p className="text-xs text-gray-400 mt-0.5">📍 {item.location}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Location: {item.location}</p>
             )}
 
             {item.ai_suggestion && (

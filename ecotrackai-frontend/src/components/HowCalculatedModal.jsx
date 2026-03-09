@@ -83,7 +83,7 @@ const HowCalculatedModal = ({ onClose, currentData }) => {
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
 
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-[#1a4d2e] to-emerald-700 text-white p-6 rounded-t-2xl z-10">
+        <div className="sticky top-0 bg-gradient-to-r from-[var(--bg-900)] to-emerald-700 text-white p-6 rounded-t-2xl z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
@@ -172,7 +172,7 @@ const HowCalculatedModal = ({ onClose, currentData }) => {
           {/* Close */}
           <button
             onClick={onClose}
-            className="w-full py-3 bg-[#1a4d2e] hover:bg-emerald-800 text-white rounded-xl font-semibold transition-colors"
+            className="w-full py-3 bg-green-700 hover:bg-green-800 text-white rounded-xl font-semibold transition-colors"
           >
             Got it!
           </button>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
-import authService from '../../services/auth.service';
+import { useAuth } from '../../hooks/useAuth';
 import useCarbon from '../../hooks/useCarbon';
 import HowCalculatedModal from '../../components/HowCalculatedModal';
 import MonthlyComparisonModal from '../../components/MonthlyComparisonModal';
@@ -12,7 +12,7 @@ import {
 
 const CarbonFootprintPage = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
 
   // — all state and logic 
   const {
@@ -26,16 +26,6 @@ const CarbonFootprintPage = () => {
     setShowHowCalculated,
     setShowMonthlyComparison
   } = useCarbon();
-
-  // Auth check on mount
-  useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      navigate('/');
-      return;
-    }
-    setUser(currentUser);
-  }, [navigate]);
 
   if (!user) return null;
 
@@ -201,7 +191,7 @@ const CarbonFootprintPage = () => {
 // EcoStatCard Component
 const EcoStatCard = ({ title, value, subtitle, icon }) => (
   <div className="bg-white overflow-hidden flex flex-col rounded-2xl shadow-md hover:shadow-xl transition-all transform hover:-translate-y-1 border border-gray-100">
-    <div className="bg-[#1a4d2e] px-5 pt-4 pb-3 rounded-t-2xl flex items-center justify-between">
+    <div className="bg-[var(--bg-900)] px-5 pt-4 pb-3 rounded-t-2xl flex items-center justify-between">
       <h4 className="text-white text-xs font-medium uppercase tracking-wide">{title}</h4>
       {icon && <div className="text-white opacity-80">{icon}</div>}
     </div>

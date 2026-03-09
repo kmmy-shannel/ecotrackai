@@ -1,0 +1,1 @@
+Controllers: HTTP handlers. Examples: auth, product, delivery, dashboard, approval, alert, manager, carbon.

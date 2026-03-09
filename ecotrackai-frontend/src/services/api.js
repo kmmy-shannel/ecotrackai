@@ -9,6 +9,12 @@ const api = axios.create({
   },
 });
 
+const clearSessionAndRedirect = (path = '/login') => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  window.location.href = path;
+};
+
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
@@ -28,12 +34,19 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/';
+      console.error('[API] 401 received on:', error.config?.url);
+      console.error('[API] Logging user out');
+      clearSessionAndRedirect('/login');
+      return Promise.reject(error);
     }
+
+    if (error.response?.status === 403) {
+      window.location.href = '/unauthorized';
+    }
+
     return Promise.reject(error);
   }
 );
 
 export default api;
+  

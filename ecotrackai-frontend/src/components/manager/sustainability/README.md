@@ -1,0 +1,1 @@
+Sustainability manager components: SustainabilityManagerLayout, CarbonVerificationCard.

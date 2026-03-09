@@ -5,81 +5,99 @@ const { generateToken } = require('../utils/jwt.utils');
 const { generateOTP, generateResetToken } = require('../utils/otp.utils');
 const emailService = require('./email.service');
 
-/**
- * AUTH SERVICE
- * MVVM Layer: Service (ViewModel equivalent for backend)
- * Responsibility: Business logic ONLY - calls Model for DB, handles logic
- */
-
 const AuthService = {
+  _ok(data = null) {
+    return { success: true, data };
+  },
 
-  // ─── REGISTER ──────────────────────────────────────────────
+  _fail(error) {
+    return { success: false, error };
+  },
+
+  _isNil(value) {
+    return value === null || value === undefined;
+  },
+
+  _extractAuthContext(user) {
+    if (!user || typeof user !== 'object') {
+      return this._fail('User context is required');
+    }
+
+    const userId = user.userId || user.user_id;
+    const businessId = user.businessId || user.business_id;
+    const role = user.role;
+
+    if (this._isNil(userId) || this._isNil(role)) {
+      return this._fail('Invalid user context');
+    }
+
+    if (this._isNil(businessId) && role !== 'super_admin') {
+      return this._fail('Invalid user context');
+    }
+
+    return this._ok({ userId, businessId, role });
+  },
 
   async register(data) {
-    const client = await pool.connect();
-
     try {
-      console.log('REGISTRATION ATTEMPT');
-      await client.query('BEGIN');
-
       const {
         businessName, businessType, registrationNumber,
         address, contactEmail, contactPhone,
         firstName, lastName, username, email, password,
         fullName, role
-      } = data;
+      } = data || {};
 
-      // Validate required fields
       if (!businessName || !username || !email || !password || !firstName || !lastName) {
-        throw { status: 400, message: 'Please provide all required fields' };
+        return this._fail('Please provide all required fields');
       }
 
-      // Check if user already exists
-      const existingUser = await UserModel.findByEmailOrUsername(email, username);
-      if (existingUser) {
-        throw { status: 400, message: 'User with this email or username already exists' };
+      const existingResult = await UserModel.findByEmailOrUsername(email, username);
+      if (!existingResult.success) return existingResult;
+      if (existingResult.data) {
+        return this._fail('User with this email or username already exists');
       }
 
-      // Create business profile
-      const businessId = await UserModel.createBusiness(client, {
-        businessName, businessType, registrationNumber,
-        address, contactEmail, contactPhone
+      const businessResult = await UserModel.createBusiness(pool, {
+        businessName,
+        businessType,
+        registrationNumber,
+        address,
+        contactEmail,
+        contactPhone
       });
-      console.log('✅ Business created with ID:', businessId);
+      if (!businessResult.success) return businessResult;
+      const businessId = businessResult.data;
 
-      // Hash password
       const hashedPassword = await hashPassword(password);
-
-      // Generate OTP
       const otp = generateOTP();
       const otpExpires = new Date();
       otpExpires.setMinutes(otpExpires.getMinutes() + 10);
 
-      // Create user
-      const user = await UserModel.createUser(client, {
-        businessId, username, email, hashedPassword,
+      const userResult = await UserModel.createUser(pool, {
+        businessId,
+        username,
+        email,
+        hashedPassword,
         fullName: fullName || `${firstName} ${lastName}`,
-        firstName, lastName, role, otp, otpExpires
+        firstName,
+        lastName,
+        role,
+        otp,
+        otpExpires
       });
-      console.log('✅ User created with ID:', user.user_id);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
 
-      // Initialize EcoTrust score
-      await UserModel.initEcoTrustScore(client, businessId);
+      const ecoInitResult = await UserModel.initEcoTrustScore(pool, businessId);
+      if (!ecoInitResult.success) return ecoInitResult;
 
-      await client.query('COMMIT');
-      console.log('✅ Transaction committed');
-
-      // Send OTP email (non-blocking - don't fail registration)
       try {
-        await emailService.sendVerificationEmail(
-          email, otp, fullName || username
-        );
-        console.log('✅ Verification email sent');
+        await emailService.sendVerificationEmail(email, otp, fullName || username);
       } catch (emailError) {
-        console.error('⚠️ Failed to send verification email:', emailError);
+        console.error('[AuthService.register] verification email failed:', emailError);
       }
 
-      return {
+      return this._ok({
         user: {
           userId: user.user_id,
           businessId,
@@ -90,317 +108,406 @@ const AuthService = {
           emailVerified: false
         },
         requiresVerification: true
-      };
-
+      });
     } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
+      console.error('[AuthService.register]', error);
+      return this._fail('Registration failed');
     }
   },
-
-  // ─── SEND OTP ──────────────────────────────────────────────
 
   async sendOTP(email) {
-    if (!email) {
-      throw { status: 400, message: 'Email is required' };
+    try {
+      if (!email) {
+        return this._fail('Email is required');
+      }
+
+      const userResult = await UserModel.findByEmailBasic(email);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
+      if (!user) return this._fail('User not found');
+      if (user.email_verified) return this._fail('Email already verified');
+
+      const otp = generateOTP();
+      const otpExpires = new Date();
+      otpExpires.setMinutes(otpExpires.getMinutes() + 10);
+
+      const otpResult = await UserModel.updateOTP(user.user_id, otp, otpExpires);
+      if (!otpResult.success) return otpResult;
+
+      await emailService.sendVerificationEmail(email, otp, user.full_name || user.username);
+      return this._ok({ sent: true });
+    } catch (error) {
+      console.error('[AuthService.sendOTP]', error);
+      return this._fail('Failed to send verification code');
     }
-
-    const user = await UserModel.findByEmailBasic(email);
-    if (!user) {
-      throw { status: 404, message: 'User not found' };
-    }
-
-    if (user.email_verified) {
-      throw { status: 400, message: 'Email already verified' };
-    }
-
-    // Generate new OTP
-    const otp = generateOTP();
-    const otpExpires = new Date();
-    otpExpires.setMinutes(otpExpires.getMinutes() + 10);
-
-    await UserModel.updateOTP(user.user_id, otp, otpExpires);
-    await emailService.sendVerificationEmail(
-      email, otp, user.full_name || user.username
-    );
-
-    console.log('✅ New OTP sent to:', email);
-    return true;
   },
-
-  // ─── VERIFY OTP ────────────────────────────────────────────
 
   async verifyOTP(email, otp, ip, userAgent) {
-    if (!email || !otp) {
-      throw { status: 400, message: 'Email and OTP are required' };
-    }
+    try {
+      if (!email || !otp) {
+        return this._fail('Email and OTP are required');
+      }
 
-    const user = await UserModel.findByEmailWithBusiness(email);
-    if (!user) {
-      throw { status: 404, message: 'User not found' };
-    }
+      const userResult = await UserModel.findByEmailWithBusiness(email);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
 
-    if (user.email_verified) {
-      throw { status: 400, message: 'Email already verified' };
-    }
+      if (!user) return this._fail('User not found');
+      if (user.email_verified) return this._fail('Email already verified');
+      if (user.verification_code !== otp) return this._fail('Invalid verification code');
+      if (new Date() > new Date(user.verification_code_expires)) {
+        return this._fail('Verification code has expired. Please request a new one.');
+      }
 
-    if (user.verification_code !== otp) {
-      throw { status: 400, message: 'Invalid verification code' };
-    }
+      const verifiedResult = await UserModel.markEmailVerified(user.user_id, user.business_id);
+      if (!verifiedResult.success) return verifiedResult;
 
-    if (new Date() > new Date(user.verification_code_expires)) {
-      throw { status: 400, message: 'Verification code has expired. Please request a new one.' };
-    }
-
-    // Mark email as verified
-    await UserModel.markEmailVerified(user.user_id);
-
-    // Generate token and session
-    const token = generateToken({
-      userId: user.user_id,
-      businessId: user.business_id,
-      role: user.role
-    });
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    await UserModel.createSession(user.user_id, token, expiresAt, ip, userAgent);
-
-    console.log('✅ Email verified successfully for:', email);
-
-    return {
-      user: {
+      const token = generateToken({
         userId: user.user_id,
         businessId: user.business_id,
-        username: user.username,
-        email: user.email,
-        fullName: user.full_name,
-        role: user.role,
-        businessName: user.business_name,
-        emailVerified: true
-      },
-      token
-    };
-  },
+        role: user.role
+      });
 
-  // ─── FORGOT PASSWORD ───────────────────────────────────────
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      const sessionResult = await UserModel.createSession(
+        user.user_id,
+        token,
+        expiresAt,
+        ip,
+        userAgent,
+        user.business_id
+      );
+      if (!sessionResult.success) return sessionResult;
+
+      return this._ok({
+        user: {
+          userId: user.user_id,
+          businessId: user.business_id,
+          username: user.username,
+          email: user.email,
+          fullName: user.full_name,
+          role: user.role,
+          businessName: user.business_name,
+          emailVerified: true
+        },
+        token
+      });
+    } catch (error) {
+      console.error('[AuthService.verifyOTP]', error);
+      return this._fail('Verification failed');
+    }
+  },
 
   async forgotPassword(email) {
-    if (!email) {
-      throw { status: 400, message: 'Email is required' };
+    try {
+      if (!email) {
+        return this._fail('Email is required');
+      }
+
+      const userResult = await UserModel.findActiveByEmail(email);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
+
+      if (!user) {
+        return this._ok({ requested: true });
+      }
+
+      const resetToken = generateResetToken();
+      const resetTokenExpires = new Date();
+      resetTokenExpires.setHours(resetTokenExpires.getHours() + 1);
+
+      const saveResult = await UserModel.saveResetToken(
+        user.user_id,
+        resetToken,
+        resetTokenExpires
+      );
+      if (!saveResult.success) return saveResult;
+
+      await emailService.sendPasswordResetEmail(
+        email,
+        resetToken,
+        user.full_name || user.username
+      );
+
+      return this._ok({ requested: true });
+    } catch (error) {
+      console.error('[AuthService.forgotPassword]', error);
+      return this._fail('Failed to process password reset request');
     }
-
-    const user = await UserModel.findActiveByEmail(email);
-
-    // Always return success even if user not found (security best practice)
-    if (!user) {
-      console.log('⚠️ User not found, but returning success for security');
-      return true;
-    }
-
-    // Generate reset token
-    const resetToken = generateResetToken();
-    const resetTokenExpires = new Date();
-    resetTokenExpires.setHours(resetTokenExpires.getHours() + 1);
-
-    await UserModel.saveResetToken(user.user_id, resetToken, resetTokenExpires);
-    await emailService.sendPasswordResetEmail(
-      email, resetToken, user.full_name || user.username
-    );
-
-    console.log('✅ Password reset email sent to:', email);
-    return true;
   },
-
-  // ─── RESET PASSWORD ────────────────────────────────────────
 
   async resetPassword(token, password) {
-    if (!password) {
-      throw { status: 400, message: 'Password is required' };
+    try {
+      if (!password) return this._fail('Password is required');
+      if (password.length < 8 || password.length > 16) {
+        return this._fail('Password must be 8-16 characters');
+      }
+      if (!/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
+        return this._fail('Password must contain both letters and numbers');
+      }
+
+      const userResult = await UserModel.findByResetToken(token);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
+      if (!user) return this._fail('Invalid or expired reset token');
+
+      const hashedPassword = await hashPassword(password);
+      const updateResult = await UserModel.updatePassword(user.user_id, hashedPassword);
+      if (!updateResult.success) return updateResult;
+
+      const deleteSessionsResult = await UserModel.deleteAllSessions(user.user_id);
+      if (!deleteSessionsResult.success && deleteSessionsResult.error !== 'Not found or unauthorized') {
+        return deleteSessionsResult;
+      }
+
+      return this._ok({ reset: true });
+    } catch (error) {
+      console.error('[AuthService.resetPassword]', error);
+      return this._fail('Failed to reset password');
     }
-
-    if (password.length < 8 || password.length > 16) {
-      throw { status: 400, message: 'Password must be 8-16 characters' };
-    }
-
-    if (!/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
-      throw { status: 400, message: 'Password must contain both letters and numbers' };
-    }
-
-    const user = await UserModel.findByResetToken(token);
-    if (!user) {
-      throw { status: 400, message: 'Invalid or expired reset token' };
-    }
-
-    const hashedPassword = await hashPassword(password);
-    await UserModel.updatePassword(user.user_id, hashedPassword);
-    await UserModel.deleteAllSessions(user.user_id);
-
-    console.log('✅ Password reset successful for:', user.email);
-    return true;
   },
-
-  // ─── LOGIN ─────────────────────────────────────────────────
 
   async login(email, password, ip, userAgent) {
-    console.log('LOGIN ATTEMPT');
+    try {
+      if (!email || !password) {
+        return this._fail('Please provide email and password');
+      }
 
-    if (!email || !password) {
-      throw { status: 400, message: 'Please provide email and password' };
-    }
+      const userResult = await UserModel.findByEmail(email);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
+      if (!user) return this._fail('Invalid credentials');
 
-    const user = await UserModel.findByEmail(email);
-    if (!user) {
-      throw { status: 401, message: 'Invalid credentials' };
-    }
-    console.log('User found:', user.username);
+      const isPasswordValid = await comparePassword(password, user.password_hash);
+      if (!isPasswordValid) return this._fail('Invalid credentials');
 
-    const isPasswordValid = await comparePassword(password, user.password_hash);
-    if (!isPasswordValid) {
-      throw { status: 401, message: 'Invalid credentials' };
-    }
-    console.log('Password valid');
-
-    // Generate token
-    const token = generateToken({
-      userId: user.user_id,
-      businessId: user.business_id,
-      role: user.role
-    });
-
-    // Create session
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    await UserModel.createSession(user.user_id, token, expiresAt, ip, userAgent);
-
-    // Update last login
-    await UserModel.updateLastLogin(user.user_id);
-
-    console.log('LOGIN SUCCESSFUL');
-
-    return {
-      user: {
+      const token = generateToken({
         userId: user.user_id,
         businessId: user.business_id,
-        username: user.username,
-        email: user.email,
-        fullName: user.full_name,
-        role: user.role,
-        businessName: user.business_name,
-        emailVerified: user.email_verified
-      },
-      token
-    };
-  },
+        role: user.role
+      });
 
-  // ─── LOGOUT ────────────────────────────────────────────────
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
-  async logout(token) {
-    if (!token) {
-      throw { status: 400, message: 'No token provided' };
-    }
-    await UserModel.deleteSession(token);
-    return true;
-  },
-
-  // ─── GET PROFILE ───────────────────────────────────────────
-
-  async getProfile(userId) {
-    const profile = await UserModel.findById(userId);
-    if (!profile) {
-      throw { status: 404, message: 'User not found' };
-    }
-
-    return {
-      user: {
-        userId: profile.user_id,
-        username: profile.username,
-        email: profile.email,
-        fullName: profile.full_name,
-        role: profile.role,
-        isActive: profile.is_active,
-        emailVerified: profile.email_verified,
-        lastLogin: profile.last_login,
-        createdAt: profile.created_at
-      },
-      business: {
-        businessId: profile.business_id,
-        businessName: profile.business_name,
-        businessType: profile.business_type,
-        registrationNumber: profile.registration_number,
-        address: profile.address,
-        contactEmail: profile.contact_email,
-        contactPhone: profile.contact_phone
-      },
-      ecoTrust: {
-        score: profile.ecotrust_score,
-        level: profile.ecotrust_level,
-        rank: profile.ecotrust_rank
-      }
-    };
-  },
-
-  // ─── UPDATE PROFILE ────────────────────────────────────────
-
-  async updateProfile(userId, { fullName, email, username }) {
-    // Check if email/username already taken by someone else
-    if (email || username) {
-      const taken = await UserModel.checkEmailOrUsernameExists(
-        email, username, userId
+      const sessionResult = await UserModel.createSession(
+        user.user_id,
+        token,
+        expiresAt,
+        ip,
+        userAgent,
+        user.business_id
       );
-      if (taken) {
-        throw { status: 400, message: 'Email or username already taken' };
-      }
+      if (!sessionResult.success) return sessionResult;
+
+      const loginResult = await UserModel.updateLastLogin(user.user_id, user.business_id);
+      if (!loginResult.success) return loginResult;
+
+      return this._ok({
+        user: {
+          userId: user.user_id,
+          businessId: user.business_id,
+          username: user.username,
+          email: user.email,
+          fullName: user.full_name,
+          role: user.role,
+          businessName: user.business_name,
+          emailVerified: user.email_verified
+        },
+        token
+      });
+    } catch (error) {
+      console.error('[AuthService.login]', error);
+      return this._fail('Login failed');
     }
-
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
-
-    if (fullName) { updates.push(`full_name = $${paramCount++}`); values.push(fullName); }
-    if (email)    { updates.push(`email = $${paramCount++}`);     values.push(email); }
-    if (username) { updates.push(`username = $${paramCount++}`);  values.push(username); }
-
-    if (updates.length === 0) {
-      throw { status: 400, message: 'No fields to update' };
-    }
-
-    const updatedUser = await UserModel.updateProfile(userId, updates, values);
-    return { user: updatedUser };
   },
 
-  // ─── CHANGE PASSWORD ───────────────────────────────────────
+  async logout(token, user = null) {
+    try {
+      if (!token) return this._fail('No token provided');
+      const ctx = user ? this._extractAuthContext(user) : this._ok(null);
+      if (!ctx.success) return ctx;
 
-  async changePassword(userId, currentPassword, newPassword, currentToken) {
-    if (!currentPassword || !newPassword) {
-      throw { status: 400, message: 'Please provide current and new password' };
+      const businessId = ctx.data?.businessId || null;
+      const deleteResult = await UserModel.deleteSession(token, businessId);
+      if (!deleteResult.success) return deleteResult;
+
+      return this._ok({ loggedOut: true });
+    } catch (error) {
+      console.error('[AuthService.logout]', error);
+      return this._fail('Logout failed');
     }
+  },
 
-    if (newPassword.length < 8 || newPassword.length > 16) {
-      throw { status: 400, message: 'New password must be 8-16 characters' };
+  async getProfile(userId, user = null) {
+    try {
+      if (this._isNil(userId)) return this._fail('userId is required');
+
+      let businessId = null;
+      if (user) {
+        const ctxResult = this._extractAuthContext(user);
+        if (!ctxResult.success) return ctxResult;
+        const ctx = ctxResult.data;
+        if (String(ctx.userId) !== String(userId) && ctx.role !== 'admin') {
+          return this._fail('Not found or unauthorized');
+        }
+        businessId = ctx.businessId;
+      }
+
+      const profileResult = await UserModel.findById(userId, businessId);
+      if (!profileResult.success) return profileResult;
+      const profile = profileResult.data;
+
+      return this._ok({
+        user: {
+          userId: profile.user_id,
+          username: profile.username,
+          email: profile.email,
+          fullName: profile.full_name,
+          role: profile.role,
+          isActive: profile.is_active,
+          emailVerified: profile.email_verified,
+          lastLogin: profile.last_login,
+          createdAt: profile.created_at
+        },
+        business: {
+          businessId: profile.business_id,
+          businessName: profile.business_name,
+          businessType: profile.business_type,
+          registrationNumber: profile.registration_number,
+          address: profile.address,
+          contactEmail: profile.contact_email,
+          contactPhone: profile.contact_phone
+        },
+        ecoTrust: {
+          score: profile.ecotrust_score,
+          level: profile.ecotrust_level,
+          rank: profile.ecotrust_rank
+        }
+      });
+    } catch (error) {
+      console.error('[AuthService.getProfile]', error);
+      return this._fail('Failed to retrieve profile');
     }
+  },
 
-    if (!/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(newPassword)) {
-      throw { status: 400, message: 'Password must contain both letters and numbers' };
+  async updateProfile(userId, payload, user = null) {
+    try {
+      if (this._isNil(userId)) return this._fail('userId is required');
+
+      const profileResult = await UserModel.findById(userId);
+      if (!profileResult.success) return profileResult;
+      const currentProfile = profileResult.data;
+      const businessId = currentProfile.business_id;
+
+      if (user) {
+        const ctxResult = this._extractAuthContext(user);
+        if (!ctxResult.success) return ctxResult;
+        const ctx = ctxResult.data;
+        if (String(ctx.userId) !== String(userId) && ctx.role !== 'admin') {
+          return this._fail('Not found or unauthorized');
+        }
+        if (String(ctx.businessId) !== String(businessId)) {
+          return this._fail('Not found or unauthorized');
+        }
+      }
+
+      const { fullName, email, username } = payload || {};
+
+      if (email || username) {
+        const existsResult = await UserModel.checkEmailOrUsernameExists(
+          email,
+          username,
+          userId,
+          businessId
+        );
+        if (!existsResult.success) return existsResult;
+        if (existsResult.data === true) {
+          return this._fail('Email or username already taken');
+        }
+      }
+
+      const updates = [];
+      const values = [];
+      let paramCount = 1;
+
+      if (fullName) {
+        updates.push(`full_name = $${paramCount++}`);
+        values.push(fullName);
+      }
+      if (email) {
+        updates.push(`email = $${paramCount++}`);
+        values.push(email);
+      }
+      if (username) {
+        updates.push(`username = $${paramCount++}`);
+        values.push(username);
+      }
+
+      if (updates.length === 0) {
+        return this._fail('No fields to update');
+      }
+
+      const updatedResult = await UserModel.updateProfile(userId, updates, values, businessId);
+      if (!updatedResult.success) return updatedResult;
+
+      return this._ok({ user: updatedResult.data });
+    } catch (error) {
+      console.error('[AuthService.updateProfile]', error);
+      return this._fail('Failed to update profile');
     }
+  },
 
-    const passwordHash = await UserModel.getPasswordHash(userId);
-    if (!passwordHash) {
-      throw { status: 404, message: 'User not found' };
+  async changePassword(userId, currentPassword, newPassword, currentToken, user = null) {
+    try {
+      if (!currentPassword || !newPassword) {
+        return this._fail('Please provide current and new password');
+      }
+      if (newPassword.length < 8 || newPassword.length > 16) {
+        return this._fail('New password must be 8-16 characters');
+      }
+      if (!/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(newPassword)) {
+        return this._fail('Password must contain both letters and numbers');
+      }
+
+      let businessId = null;
+      if (user) {
+        const ctxResult = this._extractAuthContext(user);
+        if (!ctxResult.success) return ctxResult;
+        const ctx = ctxResult.data;
+        if (String(ctx.userId) !== String(userId) && ctx.role !== 'admin') {
+          return this._fail('Not found or unauthorized');
+        }
+        businessId = ctx.businessId;
+      } else {
+        const profileResult = await UserModel.findById(userId);
+        if (!profileResult.success) return profileResult;
+        businessId = profileResult.data.business_id;
+      }
+
+      const hashResult = await UserModel.getPasswordHash(userId, businessId);
+      if (!hashResult.success) return hashResult;
+      const passwordHash = hashResult.data;
+      if (!passwordHash) return this._fail('User not found');
+
+      const isPasswordValid = await comparePassword(currentPassword, passwordHash);
+      if (!isPasswordValid) return this._fail('Current password is incorrect');
+
+      const hashedPassword = await hashPassword(newPassword);
+      const updateResult = await UserModel.updatePassword(userId, hashedPassword, businessId);
+      if (!updateResult.success) return updateResult;
+
+      const deleteResult = await UserModel.deleteOtherSessions(userId, currentToken, businessId);
+      if (!deleteResult.success && deleteResult.error !== 'Not found or unauthorized') {
+        return deleteResult;
+      }
+
+      return this._ok({ changed: true });
+    } catch (error) {
+      console.error('[AuthService.changePassword]', error);
+      return this._fail('Failed to change password');
     }
-
-    const isPasswordValid = await comparePassword(currentPassword, passwordHash);
-    if (!isPasswordValid) {
-      throw { status: 401, message: 'Current password is incorrect' };
-    }
-
-    const hashedPassword = await hashPassword(newPassword);
-    await UserModel.updatePassword(userId, hashedPassword);
-    await UserModel.deleteOtherSessions(userId, currentToken);
-
-    return true;
   }
 };
 

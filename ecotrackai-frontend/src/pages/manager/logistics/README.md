@@ -1,0 +1,1 @@
+Logistics manager pages: LogisticsManagerPage, LogisticsDashboardView, LogisticsHistoryView.

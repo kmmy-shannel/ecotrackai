@@ -53,9 +53,46 @@ const approvalService = {
 
   // ─── Sustainability Manager: fetch pending carbon verifications ────────────
   // GET /api/approvals/sustainability
-  getSustainabilityApprovals: async (viewerRole = null) => {
+ getSustainabilityApprovals: async (viewerRole = null) => {
     const params = viewerRole === 'admin' ? { viewer_role: 'admin' } : {};
     const response = await api.get('/approvals/sustainability', { params });
+    return response.data;
+  },
+
+  createFromAlert: async (payload) => {
+    const response = await api.post('/approvals/from-alert', payload);
+    return response.data;
+  },
+
+  getRequestsForAdmin: async () => {
+    const response = await api.get('/approvals/admin-requests');
+    return response.data;
+  },
+
+  adminReviewRequest: async (approvalId, decision, comment = '') => {
+    const response = await api.put(`/approvals/${approvalId}/admin-review`, {
+      decision,
+      admin_comment: comment,
+    });
+    return response.data;
+  },
+
+  approveApproval: async (approvalId, note = '') => {
+    const response = await api.patch(`/approvals/${approvalId}/decision`, {
+      decision: 'approved',
+      review_notes: note,
+    });
+    return response.data;
+  },
+
+  declineApproval: async (approvalId, reason) => {
+    if (!reason || !String(reason).trim()) {
+      throw new Error('Decline reason is required');
+    }
+    const response = await api.patch(`/approvals/${approvalId}/decision`, {
+      decision: 'declined',
+      review_notes: reason,
+    });
     return response.data;
   },
 };

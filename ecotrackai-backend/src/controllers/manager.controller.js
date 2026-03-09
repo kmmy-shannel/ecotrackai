@@ -10,101 +10,198 @@ const { sendSuccess, sendError } = require('../utils/response.utils');
 // GET /api/managers
 const getManagers = async (req, res) => {
   try {
-    if (!req.user) {
-      return sendError(res, 401, 'Not authenticated');
-    }
+    if (!req.user) return sendError(res, 401, 'Not authenticated');
 
     const result = await ManagerService.getManagers(req.user.businessId);
-    sendSuccess(res, 200, 'Managers retrieved successfully', result);
+
+    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    sendSuccess(res, 200, 'Managers retrieved successfully', result.data);
 
   } catch (error) {
     console.error('Get managers error:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to retrieve managers');
+    sendError(res, 500, 'Failed to retrieve managers');
   }
 };
 
-// POST /api/managers
 const createManager = async (req, res) => {
   try {
-    console.log('CREATING MANAGER ACCOUNT');
-    console.log('Request by admin:', req.user.userId);
-    console.log('Request data:', req.body);
-
-    if (!req.user) {
-      return sendError(res, 401, 'Not authenticated');
-    }
+    if (!req.user) return sendError(res, 401, 'Not authenticated');
 
     const result = await ManagerService.createManager(req.user, req.body);
 
-    console.log('MANAGER CREATION COMPLETED');
-    sendSuccess(res, 201, 'Manager account created successfully', result);
+    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    sendSuccess(res, 201, 'Manager account created successfully', result.data);
 
   } catch (error) {
     console.error('CREATE MANAGER ERROR:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to create manager account');
+    sendError(res, 500, 'Failed to create manager account');
   }
 };
 
-// PUT /api/managers/:managerId
 const updateManager = async (req, res) => {
   try {
-    if (!req.user) {
-      return sendError(res, 401, 'Not authenticated');
-    }
+    if (!req.user) return sendError(res, 401, 'Not authenticated');
 
-    const result = await ManagerService.updateManager(
-      req.user,
-      req.params.managerId,
-      req.body
-    );
-    sendSuccess(res, 200, 'Manager updated successfully', result);
+    const result = await ManagerService.updateManager(req.user, req.params.managerId, req.body);
+
+    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    sendSuccess(res, 200, 'Manager updated successfully', result.data);
 
   } catch (error) {
     console.error('Update manager error:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to update manager');
+    sendError(res, 500, 'Failed to update manager');
   }
 };
 
-// DELETE /api/managers/:managerId
 const deleteManager = async (req, res) => {
   try {
-    if (!req.user) {
-      return sendError(res, 401, 'Not authenticated');
-    }
+    if (!req.user) return sendError(res, 401, 'Not authenticated');
 
-    await ManagerService.deleteManager(req.user, req.params.managerId);
-    sendSuccess(res, 200, 'Manager account deactivated successfully');
+    const result = await ManagerService.deleteManager(req.user, req.params.managerId);
+
+    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    sendSuccess(res, 200, 'Manager account deactivated successfully', result.data);
 
   } catch (error) {
     console.error('Delete manager error:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to delete manager');
+    sendError(res, 500, 'Failed to delete manager');
   }
 };
 
-// POST /api/managers/:managerId/reset-password
 const resetManagerPassword = async (req, res) => {
   try {
-    if (!req.user) {
-      return sendError(res, 401, 'Not authenticated');
-    }
+    if (!req.user) return sendError(res, 401, 'Not authenticated');
 
-    await ManagerService.resetManagerPassword(
-      req.user,
-      req.params.managerId,
-      req.body.newPassword
+    const result = await ManagerService.resetManagerPassword(
+      req.user, req.params.managerId, req.body.newPassword
     );
-    sendSuccess(res, 200, 'Password reset successfully');
+
+    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    sendSuccess(res, 200, 'Password reset successfully', result.data);
 
   } catch (error) {
     console.error('Reset password error:', error);
-    sendError(res, error.status || 500, error.message || 'Failed to reset password');
+    sendError(res, 500, 'Failed to reset password');
+  }
+};
+// ── LOGISTICS APPROVALS (NEW — added below existing functions) ──
+
+const getLogisticsPending = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.getLogisticsPending(req.user.businessId);
+    result.success ? sendSuccess(res, 200, 'Pending retrieved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('getLogisticsPending error:', error);
+    sendError(res, 500, 'Failed to retrieve pending approvals');
   }
 };
 
-module.exports = {
-  getManagers,
-  createManager,
-  updateManager,
-  deleteManager,
-  resetManagerPassword
+const getLogisticsHistory = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.getLogisticsHistory(req.user.businessId);
+    result.success ? sendSuccess(res, 200, 'History retrieved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('getLogisticsHistory error:', error);
+    sendError(res, 500, 'Failed to retrieve history');
+  }
 };
+
+const getLogisticsStats = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.getLogisticsStats(req.user.businessId);
+    result.success ? sendSuccess(res, 200, 'Stats retrieved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('getLogisticsStats error:', error);
+    sendError(res, 500, 'Failed to retrieve stats');
+  }
+};
+
+const approveLogistics = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.approveLogistics(
+      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+    );
+    result.success ? sendSuccess(res, 200, 'Route approved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('approveLogistics error:', error);
+    sendError(res, 500, 'Failed to approve route');
+  }
+};
+
+const declineLogistics = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.declineLogistics(
+      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+    );
+    result.success ? sendSuccess(res, 200, 'Route declined', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('declineLogistics error:', error);
+    sendError(res, 500, 'Failed to decline route');
+  }
+};
+
+const getInventoryPending = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.getInventoryPending(req.user.businessId);
+    result.success ? sendSuccess(res, 200, 'Pending retrieved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('getInventoryPending error:', error);
+    sendError(res, 500, 'Failed to retrieve pending approvals');
+  }
+};
+
+const getInventoryHistory = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.getInventoryHistory(req.user.businessId);
+    result.success ? sendSuccess(res, 200, 'History retrieved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('getInventoryHistory error:', error);
+    sendError(res, 500, 'Failed to retrieve history');
+  }
+};
+
+const approveInventory = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.approveInventory(
+      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+    );
+    result.success ? sendSuccess(res, 200, 'Approved', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('approveInventory error:', error);
+    sendError(res, 500, 'Failed to approve');
+  }
+};
+
+const declineInventory = async (req, res) => {
+  try {
+    const ManagerModel = require('../models/manager.model');
+    const result = await ManagerModel.declineInventory(
+      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+    );
+    result.success ? sendSuccess(res, 200, 'Declined', result.data)
+                   : sendError(res, 400, result.error);
+  } catch (error) {
+    console.error('declineInventory error:', error);
+    sendError(res, 500, 'Failed to decline');
+  }
+};
+module.exports = { getManagers, createManager, updateManager, deleteManager, resetManagerPassword, getLogisticsPending, getLogisticsHistory, getLogisticsStats,
+  approveLogistics, declineLogistics,
+  getInventoryPending, getInventoryHistory,
+  approveInventory, declineInventory, };

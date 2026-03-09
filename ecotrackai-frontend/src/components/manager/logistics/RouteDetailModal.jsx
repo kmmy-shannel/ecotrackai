@@ -16,7 +16,7 @@ const RouteDetailModal = ({ approval, onClose, onDecision, submitting, readOnly 
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
 
         {/* Header — dark green matching admin style */}
-        <div className="bg-gradient-to-r from-[#1a4d2e] to-green-700 text-white p-6 rounded-t-2xl flex-shrink-0">
+        <div className="bg-gradient-to-r from-green-700 to-green-600 text-white p-6 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold">{approval.product_name}</h2>
@@ -45,7 +45,7 @@ const RouteDetailModal = ({ approval, onClose, onDecision, submitting, readOnly 
                 <div key={i} className="flex items-start gap-2 text-sm">
                   <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${
                     stop.type === 'origin' ? 'bg-green-500' :
-                    stop.type === 'destination' ? 'bg-red-500' : 'bg-[#1a4d2e]'
+                    stop.type === 'destination' ? 'bg-red-500' : 'bg-green-700'
                   }`} />
                   <span className="text-gray-700">{stop.location}</span>
                 </div>
@@ -123,16 +123,16 @@ const RouteDetailModal = ({ approval, onClose, onDecision, submitting, readOnly 
               <button
                 onClick={() => onDecision(approval.approval_id || approval.id, 'approved', comments)}
                 disabled={submitting}
-                className="flex-1 py-3 bg-gradient-to-r from-[#1a4d2e] to-green-700 hover:from-green-800 hover:to-green-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-md"
+                className="flex-1 py-3 bg-gradient-to-r from-green-700 to-green-600 hover:from-green-800 hover:to-green-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-md"
               >
-                ✓ Accept
+                Accept
               </button>
               <button
                 onClick={() => onDecision(approval.approval_id || approval.id, 'declined', comments)}
                 disabled={submitting}
                 className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
               >
-                ✗ Decline
+                Decline
               </button>
               <button
                 onClick={onClose}
@@ -144,7 +144,7 @@ const RouteDetailModal = ({ approval, onClose, onDecision, submitting, readOnly 
           ) : (
             <button
               onClick={onClose}
-              className="w-full py-3 bg-[#1a4d2e] hover:bg-green-900 text-white font-semibold rounded-xl transition-colors"
+              className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition-colors"
             >
               Close
             </button>

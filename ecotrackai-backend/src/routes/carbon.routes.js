@@ -1,7 +1,8 @@
 const { Router } = require('express');
 const { 
   getCarbonFootprint,
-  getMonthlyComparison 
+  getMonthlyComparison,
+  finalizeCarbonVerification
 } = require('../controllers/carbon.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
@@ -12,5 +13,8 @@ router.get('/', authenticate, getCarbonFootprint);
 
 // Get monthly comparison
 router.get('/monthly', authenticate, getMonthlyComparison);
+
+// Verify or request revision for carbon record
+router.patch('/:id/verify', authenticate, finalizeCarbonVerification);
 
 module.exports = router;

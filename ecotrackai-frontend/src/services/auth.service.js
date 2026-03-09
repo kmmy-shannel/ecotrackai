@@ -1,125 +1,110 @@
 import axios from 'axios';
 
-const API_URL = `${process.env.REACT_APP_API_URL}/auth`;
-
-
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = `${API_BASE_URL}/auth`;
 
 class AuthService {
-  async register(userData) {
-    try {
-      const response = await axios.post(`${API_URL}/register`, userData);
-      
-      if (response.data.success && response.data.data.token) {
-        // Store both user and token
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        localStorage.setItem('token', response.data.data.token);
+  _extractPayload(responseData) {
+    if (!responseData || typeof responseData !== 'object') return null;
+
+    // Supports:
+    // { success, data: { user, token } }
+    // { success, data: { success, data: { user, token } } }
+    const level1 = responseData.data;
+    if (level1 && typeof level1 === 'object') {
+      const level2 = level1.data;
+      if (level2 && typeof level2 === 'object' && (level2.user || level2.token)) {
+        return level2;
       }
-      
-      return response.data;
-    } catch (error) {
-      throw error;
+      if (level1.user || level1.token) {
+        return level1;
+      }
     }
+
+    if (responseData.user || responseData.token) {
+      return responseData;
+    }
+
+    return null;
+  }
+
+  _normalizeResponse(responseData) {
+    return {
+      ...(responseData || {}),
+      data: this._extractPayload(responseData),
+    };
+  }
+
+  _persistSession(payload) {
+    if (!payload?.token || !payload?.user) return;
+    localStorage.setItem('token', payload.token);
+    localStorage.setItem('user', JSON.stringify(payload.user));
+  }
+
+  _clearSession() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
+
+  async register(userData) {
+    const response = await axios.post(`${API_URL}/register`, userData);
+    return this._normalizeResponse(response.data);
   }
 
   async login(credentials) {
-    try {
-      console.log('Logging in...');
-      const response = await axios.post(`${API_URL}/login`, credentials);
-      
-      if (response.data.success && response.data.data.token) {
-        console.log('Login successful, storing token');
-        
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        localStorage.setItem('token', response.data.data.token);
-        
-        console.log('Token stored:', localStorage.getItem('token') ? 'YES' : 'NO');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+    const response = await axios.post(`${API_URL}/login`, credentials);
+    const normalized = this._normalizeResponse(response.data);
+    this._persistSession(normalized.data);
+    return normalized;
   }
 
-  // NEW: Send OTP to email
   async sendOTP(email) {
-    try {
-      console.log('Sending OTP to:', email);
-      const response = await axios.post(`${API_URL}/send-otp`, { email });
-      console.log('OTP sent successfully');
-      return response.data;
-    } catch (error) {
-      console.error('Send OTP error:', error);
-      throw error;
-    }
+    const response = await axios.post(`${API_URL}/send-otp`, { email });
+    return response.data;
   }
 
-  // NEW: Verify OTP code
   async verifyOTP(email, otp) {
-    try {
-      console.log('Verifying OTP for:', email);
-      const response = await axios.post(`${API_URL}/verify-otp`, { email, otp });
-      
-      if (response.data.success && response.data.data.token) {
-        // Store user and token after successful verification
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        localStorage.setItem('token', response.data.data.token);
-      }
-      
-      console.log('OTP verified successfully');
-      return response.data;
-    } catch (error) {
-      console.error('Verify OTP error:', error);
-      throw error;
-    }
+    const response = await axios.post(`${API_URL}/verify-otp`, { email, otp });
+    const normalized = this._normalizeResponse(response.data);
+    this._persistSession(normalized.data);
+    return normalized;
   }
 
-  // NEW: Initiate forgot password process
   async forgotPassword(email) {
-    try {
-      console.log('Initiating password reset for:', email);
-      const response = await axios.post(`${API_URL}/forgot-password`, { email });
-      console.log('Password reset email sent');
-      return response.data;
-    } catch (error) {
-      console.error('Forgot password error:', error);
-      throw error;
-    }
+    const response = await axios.post(`${API_URL}/forgot-password`, { email });
+    return response.data;
   }
 
-  // NEW: Reset password with token
   async resetPassword(token, newPassword) {
-    try {
-      console.log('Resetting password with token');
-      const response = await axios.post(`${API_URL}/reset-password/${token}`, { 
-        password: newPassword 
-      });
-      console.log('Password reset successful');
-      return response.data;
-    } catch (error) {
-      console.error('Reset password error:', error);
-      throw error;
-    }
+    const response = await axios.post(`${API_URL}/reset-password/${token}`, {
+      password: newPassword,
+    });
+    return response.data;
   }
 
-  logout() {
-    console.log('Logging out, clearing localStorage');
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
+  async logout() {
+    const token = localStorage.getItem('token');
+    try {
+      if (token) {
+        await axios.post(
+          `${API_URL}/logout`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+    } finally {
+      this._clearSession();
+    }
   }
 
   getCurrentUser() {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        return JSON.parse(userStr);
-      } catch (e) {
-        console.error('Error parsing user data:', e);
-        return null;
-      }
+    const raw = localStorage.getItem('user');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (_error) {
+      return null;
     }
-    return null;
   }
 
   getToken() {
@@ -127,7 +112,8 @@ class AuthService {
   }
 
   isAuthenticated() {
-    return !!this.getToken();
+    return Boolean(this.getToken());
   }
 }
+
 export default new AuthService();

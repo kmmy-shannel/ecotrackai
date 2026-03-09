@@ -69,7 +69,7 @@ const ManageAccountsModal = ({ onClose }) => {
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#1a4d2e] to-green-700 text-white p-6 rounded-t-2xl flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-green-700 to-green-600 text-white p-6 rounded-t-2xl flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
               <Users size={22} />

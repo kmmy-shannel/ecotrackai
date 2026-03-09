@@ -57,7 +57,7 @@ const ApprovalDetailModal = ({
               </p>
               <h2 className="text-xl font-bold text-gray-800">Approval Details</h2>
               <p className="text-xs text-gray-500 mt-1">
-                Submitted by: <span className="font-semibold text-[#1a4d2e]">Admin</span>
+                Submitted by: <span className="font-semibold text-green-700">Admin</span>
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -82,7 +82,7 @@ const ApprovalDetailModal = ({
           {/* Product Info */}
           <div>
             <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <Package size={14} className="text-[#1a4d2e]" /> Product Information
+              <Package size={14} className="text-green-700" /> Product Information
             </h3>
             <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-4">
               <div>
@@ -146,7 +146,7 @@ const ApprovalDetailModal = ({
                 onChange={(e) => setComments(e.target.value)}
                 rows={3}
                 placeholder="Add a note about your decision (optional)…"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-green-700 focus:border-transparent"
               />
 
               {/* Approve / Decline */}
@@ -154,7 +154,7 @@ const ApprovalDetailModal = ({
                 <button
                   onClick={() => onDecision(approval.approval_id || approval.id, 'approved', comments)}
                   disabled={submitting || sendingRequest}
-                  className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-[#1a4d2e] hover:bg-green-800 text-white font-semibold rounded-xl text-sm transition-all shadow-sm disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl text-sm transition-all shadow-sm disabled:opacity-50"
                 >
                   {submitting ? <Loader size={15} className="animate-spin" /> : <ThumbsUp size={15} />}
                   Approve
@@ -169,8 +169,8 @@ const ApprovalDetailModal = ({
                 </button>
               </div>
 
-              {/* Request to Admin */}
-              {!requestSent ? (
+              {/* Optional escalation to admin */}
+              {!requestSent && onRequestToAdmin ? (
                 <div>
                   <button
                     onClick={() => setShowRequestBox(!showRequestBox)}
@@ -214,12 +214,12 @@ const ApprovalDetailModal = ({
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : onRequestToAdmin ? (
                 <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <SendHorizonal size={14} className="text-amber-600" />
                   <p className="text-sm font-semibold text-amber-700">Request sent to Admin — awaiting their review.</p>
                 </div>
-              )}
+              ) : null}
             </div>
           ) : (
             /* Status Display (read-only or already decided) */
