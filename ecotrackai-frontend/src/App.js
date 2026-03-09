@@ -19,8 +19,8 @@ import EcoScorePage        from './pages/admin/EcoScorePage';
 import ManagerPage         from './pages/ManagerPage';
 
 // ── Manager pages ──────────────────────────────────────────
-import InventoryManagerPage     from './pages/manager/inventory/InventoryManagerPage';
-import LogisticsManagerPage     from './pages/manager/logistics/LogisticsManagerPage';
+import InventoryManagerPage      from './pages/manager/inventory/InventoryManagerPage';
+import LogisticsManagerPage      from './pages/manager/logistics/LogisticsManagerPage';
 import SustainabilityManagerPage from './pages/manager/sustainability/SustainabilityManagerPage';
 
 // ── Role dashboards ────────────────────────────────────────
@@ -47,13 +47,13 @@ const DashboardRedirect = () => {
 const AppRoutes = () => (
   <Routes>
     {/* ── Public ─────────────────────────────────────────── */}
-    <Route path="/"                        element={<Navigate to="/login" replace />} />
-    <Route path="/login"                   element={<LoginPage />} />
-    <Route path="/register"                element={<RegisterPage />} />
-    <Route path="/verify-otp"              element={<VerifyOTPPage />} />
-    <Route path="/forgot-password"         element={<ForgotPasswordPage />} />
-    <Route path="/reset-password/:token"   element={<ResetPasswordPage />} />
-    <Route path="/unauthorized"            element={<UnauthorizedPage />} />
+    <Route path="/"                       element={<Navigate to="/login" replace />} />
+    <Route path="/login"                  element={<LoginPage />} />
+    <Route path="/register"               element={<RegisterPage />} />
+    <Route path="/verify-otp"             element={<VerifyOTPPage />} />
+    <Route path="/forgot-password"        element={<ForgotPasswordPage />} />
+    <Route path="/reset-password/:token"  element={<ResetPasswordPage />} />
+    <Route path="/unauthorized"           element={<UnauthorizedPage />} />
 
     {/* ── Smart dashboard redirect ────────────────────────── */}
     <Route path="/dashboard" element={<DashboardRedirect />} />
@@ -71,29 +71,38 @@ const AppRoutes = () => (
     <Route path="/dashboard/logistics-manager" element={
       <ProtectedRoute requiredRole="logistics_manager" element={<LogisticsManagerPage />} />
     } />
+
+    {/* ── Sustainability Manager — base + sub-routes ──────── */}
     <Route path="/dashboard/sustainability-manager" element={
       <ProtectedRoute requiredRole="sustainability_manager" element={<SustainabilityManagerPage />} />
     } />
+    <Route path="/sustainability-manager/history" element={<Navigate to="/dashboard/sustainability-manager?tab=history" replace />} 
+    />
+    <Route path="/dashboard/sustainability-manager/history" element={
+      <ProtectedRoute requiredRole="sustainability_manager" element={<SustainabilityManagerPage />} />
+    } />
+
     <Route path="/dashboard/driver" element={
       <ProtectedRoute requiredRole="driver" element={<DriverDashboard />} />
     } />
 
     {/* ── Admin sub-pages ─────────────────────────────────── */}
-    <Route path="/products"  element={<ProtectedRoute requiredRole="admin" element={<ProductsPage />} />} />
+    <Route path="/products"   element={<ProtectedRoute requiredRole="admin" element={<ProductsPage />} />} />
     <Route path="/deliveries" element={<ProtectedRoute requiredRole="admin" element={<DeliveryRoutesPage />} />} />
-    <Route path="/alerts"    element={<ProtectedRoute requiredRole="admin" element={<AlertsPage />} />} />
-    <Route path="/carbon"    element={
+    <Route path="/alerts"     element={<ProtectedRoute requiredRole="admin" element={<AlertsPage />} />} />
+    <Route path="/carbon"     element={
       <ProtectedRoute requiredRole={['admin', 'sustainability_manager']} element={<CarbonFootprintPage />} />
     } />
-    <Route path="/managers"  element={<ProtectedRoute requiredRole="admin" element={<ManagerPage />} />} />
-    <Route path="/ecoscore"  element={<ProtectedRoute requiredRole="admin" element={<EcoScorePage />} />} />
+    <Route path="/managers"   element={<ProtectedRoute requiredRole="admin" element={<ManagerPage />} />} />
+    <Route path="/ecoscore"   element={<ProtectedRoute requiredRole="admin" element={<EcoScorePage />} />} />
 
-    {/* ── Legacy redirects (keep for backward compat) ─────── */}
-    <Route path="/inventory-manager"     element={<Navigate to="/dashboard/inventory-manager" replace />} />
-    <Route path="/logistics-manager"     element={<Navigate to="/dashboard/logistics-manager" replace />} />
-    <Route path="/sustainability-manager" element={<Navigate to="/dashboard/sustainability-manager" replace />} />
-    <Route path="/superadmin/*"          element={<Navigate to="/dashboard/super-admin" replace />} />
-    <Route path="/driver"                element={<Navigate to="/dashboard/driver" replace />} />
+    {/* ── Legacy redirects ────────────────────────────────── */}
+    <Route path="/inventory-manager"              element={<Navigate to="/dashboard/inventory-manager" replace />} />
+    <Route path="/logistics-manager"              element={<Navigate to="/dashboard/logistics-manager" replace />} />
+    <Route path="/sustainability-manager"         element={<Navigate to="/dashboard/sustainability-manager" replace />} />
+    <Route path="/sustainability-manager/history" element={<Navigate to="/dashboard/sustainability-manager/history" replace />} />
+    <Route path="/superadmin/*"                   element={<Navigate to="/dashboard/super-admin" replace />} />
+    <Route path="/driver"                         element={<Navigate to="/dashboard/driver" replace />} />
 
     {/* ── 404 fallback ────────────────────────────────────── */}
     <Route path="*" element={<Navigate to="/login" replace />} />

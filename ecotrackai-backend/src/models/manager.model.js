@@ -4,7 +4,182 @@
 // ============================================================
 const pool = require('../config/database');
 
+const MANAGED_ROLES = [
+  'inventory_manager',
+  'logistics_manager',
+  'sustainability_manager',
+  'driver'
+];
+
 const ManagerModel = {
+  async findAllByBusiness(businessId) {
+    const result = await pool.query(`
+      SELECT
+        user_id,
+        username,
+        email,
+        full_name,
+        role,
+        is_active,
+        created_at,
+        updated_at
+      FROM users
+      WHERE business_id = $1
+        AND role = ANY($2::text[])
+      ORDER BY created_at DESC
+    `, [businessId, MANAGED_ROLES]);
+
+    return result.rows;
+  },
+
+  async findByEmailOrUsername(email, username) {
+    const result = await pool.query(`
+      SELECT user_id
+      FROM users
+      WHERE email = $1 OR username = $2
+      LIMIT 1
+    `, [email, username]);
+
+    return result.rows[0] || null;
+  },
+
+  async create(businessId, username, email, hashedPassword, fullName, role) {
+    const result = await pool.query(`
+      INSERT INTO users (
+        business_id,
+        username,
+        email,
+        password_hash,
+        full_name,
+        role
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING
+        user_id,
+        username,
+        email,
+        full_name,
+        role,
+        is_active,
+        created_at
+    `, [businessId, username, email, hashedPassword, fullName, role]);
+
+    return result.rows[0] || null;
+  },
+
+  async findNonAdminByIdAndBusiness(managerId, businessId) {
+    const result = await pool.query(`
+      SELECT
+        user_id,
+        username,
+        email,
+        full_name,
+        role,
+        is_active
+      FROM users
+      WHERE user_id = $1
+        AND business_id = $2
+        AND role = ANY($3::text[])
+      LIMIT 1
+    `, [managerId, businessId, MANAGED_ROLES]);
+
+    return result.rows[0] || null;
+  },
+
+  async update(managerId, changes = {}) {
+    const updates = [];
+    const values = [];
+
+    if (changes.fullName !== undefined) {
+      values.push(changes.fullName);
+      updates.push(`full_name = $${values.length}`);
+    }
+
+    if (changes.email !== undefined) {
+      values.push(changes.email);
+      updates.push(`email = $${values.length}`);
+    }
+
+    if (changes.username !== undefined) {
+      values.push(changes.username);
+      updates.push(`username = $${values.length}`);
+    }
+
+    if (changes.isActive !== undefined) {
+      values.push(changes.isActive);
+      updates.push(`is_active = $${values.length}`);
+    }
+
+    if (updates.length === 0) return null;
+
+    values.push(managerId);
+
+    const result = await pool.query(`
+      UPDATE users
+      SET ${updates.join(', ')}, updated_at = NOW()
+      WHERE user_id = $${values.length}
+      RETURNING
+        user_id,
+        username,
+        email,
+        full_name,
+        role,
+        is_active,
+        updated_at
+    `, values);
+
+    return result.rows[0] || null;
+  },
+
+  async findByIdAndBusiness(managerId, businessId) {
+    const result = await pool.query(`
+      SELECT
+        user_id,
+        business_id,
+        username,
+        email,
+        full_name,
+        role,
+        is_active
+      FROM users
+      WHERE user_id = $1 AND business_id = $2
+      LIMIT 1
+    `, [managerId, businessId]);
+
+    return result.rows[0] || null;
+  },
+
+  async deactivate(managerId) {
+    const result = await pool.query(`
+      UPDATE users
+      SET is_active = FALSE, updated_at = NOW()
+      WHERE user_id = $1
+      RETURNING user_id
+    `, [managerId]);
+
+    return result.rows[0] || null;
+  },
+
+  async deleteSessions(managerId) {
+    await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [managerId]);
+    return true;
+  },
+
+  async updatePassword(managerId, hashedPassword) {
+    const result = await pool.query(`
+      UPDATE users
+      SET
+        password_hash = $1,
+        reset_password_token = NULL,
+        reset_password_expires = NULL,
+        updated_at = NOW()
+      WHERE user_id = $2
+      RETURNING user_id
+    `, [hashedPassword, managerId]);
+
+    return result.rows[0] || null;
+  },
+
 
   // ── LOGISTICS: Pending route approvals ──────────────────
   async getLogisticsPending(businessId) {

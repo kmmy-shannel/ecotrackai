@@ -117,11 +117,12 @@ export const getRoleNavItems = (role) => {
       { label: 'History', path: '/dashboard/logistics-manager?tab=history', icon: 'history' },
       { label: 'Map', path: '/dashboard/logistics-manager?tab=map', icon: 'navigation' },
     ],
-    [ROLES.SUSTAINABILITY_MANAGER]: [
-      { label: 'Pending Verifications', path: '/dashboard/sustainability-manager?tab=pending', icon: 'check' },
-      { label: 'EcoTrust Audit', path: '/dashboard/sustainability-manager?tab=audit', icon: 'flag' },
-      { label: 'Carbon Trends', path: '/dashboard/sustainability-manager?tab=trends', icon: 'chart' },
-    ],
+[ROLES.SUSTAINABILITY_MANAGER]: [
+  { label: 'Pending Verifications', path: '/dashboard/sustainability-manager?tab=pending',  icon: 'check' },
+  { label: 'Verification History',  path: '/dashboard/sustainability-manager?tab=history',  icon: 'history' },
+  { label: 'EcoTrust Audit',        path: '/dashboard/sustainability-manager?tab=audit',    icon: 'flag' },
+  { label: 'Carbon Trends',         path: '/dashboard/sustainability-manager?tab=trends',   icon: 'chart' },
+],
     [ROLES.DRIVER]: [
       { label: "Today's Route", path: '/dashboard/driver?tab=today', icon: 'navigation' },
       { label: 'History', path: '/dashboard/driver?tab=history', icon: 'history' },

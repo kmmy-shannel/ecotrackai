@@ -30,6 +30,29 @@ const getPendingCount = async (req, res) => {
   }
 };
 
+// GET /api/approvals/sustainability
+const getSustainabilityApprovals = async (req, res) => {
+  try {
+    const result = await ApprovalService.getApprovals(
+      req.user,
+      'pending',
+      'sustainability_manager'
+    );
+
+    if (!result.success) {
+      return sendError(res, 400, result.error);
+    }
+
+    return sendSuccess(res, 200, 'Sustainability approvals fetched', {
+      approvals: result.data?.approvals || []
+    });
+  } catch (error) {
+    console.error('Get sustainability approvals error:', error);
+    return sendError(res, 500, 'Failed to fetch sustainability approvals');
+  }
+};
+
+
 // GET /api/approvals/history?limit=50
 const getApprovalHistory = async (req, res) => {
   try {
@@ -304,5 +327,5 @@ module.exports = {
   createFromDelivery, getRouteApprovals,
   approveRouteOptimization,
   declineRouteOptimization,
-  getRouteApprovalStats,
+  getRouteApprovalStats,getSustainabilityApprovals
 };

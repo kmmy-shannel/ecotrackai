@@ -7,12 +7,16 @@
 const ManagerService = require('../services/manager.service');
 const { sendSuccess, sendError } = require('../utils/response.utils');
 
+const resolveBusinessId = (user) => user?.businessId ?? user?.business_id ?? null;
+
 // GET /api/managers
 const getManagers = async (req, res) => {
   try {
     if (!req.user) return sendError(res, 401, 'Not authenticated');
+    const businessId = resolveBusinessId(req.user);
+    if (!businessId) return sendError(res, 400, 'businessId is required');
 
-    const result = await ManagerService.getManagers(req.user.businessId);
+    const result = await ManagerService.getManagers(businessId);
 
     if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
     sendSuccess(res, 200, 'Managers retrieved successfully', result.data);

@@ -172,6 +172,38 @@ const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
       return [];
     }
   },
+  async finalizeCarbonVerification(ctx, carbonRecordId, decision, notes = '') {
+  try {
+    const actionType = decision === 'verified'
+      ? 'carbon_verified'
+      : 'carbon_revision_requested';
+
+    const txResult = await ApprovalModel.createEcoTrustTransaction({
+      businessId: ctx.businessId,
+      actionType,
+      relatedRecordId: carbonRecordId,
+      relatedRecordType: 'carbon_record',
+      actorUserId: ctx.userId,
+      verificationStatus: decision === 'verified' ? 'verified' : 'pending',
+      notes
+    });
+
+    await ApprovalModel.createApprovalHistory({
+      businessId: ctx.businessId,
+      actorUserId: ctx.userId,
+      actorRole: ctx.role,
+      action: decision,
+      notes,
+      relatedRecordType: 'carbon_record',
+      relatedRecordId: carbonRecordId
+    });
+
+    return { success: true, data: { transaction: txResult.data } };
+  } catch (error) {
+    console.error('[ApprovalService.finalizeCarbonVerification]', error);
+    return { success: false, error: 'Failed to finalize carbon verification' };
+  }
+},
 
   async _fetchInventoryBatchesByBusiness(businessId) {
     try {

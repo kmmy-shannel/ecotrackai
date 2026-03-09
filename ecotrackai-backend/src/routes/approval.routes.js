@@ -10,8 +10,9 @@ const {
   getAdminRequests,
   adminReviewRequest,
   createFromDelivery,
+  getSustainabilityApprovals, 
 } = require('../controllers/approval.controller');
-const { authenticate } = require('../middleware/auth.middleware');
+const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 const router = Router();
 
@@ -38,10 +39,12 @@ router.get('/inventory', (req, res) => {
   return getApprovals(req, res);
 });
 
-router.get('/sustainability', (req, res) => {
-  req.query.role = 'sustainability_manager';
-  return getApprovals(req, res);
-});
+router.get(
+  '/sustainability',
+  authenticate,
+  authorize('sustainability_manager', 'admin'),
+  getSustainabilityApprovals
+);
 
 // ── Create approvals ───────────────────────────────────────────────────────
 router.post('/from-alert',    createFromAlert);    // POST /api/approvals/from-alert
