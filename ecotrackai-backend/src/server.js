@@ -14,6 +14,11 @@ const carbonRoutes           = require('./routes/carbon.routes');
 const approvalRoutes         = require('./routes/approval.routes');
 const managerApprovalsRoutes = require('./routes/managerApprovals.routes');
 const inventoryRoutes        = require('./routes/inventory.routes');
+const logisticsRoutes        = require('./routes/logistics.routes');
+const routeApprovalRoutes    = require('./routes/route.approval.routes');
+
+const superadminRoutes       = require('./routes/superadmin.routes');
+
 
 const app = express();
 
@@ -39,6 +44,13 @@ app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/alerts',     alertRoutes);
 app.use('/api/carbon',     carbonRoutes);
 app.use('/api/approvals',  approvalRoutes);
+
+app.use('/api/logistics',      logisticsRoutes);
+app.use('/api/route-approvals', routeApprovalRoutes);
+
+app.use('/api/superadmin',     superadminRoutes);
+
+
 app.use('/api',            indexRoutes);   // ← MUST be last, it matches all /api/*
 
 app.get('/api/health', (req, res) => {

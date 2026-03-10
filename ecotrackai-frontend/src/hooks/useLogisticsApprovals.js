@@ -26,7 +26,7 @@ export default function useLogisticsApprovals() {
         api.get('/logistics/pending'),
         api.get('/logistics/history'),
         api.get('/logistics/stats'),
-        api.get('/deliveries/drivers'),
+        api.get('/logistics/driver-monitor'),
       ]);
 
       const extract = (res) => {

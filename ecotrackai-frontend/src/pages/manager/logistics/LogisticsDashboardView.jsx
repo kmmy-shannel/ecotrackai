@@ -256,7 +256,39 @@ export default function LogisticsDashboardView({
       {loading && <div className="text-center py-12 text-gray-400">Loading…</div>}
 
       {/* ── Pending Approvals ─────────────────────────────── */}
-     {!loading && drivers.length > 0 && (
+      {!loading && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              Pending Route Approvals
+            </h2>
+            <span className="text-xs text-gray-400">{pending.length} item{pending.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {pending.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-10 text-center shadow-sm">
+              <div className="text-4xl mb-3">✅</div>
+              <p className="font-medium text-gray-600">No pending approvals</p>
+              <p className="text-sm text-gray-400 mt-1">All routes have been reviewed</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pending.map(item => (
+                <ApprovalCard
+                  key={item.approval_id}
+                  item={item}
+                  onApprove={approveRoute}
+                  onDecline={declineRoute}
+                  drivers={drivers}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Driver Monitor Snapshot ───────────────────────── */}
+      {!loading && drivers.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">Driver Monitor</h3>

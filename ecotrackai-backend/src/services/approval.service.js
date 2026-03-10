@@ -2,6 +2,7 @@ const ApprovalModel = require('../models/approval.model');
 const DeliveryModel = require('../models/delivery.model');
 const AlertModel = require('../models/alert.model');
 const AuditModel = require('../models/audit.model');
+const pool          = require('../config/database');
 
 const MANAGER_ROLES = new Set([
   'inventory_manager',
@@ -671,7 +672,55 @@ class ApprovalService {
         'approval_approved'
       );
       if (!ecoTrustResult.success) return ecoTrustResult;
-
+      
+      if (approval.approval_type === 'spoilage_action') {
+        try {
+          const extraData = typeof approval.extra_data === 'string'
+            ? JSON.parse(approval.extra_data || '{}')
+            : (approval.extra_data || {});
+      
+          const batchNumber = extraData.batchNumber || 'N/A';
+          const draftName   = `DRAFT - ${approval.product_name} · Batch: ${batchNumber} · ${approval.quantity} kg`;
+          const originObj   = JSON.stringify({ address: approval.location || 'Warehouse' });
+      
+          // Store approval_id so the admin can trace this draft back to the spoilage alert
+          const draftMeta = JSON.stringify({
+            from_approval_id: approval.approval_id,
+            product_name:     approval.product_name,
+            quantity:         approval.quantity,
+            batch_number:     batchNumber,
+            location:         approval.location || 'Warehouse',
+            days_left:        approval.days_left,
+            risk_level:       approval.risk_level,
+            is_spoilage_draft: true
+          });
+      
+          await pool.query(`
+            INSERT INTO delivery_routes (
+              business_id, route_name, status,
+              origin_location, destination_location,
+              vehicle_type,
+              total_distance_km, estimated_duration_minutes,
+              estimated_fuel_consumption_liters, estimated_carbon_kg,
+              notes,
+              created_at, updated_at
+            ) VALUES (
+              $1, $2, 'draft',
+              $3, $3,
+              'van',
+              0, 0, 0, 0,
+              $4,
+              NOW(), NOW()
+            )
+          `, [ctx.businessId, draftName, originObj, draftMeta]);
+      
+          console.log(`[ApprovalService.approveItem] Draft delivery created for approval ${approval.approval_id}`);
+        } catch (draftErr) {
+          // Non-fatal — approval still succeeds even if draft creation fails
+          console.error('[ApprovalService.approveItem] Draft creation failed (non-fatal):', draftErr.message);
+        }
+      }
+      
       return this._ok({ approvalId, status: 'approved' });
     } catch (error) {
       if (error?.status) throw error;

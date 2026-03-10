@@ -31,6 +31,7 @@ export const SPOILAGE_TRANSITIONS = {
 export const ROUTE_TRANSITIONS = {
   planned:           ['optimized'],
   optimized:         ['awaiting_approval'],
+  draft: ['planned'],
   awaiting_approval: ['approved', 'optimized'],
   approved:          ['in_progress'],
   in_progress:       ['completed'],

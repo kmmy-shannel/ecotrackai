@@ -53,7 +53,7 @@ const normalizeDelivery = (raw) => {
     fuelConsumption:   parseFloat(raw.estimated_fuel_consumption_liters || 0).toFixed(2),
     vehicleType:       raw.vehicle_type || '—',
     status:            raw.status       || 'planned',
-    driverUserId:      raw.driver_user_id || null,
+    declineReason:     raw.decline_reason || raw.manager_comment || null,
     originName:        buildName(origin),
     destName:          buildName(dest),
     // Keep raw coords for map use

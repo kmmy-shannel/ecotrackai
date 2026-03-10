@@ -9,12 +9,13 @@ const {
   getAllDeliveries, getDelivery, createDelivery,
   optimizeRoute, submitForApproval, applyOptimization,
   startDelivery, markStopArrived, markStopDeparted,
-  completeDelivery, deleteDelivery, getDrivers,calculateRoute, updateRouteStatus
+  completeDelivery, deleteDelivery, getDrivers,calculateRoute, updateRouteStatus, getDraftDeliveries 
 } = require('../controllers/delivery.controller');
 
 // ── Anyone authenticated can read ───────────────────────────
 router.get('/',          authenticate, getAllDeliveries);
 router.get('/drivers',   authenticate, authorize('admin', 'logistics_manager'), getDrivers);
+router.get('/drafts', authenticate, getDraftDeliveries);
 router.post('/calculate-route', authenticate, calculateRoute);
 router.get('/:id',       authenticate, getDelivery);
 

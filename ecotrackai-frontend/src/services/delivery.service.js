@@ -21,6 +21,11 @@ class DeliveryService {
   async getAllDeliveries(params = {}) {
     const response = await api.get('/deliveries', { params });
     return response.data;
+    
+  }
+  async getDraftDeliveries() {
+    const response = await api.get('/deliveries/drafts');
+    return response.data;
   }
 
   async getDeliveryById(id) {

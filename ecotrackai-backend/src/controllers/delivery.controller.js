@@ -3,6 +3,7 @@
 // ============================================================
 const DeliveryService = require('../services/delivery.service');
 const { sendSuccess, sendError } = require('../utils/response.utils');
+const pool = require('../config/database');
 
 const getAllDeliveries = async (req, res) => {
   const result = await DeliveryService.getAllDeliveries(req.user);
@@ -116,12 +117,39 @@ const calculateRoute = async (req, res) => {
     return sendError(res, 500, 'Failed to calculate route');
   }
 };
+// GET /api/deliveries/drafts
+// Returns all draft routes (auto-created from spoilage approvals) for this business
+const getDraftDeliveries = async (req, res) => {
+  try {
+    const { businessId } = req.user;
+    const result = await pool.query(`
+      SELECT
+        route_id,
+        route_name,
+        status,
+        origin_location,
+        destination_location,
+        vehicle_type,
+        created_at,
+        COALESCE(notes, '{}') AS notes
+      FROM delivery_routes
+      WHERE business_id = $1
+        AND status = 'draft'
+      ORDER BY created_at DESC
+    `, [businessId]);
 
+    sendSuccess(res, 200, 'Draft deliveries retrieved', { drafts: result.rows });
+  } catch (error) {
+    console.error('[getDraftDeliveries]', error.message);
+    // Return empty drafts instead of 500 — page still loads normally
+    sendSuccess(res, 200, 'Draft deliveries retrieved', { drafts: [] });
+  }
+};
 module.exports = {
   getAllDeliveries, getDelivery, createDelivery,
   optimizeRoute, submitForApproval, applyOptimization,
   startDelivery, markStopArrived, markStopDeparted,
   completeDelivery, deleteDelivery, getDrivers,
   updateRouteStatus,
-  calculateRoute
+  calculateRoute,getDraftDeliveries,
 };

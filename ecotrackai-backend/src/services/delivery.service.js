@@ -62,7 +62,7 @@ const ALLOWED_TRANSITIONS = {
   in_transit:         ['delivered'],
   delivered:          [],
   cancelled:          [],
-  declined:           ['planned'],
+  declined: ['planned', 'awaiting_approval'],
 };
 
 const DeliveryService = {
@@ -78,9 +78,34 @@ const DeliveryService = {
   async getAllDeliveries(user) {
     if (user.role === 'driver')
       return DeliveryModel.findByDriverUserId(user.userId);
-    return DeliveryModel.findAllByBusiness(user.businessId);
+  
+    // JOIN manager_approvals to pull decline reason for admin view
+    try {
+      const { rows } = await pool.query(`
+        SELECT
+          dr.*,
+          u.full_name AS driver_full_name,
+          ma.review_notes AS decline_reason,
+          ma.manager_comment
+        FROM delivery_routes dr
+        LEFT JOIN users u ON u.user_id = dr.driver_user_id
+        LEFT JOIN LATERAL (
+          SELECT review_notes, manager_comment
+          FROM manager_approvals
+          WHERE delivery_id = dr.route_id
+            AND required_role = 'logistics_manager'
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) ma ON true
+        WHERE dr.business_id = $1
+        ORDER BY dr.created_at DESC
+      `, [user.businessId]);
+      return { success: true, data: rows };
+    } catch (err) {
+      console.error('[DeliveryService.getAllDeliveries]', err);
+      return DeliveryModel.findAllByBusiness(user.businessId);
+    }
   },
-
   // ── Get single route with stops ─────────────────────────
   async getDelivery(routeId, user) {
     const routeResult = await DeliveryModel.findById(routeId, user.businessId);
@@ -336,22 +361,33 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
     if (!routeResult.success) return routeResult;
 
     const route = routeResult.data;
-    if (!this._canTransition(route.status, 'awaiting_approval'))
-      return this._fail(`Route must be "planned" or "optimized" to submit (current: ${route.status})`);
+const submittableStatuses = ['planned', 'optimized', 'declined'];
+if (!submittableStatuses.includes(route.status))
+  return this._fail(`Route must be "planned", "optimized", or "declined" to submit (current: ${route.status})`);
 
     const optResult = await DeliveryModel.getOptimization(routeId);
     const opt       = optResult.data;
 
-    const existing = await pool.query(
-      `SELECT approval_id FROM manager_approvals
-       WHERE delivery_id=$1 AND status='pending' AND approval_type='route_optimization'`,
-      [routeId]
-    );
+   // Clear any old declined/rejected approvals for this route so resubmission works cleanly
+await pool.query(
+  `UPDATE manager_approvals
+   SET status = 'superseded'
+   WHERE delivery_id = $1
+     AND approval_type = 'route_optimization'
+     AND status IN ('declined', 'rejected')`,
+  [routeId]
+);
 
-    if (existing.rows.length > 0) {
-      await DeliveryModel.updateStatus(routeId, user.businessId, 'awaiting_approval');
-      return this._ok({ message: 'Route already pending approval' });
-    }
+const existing = await pool.query(
+  `SELECT approval_id FROM manager_approvals
+   WHERE delivery_id=$1 AND status='pending' AND approval_type='route_optimization'`,
+  [routeId]
+);
+
+if (existing.rows.length > 0) {
+  await DeliveryModel.updateStatus(routeId, user.businessId, 'awaiting_approval');
+  return this._ok({ message: 'Route already pending approval' });
+}
 
     await pool.query(`
       INSERT INTO manager_approvals (

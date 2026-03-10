@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Rectangle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Plus, Trash2, MapPin, Search, Navigation, X, Layers, Truck, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, MapPin, Search, Navigation, X, Layers, Truck, AlertCircle, CheckCircle, Zap } from 'lucide-react';
 import deliveryService from '../services/delivery.service';
 import inventoryService from '../services/inventory.service';
 
@@ -144,7 +144,7 @@ const LocationSearch = ({ onLocationSelect, stopIndex }) => {
 };
 
 // ── Main Modal ────────────────────────────────────────────────────────────────
-const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
+const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
   // REPLACE WITH:
   const [formData, setFormData] = useState({
     deliveryDate:  new Date().toISOString().split('T')[0],
@@ -303,6 +303,19 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess }) => {
                 <AlertCircle size={14} /> {errors.submit}
               </div>
             )}
+            {prefill && (
+  <div className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+    <Zap size={15} className="text-orange-500 flex-shrink-0 mt-0.5" />
+    <div>
+      <p className="text-xs font-bold text-orange-800">Pre-filled from Spoilage Approval</p>
+      <p className="text-[11px] text-orange-700 mt-0.5">
+        {prefill.productName} · Batch {prefill.batchNumber} · {prefill.quantity} · {prefill.daysLeft}d left
+      </p>
+      <p className="text-[10px] text-orange-500 mt-1">Add stop locations and assign products to complete this plan.</p>
+    </div>
+  </div>
+)}
+            
 
             {/* Delivery Info */}
             <section>

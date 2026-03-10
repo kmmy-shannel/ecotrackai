@@ -14,6 +14,7 @@ import {
 
 import useDelivery from '../../hooks/useDelivery';
 import { canTransitionRoute, getTimelineChips } from '../../utils/statusMachines';
+import deliveryService from '../../services/delivery.service'; 
 
 // ── Leaflet icon fix ──────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -71,9 +72,47 @@ const DeliveryRoutesPage = () => {
     deleteDelivery, optimizeRoute, applyOptimization,
     handleDeliveryCreated, closeOptimizationModal, getStatusBadge,
   } = useDelivery();
+  const [draftDeliveries, setDraftDeliveries] = useState([]);
+  const [loadingDrafts, setLoadingDrafts]     = useState(false);
+  const [dismissedDrafts, setDismissedDrafts] = useState(new Set());
+  const [draftPrefill, setDraftPrefill] = useState(null);
+  const fetchDrafts = async () => {
+    try {
+      setLoadingDrafts(true);
+      const res = await deliveryService.getDraftDeliveries();
+      const list = res?.data?.drafts || res?.drafts || [];
+      setDraftDeliveries(list);
+    } catch {
+      setDraftDeliveries([]);
+    } finally {
+      setLoadingDrafts(false);
+    }
+  };
+  
+  useEffect(() => {
+    fetchDrafts();
+  }, []);
 
+  const handleOpenDraft = (draft) => {
+    // Parse metadata stored in notes column
+    let meta = {};
+    try { meta = JSON.parse(draft.notes || '{}'); } catch { /* ignore */ }
+  
+    // Pass pre-fill data to the modal via state
+    setDraftPrefill({
+      routeId:     draft.route_id,
+      productName: meta.product_name  || '',
+      quantity:    meta.quantity      || '',
+      batchNumber: meta.batch_number  || '',
+      location:    meta.location      || '',
+      daysLeft:    meta.days_left     || 0,
+      riskLevel:   meta.risk_level    || 'HIGH',
+      routeName:   draft.route_name   || '',
+    });
+    setShowAddModal(true);
+  };
   if (!user) return null;
-
+  
   return (
     <Layout currentPage="Delivery Routes" user={user}>
       {success && (
@@ -86,7 +125,69 @@ const DeliveryRoutesPage = () => {
           <AlertTriangle size={16} />{error}
         </div>
       )}
+{/* Priority Delivery Drafts Banner */}
+{draftDeliveries.filter(d => !dismissedDrafts.has(d.route_id)).length > 0 && (
+  <div className="mb-6 space-y-3">
+    <div className="flex items-center gap-2">
+      <Zap size={16} className="text-orange-500" />
+      <h3 className="text-sm font-bold text-orange-700 uppercase tracking-wide">
+        Priority Delivery Drafts
+      </h3>
+      <span className="text-xs font-bold px-2 py-0.5 bg-orange-100 text-orange-700 border border-orange-200 rounded-full">
+        {draftDeliveries.filter(d => !dismissedDrafts.has(d.route_id)).length} awaiting action
+      </span>
+    </div>
 
+    {draftDeliveries
+      .filter(d => !dismissedDrafts.has(d.route_id))
+      .map(draft => {
+        let meta = {};
+        try { meta = JSON.parse(draft.notes || '{}'); } catch { /* ignore */ }
+
+        return (
+          <div key={draft.route_id}
+            className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start justify-between gap-4 shadow-sm">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div className="w-9 h-9 bg-orange-100 border border-orange-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Package size={16} className="text-orange-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-orange-900 text-sm truncate">
+                  {meta.product_name || 'Product'} — {meta.quantity} · Batch: {meta.batch_number || 'N/A'}
+                </p>
+                <p className="text-xs text-orange-700 mt-0.5">
+                  📍 {meta.location || 'Warehouse'} · 
+                  <span className={`font-semibold ml-1 ${meta.days_left <= 2 ? 'text-red-600' : 'text-orange-600'}`}>
+                    {meta.days_left}d left
+                  </span>
+                  <span className="ml-2 px-1.5 py-0.5 bg-orange-200 text-orange-800 rounded text-[10px] font-bold">
+                    {meta.risk_level}
+                  </span>
+                </p>
+                <p className="text-[11px] text-orange-500 mt-1">
+                  ✓ Approved by Inventory Manager — complete the delivery plan to dispatch
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => handleOpenDraft(draft)}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm">
+                Open Draft
+              </button>
+              <button
+                onClick={() => setDismissedDrafts(prev => new Set([...prev, draft.route_id]))}
+                className="p-1.5 text-orange-400 hover:text-orange-600 rounded-lg hover:bg-orange-100 transition-colors"
+                title="Dismiss">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })
+    }
+  </div>
+)}
       {/* Top bar */}
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-xl w-full">
@@ -207,37 +308,75 @@ const DeliveryRoutesPage = () => {
                             {delivery.status === 'awaiting_approval' && <span className="text-xs text-orange-500">⏳ Pending logistics review</span>}
                             {delivery.status === 'optimized'         && <span className="text-xs text-purple-600">✨ AI optimized — ready to submit</span>}
                             {delivery.status === 'approved'          && <span className="text-xs text-green-600">✓ Approved — driver notified</span>}
-                            {delivery.status === 'declined'          && <span className="text-xs text-red-500">✕ Declined by logistics manager</span>}
+                            {delivery.status === 'declined' && (
+  <div>
+    <span className="text-xs text-red-500">✕ Declined by logistics manager</span>
+    {(delivery.declineReason || delivery.decline_reason) && (
+      <p className="text-xs text-red-400 mt-0.5 italic max-w-[200px] truncate">
+        "{delivery.declineReason || delivery.decline_reason}"
+      </p>
+    )}
+  </div>
+)}
                             {delivery.status === 'in_transit'        && <span className="text-xs text-blue-600">🚛 Driver en route</span>}
                             {delivery.status === 'delivered'         && <span className="text-xs text-green-700">📦 Delivered ✓</span>}
                           </div>
                         </td>
 
-                        {/* Actions */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setExpandedDelivery(delivery.id)}
-                              className="p-2 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
-                              title="View Details">
-                              {expandedDelivery === delivery.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                            </button>
-                            <button
-                              onClick={() => optimizeRoute(delivery)}
-                              disabled={optimizingRoute === delivery.id || !canTransitionRoute(delivery.status, 'optimized')}
-                              className="p-2 hover:bg-purple-50 text-purple-600 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                              title="AI Route Optimization">
-                              <Sparkles size={18} className={optimizingRoute === delivery.id ? 'animate-spin' : ''} />
-                            </button>
-                            <button
-                              onClick={() => deleteDelivery(delivery.id)}
-                              className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
-                              title="Delete">
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                       {/* Actions */}
+<td className="px-6 py-4">
+  <div className="flex items-center justify-end gap-2">
+    <button
+      onClick={() => setExpandedDelivery(delivery.id)}
+      className="p-2 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
+      title="View Details">
+      {expandedDelivery === delivery.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+    </button>
+    <button
+      onClick={() => optimizeRoute(delivery)}
+      disabled={optimizingRoute === delivery.id || !canTransitionRoute(delivery.status, 'optimized')}
+      className="p-2 hover:bg-purple-50 text-purple-600 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      title="AI Route Optimization">
+      <Sparkles size={18} className={optimizingRoute === delivery.id ? 'animate-spin' : ''} />
+    </button>
+    
+   
+  {/* Submit for Approval button - planned, optimized, or declined (resubmit) */}
+  {(delivery.status === 'planned' || delivery.status === 'optimized' || delivery.status === 'declined') && (
+  <button
+    onClick={async () => {
+      const isResubmit = delivery.status === 'declined';
+      const msg = isResubmit
+        ? 'Resubmit this declined route for Logistics Manager approval?'
+        : 'Submit this route for Logistics Manager approval?';
+      if (!window.confirm(msg)) return;
+      try {
+        await deliveryService.submitForApproval(delivery.id);
+        await handleDeliveryCreated();
+      } catch (err) {
+        console.error(err);
+      }
+    }}
+    className={`p-2 rounded-lg transition-colors ${
+      delivery.status === 'declined'
+        ? 'hover:bg-orange-50 text-orange-500'
+        : 'hover:bg-green-50 text-green-600'
+    }`}
+    title={delivery.status === 'declined' ? 'Resubmit for Approval' : 'Submit for Approval'}>
+    <CheckCircle size={18} />
+  </button>
+)}
+    
+    <button
+      onClick={() => deleteDelivery(delivery.id)}
+      className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
+      title="Delete">
+      <Trash2 size={18} />
+    </button>
+  </div>
+</td>      
+              </tr>
+
 
                       {expandedDelivery === delivery.id && (
                         <tr className="bg-gray-50">
@@ -262,8 +401,12 @@ const DeliveryRoutesPage = () => {
           onApply={applyOptimization}
         />
       )}
-      {showAddModal && (
-        <PlanNewDeliveryModal onClose={() => setShowAddModal(false)} onSuccess={handleDeliveryCreated} />
+           {showAddModal && (
+        <PlanNewDeliveryModal
+          onClose={() => { setShowAddModal(false); setDraftPrefill(null); }}
+          onSuccess={() => { handleDeliveryCreated(); fetchDrafts(); setDraftPrefill(null); }}
+          prefill={draftPrefill}
+        />
       )}
     </Layout>
   );
@@ -293,11 +436,21 @@ const SummaryCard = ({ title, value, subtitle, icon, color, trend }) => {
 };
 
 // ── Delivery Details (expanded row) ─────────────────────
+// ── Delivery Details (expanded row) ─────────────────────
 const DeliveryDetails = ({ delivery }) => {
   const routeTimeline = getTimelineChips('route', delivery.status);
   const stops = delivery.stops || [];
   return (
     <div className="bg-white rounded-lg p-4 space-y-4">
+      {/* Decline reason - add this block */}
+      {(delivery.declineReason || delivery.decline_reason) && delivery.status === 'declined' && (
+  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-2">
+    <p className="text-xs font-semibold text-red-700 mb-1">✕ Declined by Logistics Manager</p>
+    <p className="text-sm text-red-600">"{delivery.declineReason || delivery.decline_reason}"</p>
+    <p className="text-xs text-red-400 mt-1">Edit this route and resubmit for approval.</p>
+  </div>
+)}
+      
       <div className="flex flex-wrap gap-2">
         {routeTimeline.map(chip => (
           <span key={chip.status}
