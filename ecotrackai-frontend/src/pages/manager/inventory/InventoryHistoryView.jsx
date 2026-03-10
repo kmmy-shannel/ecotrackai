@@ -30,7 +30,6 @@ const InventoryHistoryView = ({ history = [] }) => {
     <div className="space-y-6">
 
       <div>
-        <h2 className="text-lg font-bold text-gray-800 uppercase tracking-wide">Approval History</h2>
         <p className="text-xs text-gray-400 mt-0.5">All past spoilage approval decisions</p>
       </div>
 
@@ -159,11 +158,25 @@ const HistoryItem = ({ item }) => {
               </p>
             )}
 
-            {item.review_notes && (
-              <p className="text-xs text-gray-500 mt-1">
-                Note: <span className="italic">"{item.review_notes}"</span>
-              </p>
-            )}
+{(() => {
+  const batchNumber =
+    item.batch_number ||
+    (typeof item.extra_data === 'string'
+      ? (() => { try { return JSON.parse(item.extra_data)?.batchNumber; } catch { return null; } })()
+      : item.extra_data?.batchNumber) ||
+    null;
+  return batchNumber ? (
+    <p className="text-xs text-gray-500 mt-1">
+      Batch: <span className="font-bold font-mono text-gray-700">{batchNumber}</span>
+    </p>
+  ) : null;
+})()}
+
+{item.review_notes && (
+  <p className="text-xs text-gray-500 mt-1">
+    Note: <span className="italic">"{item.review_notes}"</span>
+  </p>
+)}
 
             <p className="text-xs text-gray-400 mt-1">
               Decided by:{' '}

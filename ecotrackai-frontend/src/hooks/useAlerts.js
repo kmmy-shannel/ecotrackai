@@ -102,9 +102,12 @@ const useAlerts = () => {
       if (!selectedAlert) return;
       try {
         if (decision === 'accepted') {
-          if (!canTransitionSpoilage(selectedAlert.status || 'active', 'pending_review')) {
-            throw new Error('Alert cannot move to pending_review from its current status');
-          }
+          const currentStatus = selectedAlert.status || 'active';
+// Allow re-submission from declined status — Maria declined, admin re-analyzes and resubmits
+const allowedFromStatuses = ['active', 'declined'];
+if (!allowedFromStatuses.includes(currentStatus) && !canTransitionSpoilage(currentStatus, 'pending_review')) {
+  throw new Error('Alert cannot be submitted from its current status');
+}
           // use new submit endpoint which handles approval creation and status change
           await alertService.submitForApproval(selectedAlert.id, {
             aiSuggestion:

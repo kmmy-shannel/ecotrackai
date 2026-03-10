@@ -564,11 +564,28 @@ const AlertService = {
           WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
           ELSE 'LOW'
         END AS risk_level,
-        'active' AS status,
+       CASE
+  WHEN ma.status = 'pending'           THEN 'pending_review'
+  WHEN ma.status = 'approved'          THEN 'approved'
+  WHEN ma.status = 'declined'          THEN 'declined'
+  WHEN ma.status = 'rejected'          THEN 'declined'
+  ELSE 'active'
+END AS status,
         'spoilage_risk' AS alert_type,
-        i.current_condition
+        i.current_condition,
+ma.approval_id,
+ma.manager_comment,
+COALESCE(ma.review_notes, ma.manager_comment) AS decline_reason
       FROM inventory i
       JOIN products p ON i.product_id = p.product_id
+      LEFT JOIN LATERAL (
+  SELECT approval_id, status, manager_comment, review_notes
+  FROM manager_approvals
+  WHERE alert_id = i.inventory_id
+    AND business_id = i.business_id
+  ORDER BY created_at DESC
+  LIMIT 1
+) ma ON true
       WHERE i.business_id = $1
         AND i.quantity > 0
         AND i.expected_expiry_date IS NOT NULL
@@ -636,22 +653,32 @@ const AlertService = {
     }
   
     const ApprovalService = require('./approval.service');
-    const payload = {
-      alertId: alert.id,
-      productName: alert.product_name,
-      quantity: alert.quantity || 'N/A',
-      location: alert.location || 'N/A',
-      daysLeft: alert.days_left || 0,
-      riskLevel: alert.risk_level || 'MEDIUM',
-      priority: alert.risk_level || 'MEDIUM',
-      aiSuggestion: options.aiSuggestion || '',
-      requiredRole: 'inventory_manager',
-      approvalType: 'spoilage_action',
-      batchNumber: alert.batch_number || null
-    };
-  
-    const result = await ApprovalService.createFromAlert(user, payload);
-    return result;
+const payload = {
+  alertId: null,          // ← pass null so createFromAlert skips AlertModel.findByIdAndBusiness
+  inventoryId: alert.id,  // ← carry the real inventory_id separately for the approval record
+  productName: alert.product_name,
+  quantity: alert.quantity || 'N/A',
+  location: alert.location || 'N/A',
+  daysLeft: alert.days_left || 0,
+  riskLevel: alert.risk_level || 'MEDIUM',
+  priority: alert.risk_level || 'MEDIUM',
+  aiSuggestion: options.aiSuggestion || '',
+  requiredRole: 'inventory_manager',
+  approvalType: 'spoilage_action',
+  batchNumber: alert.batch_number || null
+};
+
+const result = await ApprovalService.createFromAlert(user, payload);
+
+// After approval created, write the inventory_id into alert_id so the LEFT JOIN can find it
+if (result?.success && result?.data?.approval?.approval_id) {
+  await pool.query(
+    `UPDATE manager_approvals SET alert_id = $1 WHERE approval_id = $2`,
+    [alert.id, result.data.approval.approval_id]
+  );
+}
+
+return result;
   },
 
   async deleteAlert(id, businessId) {

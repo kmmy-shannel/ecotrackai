@@ -58,35 +58,51 @@ const ApprovalCard = ({ approval, onApprove, onDecline }) => {
 
           {/* Info grid */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-gray-50 rounded-lg p-3">
-              <div className="flex items-center gap-1 mb-1">
-                <Package size={11} className="text-gray-400" />
-                <p className="text-xs text-gray-400">Quantity</p>
-              </div>
-              <p className="font-semibold text-gray-800 text-sm">{approval.quantity}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <div className="flex items-center gap-1 mb-1">
-                <Clock size={11} className="text-gray-400" />
-                <p className="text-xs text-gray-400">Days Left</p>
-              </div>
-              <p className={`font-semibold text-sm ${
-                approval.days_left <= 2 ? 'text-red-600' :
-                approval.days_left <= 4 ? 'text-orange-500' : 'text-gray-800'
-              }`}>
-                {approval.days_left}d
-              </p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <div className="flex items-center gap-1 mb-1">
-                <MapPin size={11} className="text-gray-400" />
-                <p className="text-xs text-gray-400">Location</p>
-              </div>
-              <p className="font-semibold text-gray-800 text-sm truncate">
-                {approval.location || '—'}
-              </p>
-            </div>
-          </div>
+  <div className="bg-gray-50 rounded-lg p-3">
+    <div className="flex items-center gap-1 mb-1">
+      <Package size={11} className="text-gray-400" />
+      <p className="text-xs text-gray-400">Quantity</p>
+    </div>
+    <p className="font-semibold text-gray-800 text-sm">{approval.quantity}</p>
+  </div>
+  <div className="bg-gray-50 rounded-lg p-3">
+    <div className="flex items-center gap-1 mb-1">
+      <Clock size={11} className="text-gray-400" />
+      <p className="text-xs text-gray-400">Days Left</p>
+    </div>
+    <p className={`font-semibold text-sm ${
+      approval.days_left <= 2 ? 'text-red-600' :
+      approval.days_left <= 4 ? 'text-orange-500' : 'text-gray-800'
+    }`}>
+      {approval.days_left}d
+    </p>
+  </div>
+  <div className="bg-gray-50 rounded-lg p-3">
+    <div className="flex items-center gap-1 mb-1">
+      <MapPin size={11} className="text-gray-400" />
+      <p className="text-xs text-gray-400">Location</p>
+    </div>
+    <p className="font-semibold text-gray-800 text-sm truncate">
+      {approval.location || '—'}
+    </p>
+  </div>
+</div>
+
+{/* Batch number — extracted from extra_data */}
+{(() => {
+  const batchNumber =
+    approval.batch_number ||
+    (typeof approval.extra_data === 'string'
+      ? (() => { try { return JSON.parse(approval.extra_data)?.batchNumber; } catch { return null; } })()
+      : approval.extra_data?.batchNumber) ||
+    null;
+  return batchNumber ? (
+    <div className="bg-gray-50 rounded-lg px-3 py-2 flex items-center gap-2">
+      <span className="text-xs text-gray-400 font-medium">Batch #</span>
+      <span className="text-xs font-bold text-gray-700 font-mono">{batchNumber}</span>
+    </div>
+  ) : null;
+})()}
 
           {/* AI suggestion */}
           {approval.ai_suggestion && (

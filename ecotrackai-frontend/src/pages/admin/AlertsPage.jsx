@@ -370,8 +370,8 @@ const RiskBadge = ({ level }) => {
 
 const statusConfig = {
   pending_review: { label: 'Pending Manager Review', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  approved:       { label: '✓ Approved by Manager',     className: 'bg-emerald-100 text-emerald-800 border-emerald-300'  },
-  declined:       { label: '✗ Declined by Manager',     className: 'bg-red-50 text-red-600 border-red-200'        },
+  approved:       { label: '✓ Approved by Manager',  className: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  declined:       { label: '✗ Declined by Manager',  className: 'bg-red-50 text-red-600 border-red-200' },
 };
 
 const ProductRow = ({ alert, onDelete, onGetInsights, getProductImage, getRiskBadgeColor, getRiskBadgeText }) => (
@@ -385,13 +385,18 @@ const ProductRow = ({ alert, onDelete, onGetInsights, getProductImage, getRiskBa
         {getProductImage(alert.product_name)}
       </div>
       <div>
-        <p className="font-semibold text-emerald-900 text-sm truncate">{alert.product_name}</p>
-        {statusConfig[alert.status] && (
-          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusConfig[alert.status].className}`}>
-            {statusConfig[alert.status].label}
-          </span>
-        )}
-      </div>
+  <p className="font-semibold text-emerald-900 text-sm truncate">{alert.product_name}</p>
+  {statusConfig[alert.status] && (
+    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusConfig[alert.status].className}`}>
+      {statusConfig[alert.status].label}
+    </span>
+  )}
+  {alert.status === 'declined' && alert.decline_reason && (
+    <p className="text-xs text-red-500 mt-1 italic">
+      ✗ "{alert.decline_reason}"
+    </p>
+  )}
+</div>
     </div>
     <div className="text-center text-sm font-medium text-emerald-700">
       {alert.batch_number || alert.batchNumber || '—'}
@@ -429,13 +434,15 @@ const ProductRow = ({ alert, onDelete, onGetInsights, getProductImage, getRiskBa
         </span>
       )}
       {alert.status === 'declined' && (
-        <button
-          onClick={() => onGetInsights(alert)}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-full transition-colors inline-flex items-center gap-1"
-        >
-          <Sparkles size={11} /> Re-analyze
-        </button>
-      )}
+  <div className="flex flex-col items-end gap-1">
+    <button
+      onClick={() => onGetInsights(alert)}
+      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-full transition-colors inline-flex items-center gap-1"
+    >
+      <Sparkles size={11} /> Re-analyze & Resubmit
+    </button>
+  </div>
+)}
 
     </div>
   </div>
@@ -540,18 +547,18 @@ const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => (
       <div className="border-t border-emerald-100 p-4 bg-emerald-50 space-y-3 flex-shrink-0">
         {!loading && insights && (
           <div className="flex gap-3">
-            <button
-              onClick={() => onReview('accepted')}
-              className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl text-sm transition-colors"
-            >
-              ✓ Accept Recommendations
-            </button>
-            <button
-              onClick={() => onReview('rejected')}
-              className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors"
-            >
-              ✗ Reject Recommendations
-            </button>
+           <button
+  onClick={() => { onReview('accepted'); onClose(); }}
+  className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl text-sm transition-colors"
+>
+  ✓ Accept Recommendations
+</button>
+<button
+  onClick={() => { onReview('rejected'); onClose(); }}
+  className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors"
+>
+  ✗ Reject Recommendations
+</button>
           </div>
         )}
         <button
