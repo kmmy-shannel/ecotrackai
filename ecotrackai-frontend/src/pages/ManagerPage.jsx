@@ -621,7 +621,7 @@ const ManagerPage = () => {
 
       {/* ── Page header ── */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">PROCESS MANAGER</h1>
+
         <button
           onClick={() => { logistics.refresh(); inventory.refresh(); }}
           className="flex items-center gap-2 px-5 py-2.5 bg-[#1a4d2e] hover:bg-[#153621] text-white rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"

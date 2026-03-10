@@ -18,7 +18,7 @@ const getManagers = async (req, res) => {
 
     const result = await ManagerService.getManagers(businessId);
 
-    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    if (!result.success) return sendError(res, 400, result.error);
     sendSuccess(res, 200, 'Managers retrieved successfully', result.data);
 
   } catch (error) {
@@ -33,7 +33,7 @@ const createManager = async (req, res) => {
 
     const result = await ManagerService.createManager(req.user, req.body);
 
-    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    if (!result.success) return sendError(res, 400, result.error);
     sendSuccess(res, 201, 'Manager account created successfully', result.data);
 
   } catch (error) {
@@ -48,7 +48,7 @@ const updateManager = async (req, res) => {
 
     const result = await ManagerService.updateManager(req.user, req.params.managerId, req.body);
 
-    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    if (!result.success) return sendError(res, 400, result.error);
     sendSuccess(res, 200, 'Manager updated successfully', result.data);
 
   } catch (error) {
@@ -63,7 +63,7 @@ const deleteManager = async (req, res) => {
 
     const result = await ManagerService.deleteManager(req.user, req.params.managerId);
 
-    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    if (!result.success) return sendError(res, 400, result.error);
     sendSuccess(res, 200, 'Manager account deactivated successfully', result.data);
 
   } catch (error) {
@@ -80,7 +80,7 @@ const resetManagerPassword = async (req, res) => {
       req.user, req.params.managerId, req.body.newPassword
     );
 
-    if (!result.success) return sendError(res, 400, result.error);   // ← ADD THIS
+    if (!result.success) return sendError(res, 400, result.error);
     sendSuccess(res, 200, 'Password reset successfully', result.data);
 
   } catch (error) {
@@ -88,12 +88,16 @@ const resetManagerPassword = async (req, res) => {
     sendError(res, 500, 'Failed to reset password');
   }
 };
-// ── LOGISTICS APPROVALS (NEW — added below existing functions) ──
+
+// ── LOGISTICS APPROVALS ───────────────────────────────────────
+// Uses resolveBusinessId() to safely handle both businessId and business_id
+// from JWT payload — no other functions above are touched.
 
 const getLogisticsPending = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
     const ManagerModel = require('../models/manager.model');
-    const result = await ManagerModel.getLogisticsPending(req.user.businessId);
+    const result = await ManagerModel.getLogisticsPending(businessId);
     result.success ? sendSuccess(res, 200, 'Pending retrieved', result.data)
                    : sendError(res, 400, result.error);
   } catch (error) {
@@ -104,8 +108,9 @@ const getLogisticsPending = async (req, res) => {
 
 const getLogisticsHistory = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
     const ManagerModel = require('../models/manager.model');
-    const result = await ManagerModel.getLogisticsHistory(req.user.businessId);
+    const result = await ManagerModel.getLogisticsHistory(businessId);
     result.success ? sendSuccess(res, 200, 'History retrieved', result.data)
                    : sendError(res, 400, result.error);
   } catch (error) {
@@ -116,8 +121,9 @@ const getLogisticsHistory = async (req, res) => {
 
 const getLogisticsStats = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
     const ManagerModel = require('../models/manager.model');
-    const result = await ManagerModel.getLogisticsStats(req.user.businessId);
+    const result = await ManagerModel.getLogisticsStats(businessId);
     result.success ? sendSuccess(res, 200, 'Stats retrieved', result.data)
                    : sendError(res, 400, result.error);
   } catch (error) {
@@ -128,9 +134,11 @@ const getLogisticsStats = async (req, res) => {
 
 const approveLogistics = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
+    const reviewerId = req.user?.userId ?? req.user?.user_id;
     const ManagerModel = require('../models/manager.model');
     const result = await ManagerModel.approveLogistics(
-      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+      req.params.id, businessId, reviewerId, req.body.comment
     );
     result.success ? sendSuccess(res, 200, 'Route approved', result.data)
                    : sendError(res, 400, result.error);
@@ -142,9 +150,11 @@ const approveLogistics = async (req, res) => {
 
 const declineLogistics = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
+    const reviewerId = req.user?.userId ?? req.user?.user_id;
     const ManagerModel = require('../models/manager.model');
     const result = await ManagerModel.declineLogistics(
-      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+      req.params.id, businessId, reviewerId, req.body.comment
     );
     result.success ? sendSuccess(res, 200, 'Route declined', result.data)
                    : sendError(res, 400, result.error);
@@ -156,8 +166,9 @@ const declineLogistics = async (req, res) => {
 
 const getInventoryPending = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
     const ManagerModel = require('../models/manager.model');
-    const result = await ManagerModel.getInventoryPending(req.user.businessId);
+    const result = await ManagerModel.getInventoryPending(businessId);
     result.success ? sendSuccess(res, 200, 'Pending retrieved', result.data)
                    : sendError(res, 400, result.error);
   } catch (error) {
@@ -168,8 +179,9 @@ const getInventoryPending = async (req, res) => {
 
 const getInventoryHistory = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
     const ManagerModel = require('../models/manager.model');
-    const result = await ManagerModel.getInventoryHistory(req.user.businessId);
+    const result = await ManagerModel.getInventoryHistory(businessId);
     result.success ? sendSuccess(res, 200, 'History retrieved', result.data)
                    : sendError(res, 400, result.error);
   } catch (error) {
@@ -180,9 +192,11 @@ const getInventoryHistory = async (req, res) => {
 
 const approveInventory = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
+    const reviewerId = req.user?.userId ?? req.user?.user_id;
     const ManagerModel = require('../models/manager.model');
     const result = await ManagerModel.approveInventory(
-      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+      req.params.id, businessId, reviewerId, req.body.comment
     );
     result.success ? sendSuccess(res, 200, 'Approved', result.data)
                    : sendError(res, 400, result.error);
@@ -194,9 +208,11 @@ const approveInventory = async (req, res) => {
 
 const declineInventory = async (req, res) => {
   try {
+    const businessId = resolveBusinessId(req.user);
+    const reviewerId = req.user?.userId ?? req.user?.user_id;
     const ManagerModel = require('../models/manager.model');
     const result = await ManagerModel.declineInventory(
-      req.params.id, req.user.businessId, req.user.userId, req.body.comment
+      req.params.id, businessId, reviewerId, req.body.comment
     );
     result.success ? sendSuccess(res, 200, 'Declined', result.data)
                    : sendError(res, 400, result.error);
@@ -205,7 +221,20 @@ const declineInventory = async (req, res) => {
     sendError(res, 500, 'Failed to decline');
   }
 };
-module.exports = { getManagers, createManager, updateManager, deleteManager, resetManagerPassword, getLogisticsPending, getLogisticsHistory, getLogisticsStats,
-  approveLogistics, declineLogistics,
-  getInventoryPending, getInventoryHistory,
-  approveInventory, declineInventory, };
+
+module.exports = {
+  getManagers,
+  createManager,
+  updateManager,
+  deleteManager,
+  resetManagerPassword,
+  getLogisticsPending,
+  getLogisticsHistory,
+  getLogisticsStats,
+  approveLogistics,
+  declineLogistics,
+  getInventoryPending,
+  getInventoryHistory,
+  approveInventory,
+  declineInventory,
+};

@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboard.routes');
 const catalogRoutes = require('./routes/catalog.routes');
 const superadminRoutes = require('./routes/superadmin.routes');
 const managerApprovalsRoutes = require('./routes/managerApprovals.routes');
+const alertRoutes = require('./routes/alert.routes');
 const AlertService = require('./services/alert.service');
 const app = express();
 
@@ -36,6 +37,12 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/catalog', catalogRoutes);
 app.use('/api/super-admin', superadminRoutes);
 app.use('/api/manager', managerApprovalsRoutes);
+app.use('/api/alerts', alertRoutes);
+
+// Manager base check (helps verify correct backend instance is running)
+app.get('/api/manager', (req, res) => {
+  res.json({ success: true, message: 'Manager routes active' });
+});
 
 let lastSpoilageCronRunDate = null;
 const SPOILAGE_CRON_ENABLED = process.env.SPOILAGE_CRON_ENABLED !== 'false';

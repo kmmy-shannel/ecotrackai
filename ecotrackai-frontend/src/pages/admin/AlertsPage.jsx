@@ -5,7 +5,7 @@ import authService from '../../services/auth.service';
 import useAlerts from '../../hooks/useAlerts';
 import approvalService from '../../services/approval.service';
 import {
-  Search, Sparkles, Trash2, X, TrendingDown,
+  Search, Sparkles, X, TrendingDown,
   Package, Clock, ShieldCheck, AlertCircle, CheckCircle2,
   XCircle, MessageSquare, ChevronDown, ChevronUp
 } from 'lucide-react';
@@ -436,12 +436,7 @@ const ProductRow = ({ alert, onDelete, onGetInsights, getProductImage, getRiskBa
           <Sparkles size={11} /> Re-analyze
         </button>
       )}
-      <button
-        onClick={() => onDelete(alert.id)}
-        className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors"
-      >
-        <Trash2 size={15} />
-      </button>
+
     </div>
   </div>
 );

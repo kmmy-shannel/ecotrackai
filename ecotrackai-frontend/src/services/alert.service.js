@@ -1,9 +1,8 @@
 import axios from 'axios';
 import authService from './auth.service';
-
+import api from './api';  // ← ADD THIS ONE IMPORT
 
 const API_URL = `${process.env.REACT_APP_API_URL}/alerts`;
-
 
 class AlertService {
   // Get authorization headers
@@ -31,7 +30,8 @@ class AlertService {
   async getAllAlerts() {
     try {
       const response = await axios.get(API_URL, {
-        headers: this.getAuthHeader()
+        headers: this.getAuthHeader(),
+        params: { _t: Date.now() }
       });
       return response.data;
     } catch (error) {
@@ -94,14 +94,11 @@ class AlertService {
     }
   }
 
-  // Submit active alert for manager approval (will create queue item and update status)
+  // Submit active alert for manager approval
+  // ← REPLACED: now uses shared api instance so auth token is handled automatically
   async submitForApproval(alertId, body = {}) {
     try {
-      const response = await axios.post(
-        `${API_URL}/${alertId}/submit`,
-        body,
-        { headers: this.getAuthHeader() }
-      );
+      const response = await api.post(`/alerts/${alertId}/submit`, body);
       return response.data;
     } catch (error) {
       console.error('Submit alert for approval error:', error);
@@ -109,6 +106,5 @@ class AlertService {
     }
   }
 }
-
 
 export default new AlertService();

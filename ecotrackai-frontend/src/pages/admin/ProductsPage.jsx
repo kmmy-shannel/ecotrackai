@@ -37,8 +37,8 @@ const calcDaysLeft = (item) => {
 const getRisk = (d) => {
   if (d === null)  return { label: '—',       cls: 'bg-gray-100 text-gray-500' };
   if (d <= 0)      return { label: 'EXPIRED', cls: 'bg-red-600 text-white' };
-  if (d <= 3)      return { label: 'HIGH',    cls: 'bg-red-100 text-red-700' };
-  if (d <= 6)      return { label: 'MEDIUM',  cls: 'bg-orange-100 text-orange-700' };
+  if (d <= 4)      return { label: 'HIGH',    cls: 'bg-red-100 text-red-700' };
+  if (d <= 7)      return { label: 'MEDIUM',  cls: 'bg-orange-100 text-orange-700' };
   return                  { label: 'LOW',     cls: 'bg-green-100 text-green-700' };
 };
 

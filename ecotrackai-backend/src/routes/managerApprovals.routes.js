@@ -1,11 +1,5 @@
-// ============================================================
-// FILE: src/routes/managerApprovals.routes.js  (NEW FILE)
-// This is a SEPARATE file from manager.routes.js
-// It does NOT inherit the router.use(authorize('admin')) guard
-// Register in server.js as: app.use('/api/manager', require('./routes/managerApprovals.routes'))
-// ============================================================
-const { Router }  = require('express');
-const router      = Router();
+const { Router } = require('express');
+const router = Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 const {
@@ -15,52 +9,43 @@ const {
   approveInventory, declineInventory,
 } = require('../controllers/manager.controller');
 
-// ── Logistics Manager ────────────────────────────────────────
-router.get(
-  '/logistics/pending',
+// ── Logistics ─────────────────────────────────────────────────
+router.get('/logistics/pending',
   authenticate, authorize('logistics_manager', 'admin'),
   getLogisticsPending
 );
-router.get(
-  '/logistics/history',
+router.get('/logistics/history',
   authenticate, authorize('logistics_manager', 'admin'),
   getLogisticsHistory
 );
-router.get(
-  '/logistics/stats',
+router.get('/logistics/stats',
   authenticate, authorize('logistics_manager', 'admin'),
   getLogisticsStats
 );
-router.post(
-  '/logistics/:id/approve',
-  authenticate, authorize('logistics_manager'),
+router.post('/logistics/:id/approve',
+  authenticate, authorize('logistics_manager', 'admin'),
   approveLogistics
 );
-router.post(
-  '/logistics/:id/decline',
-  authenticate, authorize('logistics_manager'),
+router.post('/logistics/:id/decline',
+  authenticate, authorize('logistics_manager', 'admin'),
   declineLogistics
 );
 
-// ── Inventory Manager ────────────────────────────────────────
-router.get(
-  '/inventory/pending',
+// ── Inventory ─────────────────────────────────────────────────
+router.get('/inventory/pending',
   authenticate, authorize('inventory_manager', 'admin'),
   getInventoryPending
 );
-router.get(
-  '/inventory/history',
+router.get('/inventory/history',
   authenticate, authorize('inventory_manager', 'admin'),
   getInventoryHistory
 );
-router.post(
-  '/inventory/:id/approve',
-  authenticate, authorize('inventory_manager'),
+router.post('/inventory/:id/approve',
+  authenticate, authorize('inventory_manager', 'admin'),
   approveInventory
 );
-router.post(
-  '/inventory/:id/decline',
-  authenticate, authorize('inventory_manager'),
+router.post('/inventory/:id/decline',
+  authenticate, authorize('inventory_manager', 'admin'),
   declineInventory
 );
 

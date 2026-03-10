@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import alertService from '../services/alert.service';
-import approvalService from '../services/approval.service';
 import { canTransitionSpoilage } from '../utils/statusMachines';
 
 const useAlerts = () => {
@@ -19,16 +18,9 @@ const useAlerts = () => {
     setLoading(true);
     setError('');
     try {
-      try {
-        await alertService.syncAlerts();
-      } catch (_error) {
-        // Non-blocking sync failure.
-      }
-
       const response = await alertService.getAllAlerts();
-      const data = response?.data || response?.alerts || response || [];
-      const list = Array.isArray(data) ? data : data.alerts || [];
-      setAlerts(list);
+      const list = response?.data?.alerts || response?.alerts || [];
+      setAlerts(Array.isArray(list) ? list : []);
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to load alerts');
     } finally {

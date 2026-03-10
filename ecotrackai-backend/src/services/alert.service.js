@@ -1,3 +1,4 @@
+console.log('[AlertService] MODULE LOADED - new version');
 const pool = require('../config/database');
 const AlertModel = require('../models/alert.model');
 const AuditModel = require('../models/audit.model');
@@ -64,10 +65,8 @@ const AlertService = {
     return Number.isFinite(parsed) ? parsed : fallback;
   },
 
-  // Clean up alerts for products no longer in inventory
   async _cleanupStaleAlerts(businessId) {
     try {
-      // First, delete alerts where status is resolved/dismissed and older than 7 days
       const oldResolvedQuery = `
         DELETE FROM alerts
         WHERE business_id = $1
@@ -76,9 +75,7 @@ const AlertService = {
         RETURNING id
       `;
       const { rows: oldResolved } = await pool.query(oldResolvedQuery, [businessId]);
-      
-      // Clean up alerts for products with no active inventory (regardless of alert status)
-      // This removes alerts for products that were deleted or have 0 quantity
+
       const cleanupQuery = `
         DELETE FROM alerts a
         WHERE a.business_id = $1
@@ -92,7 +89,7 @@ const AlertService = {
         RETURNING a.id
       `;
       const { rows: deletedRows } = await pool.query(cleanupQuery, [businessId]);
-      
+
       const totalDeleted = oldResolved.length + deletedRows.length;
       if (totalDeleted > 0) {
         console.log(`[AlertService._cleanupStaleAlerts] Cleaned up ${totalDeleted} stale alerts for business ${businessId}`);
@@ -110,7 +107,6 @@ const AlertService = {
     if (!createdAt || Number.isNaN(createdAt.getTime())) {
       return shelf;
     }
-
     const daysSinceEntry = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
     return Math.max(0, shelf - Math.max(0, daysSinceEntry));
   },
@@ -142,7 +138,7 @@ const AlertService = {
     const tempComponent = clamp(tempDeviation * 2.5, 0, 20);
     const humidityComponent = clamp(humidityDeviation * 0.8, 0, 12);
     const GOOD_CONDITIONS = ['good', 'excellent', 'very good'];
-const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
+    const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
     const quantityComponent = clamp(Math.log10(quantity + 1) * 4, 0, 8);
     const suboptimalComponent = checkSuboptimalConditions(temperature, humidity, storageCategory) ? 5 : 0;
 
@@ -172,62 +168,57 @@ const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
       return [];
     }
   },
+
   async finalizeCarbonVerification(ctx, carbonRecordId, decision, notes = '') {
-  try {
-    const actionType = decision === 'verified'
-      ? 'carbon_verified'
-      : 'carbon_revision_requested';
-
-    const txResult = await ApprovalModel.createEcoTrustTransaction({
-      businessId: ctx.businessId,
-      actionType,
-      relatedRecordId: carbonRecordId,
-      relatedRecordType: 'carbon_record',
-      actorUserId: ctx.userId,
-      verificationStatus: decision === 'verified' ? 'verified' : 'pending',
-      notes
-    });
-
-    await ApprovalModel.createApprovalHistory({
-      businessId: ctx.businessId,
-      actorUserId: ctx.userId,
-      actorRole: ctx.role,
-      action: decision,
-      notes,
-      relatedRecordType: 'carbon_record',
-      relatedRecordId: carbonRecordId
-    });
-
-    return { success: true, data: { transaction: txResult.data } };
-  } catch (error) {
-    console.error('[ApprovalService.finalizeCarbonVerification]', error);
-    return { success: false, error: 'Failed to finalize carbon verification' };
-  }
-},
+    try {
+      const actionType = decision === 'verified' ? 'carbon_verified' : 'carbon_revision_requested';
+      const txResult = await ApprovalModel.createEcoTrustTransaction({
+        businessId: ctx.businessId,
+        actionType,
+        relatedRecordId: carbonRecordId,
+        relatedRecordType: 'carbon_record',
+        actorUserId: ctx.userId,
+        verificationStatus: decision === 'verified' ? 'verified' : 'pending',
+        notes
+      });
+      await ApprovalModel.createApprovalHistory({
+        businessId: ctx.businessId,
+        actorUserId: ctx.userId,
+        actorRole: ctx.role,
+        action: decision,
+        notes,
+        relatedRecordType: 'carbon_record',
+        relatedRecordId: carbonRecordId
+      });
+      return { success: true, data: { transaction: txResult.data } };
+    } catch (error) {
+      console.error('[ApprovalService.finalizeCarbonVerification]', error);
+      return { success: false, error: 'Failed to finalize carbon verification' };
+    }
+  },
 
   async _fetchInventoryBatchesByBusiness(businessId) {
     try {
       const query = `
-  SELECT
-    i.inventory_id AS batch_id,
-    i.batch_number,
-    i.product_id,
-    p.product_name,
-    p.storage_category,
-    p.shelf_life_days,
-    i.quantity AS batch_quantity,
-    COALESCE(i.unit_of_measure, p.unit_of_measure, 'kg') AS unit_of_measure,
-    COALESCE(i.entry_date, p.created_at, NOW()) AS batch_created_at,
-    COALESCE(i.current_condition, 'good') AS current_condition,
-    i.expected_expiry_date   -- ADD THIS LINE
-  FROM inventory i
-  JOIN products p ON p.product_id = i.product_id
-  WHERE i.business_id = $1
-    AND COALESCE(i.quantity, 0) > 0
-    AND LOWER(COALESCE(i.current_condition, 'good')) <> 'spoiled'
-  ORDER BY i.inventory_id ASC
-`;
-
+        SELECT
+          i.inventory_id AS batch_id,
+          i.batch_number,
+          i.product_id,
+          p.product_name,
+          p.storage_category,
+          p.shelf_life_days,
+          i.quantity AS batch_quantity,
+          COALESCE(i.unit_of_measure, p.unit_of_measure, 'kg') AS unit_of_measure,
+          COALESCE(i.entry_date, p.created_at, NOW()) AS batch_created_at,
+          COALESCE(i.current_condition, 'good') AS current_condition,
+          i.expected_expiry_date
+        FROM inventory i
+        JOIN products p ON p.product_id = i.product_id
+        WHERE i.business_id = $1
+          AND COALESCE(i.quantity, 0) > 0
+          AND LOWER(COALESCE(i.current_condition, 'good')) <> 'spoiled'
+        ORDER BY i.inventory_id ASC
+      `;
       const { rows } = await pool.query(query, [businessId]);
       if (rows.length > 0) return rows;
     } catch (error) {
@@ -318,7 +309,7 @@ const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
         candidate.location,
         candidate.quantityDisplay,
         String(candidate.valueEstimate),
-        candidate.batchNumber || null   
+        candidate.batchNumber || null
       );
 
       return { created: 1, updated: 0, skipped: 0 };
@@ -334,7 +325,6 @@ const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
     }
 
     try {
-      // First, clean up stale alerts for products no longer in inventory
       await this._cleanupStaleAlerts(businessId);
 
       const batches = await this._fetchInventoryBatchesByBusiness(businessId);
@@ -361,16 +351,15 @@ const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
         } else {
           daysLeft = this._calculateDaysLeft(shelfLifeDays, batch.batch_created_at);
         }
-        
+
         const forceAlert = daysLeft <= 7 || (shelfLifeDays > 0 && (daysLeft / shelfLifeDays) <= 0.7);
         const condition = String(batch.current_condition || 'good').toLowerCase();
-        // Poor/Fair condition reduces effective days left (like bruising shortens shelf life)
         const conditionMultiplier = { poor: 0.4, fair: 0.7, good: 1.0, excellent: 1.0 };
         const effectiveDaysLeft = Math.floor(daysLeft * (conditionMultiplier[condition] || 1.0));
-        
+
         const riskScore = this._calculateRiskScore({
           shelfLifeDays,
-          daysLeft: effectiveDaysLeft,   // use condition-adjusted days
+          daysLeft: effectiveDaysLeft,
           temperature: env.temperature,
           humidity: env.humidity,
           quantity,
@@ -475,100 +464,124 @@ const conditionComponent = GOOD_CONDITIONS.includes(condition) ? 0 : 12;
       return { success: false, error: 'Failed to run daily spoilage risk engine' };
     }
   },
-  // ADD this method to the existing AlertService:
-async generateAlertsForBusiness(businessId) {
-  // Pull all inventory for this business that hasn't expired
-  const { rows: items } = await pool.query(`
-    SELECT 
-      i.inventory_id, i.product_id, i.quantity, i.batch_number,
-      i.expected_expiry_date, i.current_condition, i.unit_of_measure,
-      i.facility_id,
-      p.product_name, p.optimal_temp_min, p.optimal_temp_max,
-      p.storage_category,
-      sf.facility_name,
-      CURRENT_DATE::date AS today,
-      (i.expected_expiry_date - CURRENT_DATE)::int AS days_left
-    FROM inventory i
-    JOIN products p ON i.product_id = p.product_id
-    LEFT JOIN storage_facilities sf ON i.facility_id = sf.facility_id
-    WHERE i.business_id = $1
-      AND i.expected_expiry_date >= CURRENT_DATE
-      AND i.quantity > 0
-  `, [businessId]);
 
-  let created = 0;
-  let skipped = 0;
+  async generateAlertsForBusiness(businessId) {
+    const { rows: items } = await pool.query(`
+      SELECT
+        i.inventory_id, i.product_id, i.quantity, i.batch_number,
+        i.expected_expiry_date, i.current_condition, i.unit_of_measure,
+        i.facility_id,
+        p.product_name, p.optimal_temp_min, p.optimal_temp_max,
+        p.storage_category,
+        sf.facility_name,
+        CURRENT_DATE::date AS today,
+        (i.expected_expiry_date - CURRENT_DATE)::int AS days_left
+      FROM inventory i
+      JOIN products p ON i.product_id = p.product_id
+      LEFT JOIN storage_facilities sf ON i.facility_id = sf.facility_id
+      WHERE i.business_id = $1
+        AND i.expected_expiry_date >= CURRENT_DATE
+        AND i.quantity > 0
+    `, [businessId]);
 
-  for (const item of items) {
-    const daysLeft = item.days_left;
+    let created = 0;
+    let skipped = 0;
 
-    // Risk classification
-    let riskLevel;
-    if (daysLeft <= 2)      riskLevel = 'HIGH';
-    else if (daysLeft <= 4) riskLevel = 'MEDIUM';
-    else if (daysLeft <= 7) riskLevel = 'LOW';
-    else continue; // Not at risk yet — skip
+    for (const item of items) {
+      const daysLeft = item.days_left;
 
-    // Don't duplicate: skip if active alert already exists for this batch
-    const { rows: existing } = await pool.query(`
-      SELECT id FROM alerts
-      WHERE business_id = $1
-        AND product_id  = $2
-        AND batch_number = $3
-        AND status NOT IN ('dismissed', 'resolved', 'approved', 'declined')
-    `, [businessId, item.product_id, item.batch_number]);
+      // ✅ UPDATED risk classification — HIGH ≤4d, MEDIUM ≤9d, LOW 10d+
+      let riskLevel;
+      if (daysLeft <= 4)      riskLevel = 'HIGH';
+      else if (daysLeft <= 7) riskLevel = 'MEDIUM';
+      else                    riskLevel = 'LOW';
 
-    if (existing.length > 0) { skipped++; continue; }
+      const { rows: existing } = await pool.query(`
+        SELECT id FROM alerts
+        WHERE business_id = $1
+          AND product_id = $2
+          AND batch_number = $3
+          AND status NOT IN ('dismissed', 'resolved', 'approved', 'declined')
+      `, [businessId, item.product_id, item.batch_number]);
 
-    // AI suggestion text
-    const suggestion =
-      riskLevel === 'HIGH'
-        ? `Redistribute ${item.product_name} immediately or offer at reduced price to avoid total loss.`
-        : riskLevel === 'MEDIUM'
-        ? `Plan delivery or promotional move for ${item.product_name} within the next 2 days.`
-        : `Monitor ${item.product_name} closely — expiry approaching within a week.`;
+      if (existing.length > 0) { skipped++; continue; }
 
-    await pool.query(`
-      INSERT INTO alerts (
-        business_id, product_id, product_name, risk_level,
-        details, days_left, quantity, location,
-        alert_type, status, batch_number
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10)
-    `, [
-      businessId,
-      item.product_id,
-      item.product_name,
-      riskLevel,
-      suggestion,
-      daysLeft,
-      `${item.quantity} ${item.unit_of_measure || 'kg'}`,
-      item.facility_name || 'Main Warehouse',
-      'spoilage_risk',
-      item.batch_number
-    ]);
-    created++;
-  }
+      const suggestion =
+        riskLevel === 'HIGH'
+          ? `Redistribute ${item.product_name} immediately or offer at reduced price to avoid total loss.`
+          : riskLevel === 'MEDIUM'
+          ? `Plan delivery or promotional move for ${item.product_name} within the next few days.`
+          : `Monitor ${item.product_name} closely — expiry approaching within 10 days.`;
 
-  return { created, skipped, total: items.length };
-},
+      await pool.query(`
+        INSERT INTO alerts (
+          business_id, product_id, product_name, risk_level,
+          details, days_left, quantity, location,
+          alert_type, status, batch_number
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10)
+      `, [
+        businessId,
+        item.product_id,
+        item.product_name,
+        riskLevel,
+        suggestion,
+        daysLeft,
+        `${item.quantity} ${item.unit_of_measure || 'kg'}`,
+        item.facility_name || 'Main Warehouse',
+        'spoilage_risk',
+        item.batch_number
+      ]);
+      created++;
+    }
+
+    return { created, skipped, total: items.length };
+  },
 
   async syncAlertsFromProducts(businessId) {
     console.log('[AlertService.syncAlertsFromProducts] businessId =', businessId);
     if (!businessId) {
       throw { status: 400, message: 'businessId is required for sync' };
     }
-
-    const result = await this.processBusinessSpoilageRiskEngine(businessId);
-    if (!result.success) {
-      throw { status: 500, message: result.error || 'Failed to sync spoilage alerts' };
-    }
-
-    return (result.data.alertsCreated || 0) + (result.data.alertsUpdated || 0);
+    const result = await this.generateAlertsForBusiness(businessId);
+    return (result.created || 0) + (result.skipped || 0);
   },
 
   async getAllAlerts(businessId) {
-    const alerts = await AlertModel.findAllByBusiness(businessId);
-    return { alerts };
+    console.log('[getAllAlerts] called with businessId:', businessId);
+    const { rows } = await pool.query(`
+      SELECT
+        i.inventory_id AS id,
+        i.inventory_id,
+        i.product_id,
+        p.product_name,
+        i.batch_number,
+        i.quantity AS current_quantity,
+        i.unit_of_measure,
+        i.expected_expiry_date,
+        (i.expected_expiry_date - CURRENT_DATE)::int AS days_left,
+        CASE
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
+          ELSE 'LOW'
+        END AS risk_level,
+        'active' AS status,
+        'spoilage_risk' AS alert_type,
+        i.current_condition
+      FROM inventory i
+      JOIN products p ON i.product_id = p.product_id
+      WHERE i.business_id = $1
+        AND i.quantity > 0
+        AND i.expected_expiry_date IS NOT NULL
+        AND LOWER(COALESCE(i.current_condition, 'good')) <> 'spoiled'
+      ORDER BY
+        CASE
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 1
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 2
+          ELSE 3
+        END,
+        i.expected_expiry_date ASC
+    `, [businessId]);
+    return { alerts: rows };
   },
 
   async getAlertStats(businessId) {
@@ -581,14 +594,47 @@ async generateAlertsForBusiness(businessId) {
   },
 
   async submitAlertForApproval(alertId, businessId, user, options = {}) {
-    // Reuse approval service logic by constructing payload from alert
-    const alert = await this.getAlertById(alertId, businessId);
+    // Look up from inventory directly (matches how getAllAlerts returns inventory_id as id)
+    const { rows } = await pool.query(`
+      SELECT
+        i.inventory_id AS id,
+        i.product_id,
+        p.product_name,
+        i.batch_number,
+        i.quantity,
+        i.unit_of_measure,
+        (i.expected_expiry_date - CURRENT_DATE)::int AS days_left,
+        CASE
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
+          ELSE 'LOW'
+        END AS risk_level,
+        'active' AS status,
+        i.current_condition,
+        'Main Warehouse' AS location
+      FROM inventory i
+      JOIN products p ON i.product_id = p.product_id
+      WHERE i.inventory_id = $1
+        AND i.business_id = $2
+        AND i.quantity > 0
+    `, [alertId, businessId]);
+  
+    const alert = rows[0];
     if (!alert) throw { status: 404, message: 'Alert not found' };
-    if (alert.status !== 'active') {
-      throw { status: 400, message: 'Only active alerts can be submitted' };
+  
+    // Check if already submitted (pending approval exists for this inventory item)
+    const { rows: existing } = await pool.query(`
+      SELECT approval_id FROM manager_approvals
+      WHERE business_id = $1
+        AND alert_id = $2
+        AND status = 'pending'
+      LIMIT 1
+    `, [businessId, alert.id]);
+  
+    if (existing.length > 0) {
+      throw { status: 400, message: 'This alert is already pending manager review' };
     }
-
-    // forward to approval service
+  
     const ApprovalService = require('./approval.service');
     const payload = {
       alertId: alert.id,
@@ -598,12 +644,12 @@ async generateAlertsForBusiness(businessId) {
       daysLeft: alert.days_left || 0,
       riskLevel: alert.risk_level || 'MEDIUM',
       priority: alert.risk_level || 'MEDIUM',
-      aiSuggestion: options.aiSuggestion || alert.details || '',
+      aiSuggestion: options.aiSuggestion || '',
       requiredRole: 'inventory_manager',
       approvalType: 'spoilage_action',
       batchNumber: alert.batch_number || null
     };
-
+  
     const result = await ApprovalService.createFromAlert(user, payload);
     return result;
   },
@@ -646,9 +692,29 @@ async generateAlertsForBusiness(businessId) {
   },
 
   async getAIInsights(id, businessId) {
-    const alert = await AlertModel.findByIdAndBusiness(id, businessId);
-    if (!alert) throw { status: 404, message: 'Alert not found' };
-    return aiService.generateAlertInsights(alert);
+    const { rows } = await pool.query(`
+      SELECT
+        i.inventory_id AS id,
+        i.product_id,
+        p.product_name,
+        i.batch_number,
+        i.quantity,
+        i.unit_of_measure,
+        (i.expected_expiry_date - CURRENT_DATE)::int AS days_left,
+        CASE
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
+          ELSE 'LOW'
+        END AS risk_level,
+        i.current_condition,
+        'Main Warehouse' AS location
+      FROM inventory i
+      JOIN products p ON i.product_id = p.product_id
+      WHERE i.inventory_id = $1
+        AND i.business_id = $2
+    `, [id, businessId]);
+    if (!rows[0]) throw { status: 404, message: 'Inventory item not found' };
+    return aiService.generateAlertInsights(rows[0]);
   }
 };
 
