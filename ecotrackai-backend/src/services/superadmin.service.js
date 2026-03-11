@@ -1,15 +1,30 @@
 // ============================================================
 // FILE: backend/src/services/superadmin.service.js
 // LAYER: Business Logic — Super Admin Platform Operations
-// PURPOSE: All platform-level operations (non-business-specific)
+//
+// COLUMN NAME FIXES (verified against actual Neon schema):
+//
+//   manager_approvals:
+//     decided_by      → reviewed_by
+//     decided_at      → reviewed_at
+//     manager_comment → review_notes
+//     (decision_notes also exists — used as fallback alias)
+//
+//   ecotrust_scores:
+//     total_points    → current_score  (column does not exist as total_points)
+//     level           → level          (correct, no change)
+//
+//   business_profiles: confirmed correct table name throughout
+//   AuditModel.log() → AuditModel.logInvalidStatusTransition()
 // ============================================================
 
 const BusinessModel = require('../models/business.model');
-const UserModel = require('../models/user.model');
-const AuditModel = require('../models/audit.model');
-const pool = require('../config/database');
+const AuditModel    = require('../models/audit.model');
+const pool          = require('../config/database');
 
 const SuperAdminService = {
+
+  // ─── HELPERS ──────────────────────────────────────────────
 
   _ok(data = null) {
     return { success: true, data };
@@ -32,7 +47,7 @@ const SuperAdminService = {
     }
 
     const userId = user.userId || user.user_id;
-    const role = user.role;
+    const role   = user.role;
 
     if (this._isNil(userId) || this._isNil(role)) {
       return this._fail('Invalid user context');
@@ -45,9 +60,8 @@ const SuperAdminService = {
     return this._ok({ userId, role });
   },
 
-  /**
-   * ===== BUSINESS REGISTRY OPERATIONS =====
-   */
+  // ─── BUSINESS REGISTRY ────────────────────────────────────
+
   async getAllBusinesses(user, limit = 50, offset = 0) {
     try {
       const ctxResult = this._extractSuperAdminContext(user);
@@ -97,19 +111,51 @@ const SuperAdminService = {
         return this._fail('Request body is required');
       }
 
-      const { businessName, businessType, registrationNumber, address, contactEmail, contactPhone } = body;
+      const {
+        businessName, businessType, registrationNumber,
+        address, contactEmail, contactPhone
+      } = body;
 
       if (!businessName || !businessType || !registrationNumber) {
         return this._fail('business_name, business_type, and registration_number are required');
       }
 
-      const result = await BusinessModel.create({
-        businessName, businessType, registrationNumber, address, contactEmail, contactPhone
-      });
-      if (!result.success) return result;
+      const client = await pool.connect();
+      let business;
+      try {
+        await client.query('BEGIN');
+
+        const result = await BusinessModel.create({
+          businessName, businessType, registrationNumber,
+          address, contactEmail, contactPhone
+        });
+
+        if (!result.success) {
+          await client.query('ROLLBACK');
+          return result;
+        }
+
+        business = result.data;
+
+        // System flow: EcoTrust record created immediately at 0 / Newcomer
+        // No ON CONFLICT — ecotrust_scores has no unique constraint on business_id,
+        // only a PK on score_id. Plain INSERT is correct.
+        await client.query(
+          `INSERT INTO ecotrust_scores (business_id, current_score, total_points_earned, level)
+           VALUES ($1, 0, 0, 'Newcomer')`,
+          [business.business_id]
+        );
+
+        await client.query('COMMIT');
+      } catch (txError) {
+        await client.query('ROLLBACK');
+        throw txError;
+      } finally {
+        client.release();
+      }
 
       return this._ok({
-        business: result.data,
+        business,
         message: 'Business created successfully. Admin account must be created separately.'
       });
     } catch (error) {
@@ -149,16 +195,20 @@ const SuperAdminService = {
       const result = await BusinessModel.updateStatus(businessId, false);
       if (!result.success) return result;
 
-      // AUDIT: Log suspension
-      await AuditModel.logInvalidStatusTransition({
-        businessId,
-        userId: ctxResult.data.userId,
-        event_type: 'business_suspended',
-        action: 'business_suspended',
-        entity_type: 'business',
-        entity_id: businessId,
-        reason: 'Suspended by super_admin'
-      });
+      // Audit failure must never block the suspension
+      try {
+        await AuditModel.logInvalidStatusTransition({
+          businessId,
+          userId:     ctxResult.data.userId,
+          entityType: 'business',
+          entityId:   businessId,
+          fromStatus: 'active',
+          toStatus:   'suspended',
+          reason:     'Suspended by super_admin'
+        });
+      } catch (auditError) {
+        console.warn('[SuperAdminService.suspendBusiness] Audit log failed:', auditError.message);
+      }
 
       return this._ok({ business: result.data, message: 'Business suspended successfully' });
     } catch (error) {
@@ -186,30 +236,29 @@ const SuperAdminService = {
     }
   },
 
-  /**
-   * ===== USER MANAGEMENT OPERATIONS =====
-   */
+  // ─── USER MANAGEMENT ─────────────────────────────────────
+
   async getSuperAdmins(user, limit = 50, offset = 0) {
     try {
       const ctxResult = this._extractSuperAdminContext(user);
       if (!ctxResult.success) return ctxResult;
 
-      const query = `
-        SELECT user_id, username, email, full_name, is_active, created_at, last_login
-        FROM users
-        WHERE role = 'super_admin'
-        ORDER BY created_at DESC
-        LIMIT $1 OFFSET $2
-      `;
-      const { rows } = await pool.query(query, [limit, offset]);
+      const { rows } = await pool.query(
+        `SELECT user_id, username, email, full_name, is_active, created_at, last_login
+         FROM users
+         WHERE role = 'super_admin'
+         ORDER BY created_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      );
 
-      const countQuery = 'SELECT COUNT(*) as total FROM users WHERE role = \'super_admin\'';
-      const countResult = await pool.query(countQuery);
-      const total = parseInt(countResult.rows[0].total);
+      const countResult = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM users WHERE role = 'super_admin'`
+      );
 
       return this._ok({
         super_admins: rows,
-        pagination: { total, limit, offset }
+        pagination: { total: countResult.rows[0].total, limit, offset }
       });
     } catch (error) {
       console.error('[SuperAdminService.getSuperAdmins]', error);
@@ -226,14 +275,14 @@ const SuperAdminService = {
         return this._fail('business_id is required');
       }
 
-      const query = `
-        SELECT user_id, username, email, full_name, role, is_active, created_at, last_login
-        FROM users
-        WHERE business_id = $1 AND role = 'admin'
-        ORDER BY created_at DESC
-        LIMIT $2 OFFSET $3
-      `;
-      const { rows } = await pool.query(query, [businessId, limit, offset]);
+      const { rows } = await pool.query(
+        `SELECT user_id, username, email, full_name, role, is_active, created_at, last_login
+         FROM users
+         WHERE business_id = $1 AND role = 'admin'
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [businessId, limit, offset]
+      );
 
       return this._ok({
         admins: rows,
@@ -254,16 +303,16 @@ const SuperAdminService = {
         return this._fail('user_id is required');
       }
 
-      const query = `
-        UPDATE users
-        SET is_active = false
-        WHERE user_id = $1 AND role != 'super_admin'
-        RETURNING user_id, username, email, role, is_active
-      `;
-      const { rows } = await pool.query(query, [userId]);
+      const { rows } = await pool.query(
+        `UPDATE users
+         SET is_active = false
+         WHERE user_id = $1 AND role != 'super_admin'
+         RETURNING user_id, username, email, role, is_active`,
+        [userId]
+      );
 
       if (rows.length === 0) {
-        return this._fail('User not found or is super_admin', 404);
+        return this._fail('User not found or cannot deactivate a super_admin', 404);
       }
 
       return this._ok({ user: rows[0], message: 'User deactivated successfully' });
@@ -273,48 +322,46 @@ const SuperAdminService = {
     }
   },
 
-  /**
-   * ===== SYSTEM HEALTH OPERATIONS =====
-   */
+  // ─── SYSTEM HEALTH ────────────────────────────────────────
+
   async getSystemHealth(user) {
     try {
       const ctxResult = this._extractSuperAdminContext(user);
       if (!ctxResult.success) return ctxResult;
 
-      const businessStatsResult = await BusinessModel.getSystemStats();
-      if (!businessStatsResult.success) return businessStatsResult;
+      // BusinessModel.getSystemStats() uses business_profiles — confirmed correct
+      const statsResult = await BusinessModel.getSystemStats();
+      if (!statsResult.success) return this._fail('Failed to fetch business stats');
 
-      const businessStats = businessStatsResult.data;
+      const stats = statsResult.data;
 
-      // Get today's alerts count
-      const alertsQuery = `
-        SELECT COUNT(*) as total FROM alerts WHERE DATE(created_at) = CURRENT_DATE
-      `;
-      const alertsResult = await pool.query(alertsQuery);
-      const alertsToday = parseInt(alertsResult.rows[0].total);
-
-      // Get pending approvals count
-      const approvalsQuery = `
-        SELECT COUNT(*) as total FROM manager_approvals WHERE status = 'pending'
-      `;
-      const approvalsResult = await pool.query(approvalsQuery);
-      const pendingApprovals = parseInt(approvalsResult.rows[0].total);
-
-      // Get high-risk products
-      const highRiskQuery = `
-        SELECT COUNT(*) as total FROM alerts WHERE risk_level = 'HIGH'
-      `;
-      const highRiskResult = await pool.query(highRiskQuery);
-      const highRiskAlerts = parseInt(highRiskResult.rows[0].total);
+      const [alertsResult, approvalsResult, highRiskResult] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM alerts
+           WHERE DATE(created_at) = CURRENT_DATE`
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM manager_approvals
+           WHERE status = 'pending'`
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM alerts
+           WHERE risk_level = 'HIGH'`
+        )
+      ]);
 
       return this._ok({
         system_health: {
-          ...businessStats,
-          alerts_today: alertsToday,
-          pending_approvals: pendingApprovals,
-          high_risk_alerts: highRiskAlerts,
-          system_status: 'operational',
-          timestamp: new Date().toISOString()
+          total_businesses:     parseInt(stats.total_businesses     || 0),
+          active_businesses:    parseInt(stats.active_businesses    || 0),
+          suspended_businesses: parseInt(stats.suspended_businesses || 0),
+          active_users:         parseInt(stats.total_users          || 0),
+          super_admin_count:    parseInt(stats.super_admin_count    || 0),
+          alerts_today:         alertsResult.rows[0].total,
+          pending_approvals:    approvalsResult.rows[0].total,
+          high_risk_alerts:     highRiskResult.rows[0].total,
+          system_status:        'operational',
+          timestamp:            new Date().toISOString()
         }
       });
     } catch (error) {
@@ -323,50 +370,71 @@ const SuperAdminService = {
     }
   },
 
-  /**
-   * ===== AUDIT LOG OPERATIONS =====
-   */
+  // ─── AUDIT LOGS ───────────────────────────────────────────
+
   async getAuditLogs(user, filters = {}) {
     try {
       const ctxResult = this._extractSuperAdminContext(user);
       if (!ctxResult.success) return ctxResult;
 
-      const { businessId, startDate, endDate, eventType, limit = 100, offset = 0 } = filters;
+      const {
+        businessId, startDate, endDate, eventType,
+        limit = 100, offset = 0
+      } = filters;
 
-      let query = 'SELECT * FROM audit_logs WHERE 1=1';
-      const values = [];
+      const conditions = ['1=1'];
+      const values     = [];
+      let   idx        = 1;
 
       if (!this._isNil(businessId)) {
+        conditions.push(`ma.business_id = $${idx++}`);
         values.push(businessId);
-        query += ` AND business_id = $${values.length}`;
       }
-
       if (!this._isNil(eventType)) {
+        conditions.push(`ma.approval_type = $${idx++}`);
         values.push(eventType);
-        query += ` AND event_type = $${values.length}`;
       }
-
       if (!this._isNil(startDate)) {
+        conditions.push(`ma.created_at >= $${idx++}`);
         values.push(startDate);
-        query += ` AND created_at >= $${values.length}`;
       }
-
       if (!this._isNil(endDate)) {
+        conditions.push(`ma.created_at <= $${idx++}`);
         values.push(endDate);
-        query += ` AND created_at <= $${values.length}`;
       }
 
-      values.push(limit);
-      query += ` ORDER BY created_at DESC LIMIT $${values.length}`;
+      values.push(limit, offset);
 
-      values.push(offset);
-      query += ` OFFSET $${values.length}`;
+      // FIXED COLUMN NAMES (verified against Neon schema):
+      //   decided_by  → reviewed_by
+      //   decided_at  → reviewed_at
+      //   manager_comment → review_notes
+      const { rows } = await pool.query(
+        `SELECT
+           ma.approval_id,
+           ma.business_id,
+           bp.business_name,
+           ma.approval_type                              AS event_type,
+           ma.status,
+           ma.risk_level,
+           ma.ai_suggestion,
+           COALESCE(ma.review_notes, ma.decision_notes) AS reason,
+           ma.reviewed_by                               AS decided_by,
+           u.full_name                                  AS decided_by_name,
+           ma.reviewed_at                               AS decided_at,
+           ma.created_at
+         FROM manager_approvals ma
+         LEFT JOIN business_profiles bp ON bp.business_id = ma.business_id
+         LEFT JOIN users             u  ON u.user_id      = ma.reviewed_by
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY ma.created_at DESC
+         LIMIT $${idx++} OFFSET $${idx}`,
+        values
+      );
 
-      const { rows } = await pool.query(query, values);
-      
       return this._ok({
-        audit_logs: rows,
-        pagination: { limit, offset, returned: rows.length }
+        audit_logs:  rows,
+        pagination:  { limit, offset, returned: rows.length }
       });
     } catch (error) {
       console.error('[SuperAdminService.getAuditLogs]', error);
@@ -374,15 +442,17 @@ const SuperAdminService = {
     }
   },
 
-  /**
-   * ===== ANALYTICS OPERATIONS =====
-   */
+  // ─── ANALYTICS ────────────────────────────────────────────
+
   async getCrossBusinessAnalytics(user, timeRange = 30) {
     try {
       const ctxResult = this._extractSuperAdminContext(user);
       if (!ctxResult.success) return ctxResult;
 
-      const safeRange = Number.isFinite(Number(timeRange)) ? Math.max(1, Number(timeRange)) : 30;
+      const safeRange = Number.isFinite(Number(timeRange))
+        ? Math.max(1, Number(timeRange))
+        : 30;
+
       const pickColumn = (columns, candidates) => {
         for (const candidate of candidates) {
           if (columns.includes(candidate)) return candidate;
@@ -390,94 +460,103 @@ const SuperAdminService = {
         return null;
       };
 
-      // Carbon emissions trend (schema-safe against column drift).
+      // Introspect carbon_footprint_records columns
       const carbonColumnsResult = await pool.query(`
-        SELECT column_name
-        FROM information_schema.columns
+        SELECT column_name FROM information_schema.columns
         WHERE table_schema = current_schema()
-          AND table_name = 'carbon_footprint_records'
+          AND table_name   = 'carbon_footprint_records'
       `);
-      const carbonColumns = carbonColumnsResult.rows.map((row) => row.column_name);
-      const carbonDateColumn = pickColumn(carbonColumns, ['created_at', 'recorded_at', 'updated_at']);
-      const carbonEmissionColumn = pickColumn(carbonColumns, [
-        'total_carbon_kg',
-        'transportation_carbon_kg',
-        'actual_co2_kg',
-        'estimated_co2_kg',
-        'co2_kg',
-        'emission_amount'
+      const carbonColumns        = carbonColumnsResult.rows.map(r => r.column_name);
+      const carbonDateCol        = pickColumn(carbonColumns, ['created_at', 'recorded_at', 'updated_at']);
+      const carbonEmissionCol    = pickColumn(carbonColumns, [
+        'total_carbon_kg', 'transportation_carbon_kg',
+        'actual_co2_kg', 'estimated_co2_kg', 'co2_kg', 'emission_amount'
       ]);
-      const carbonBusinessColumn = pickColumn(carbonColumns, ['business_id']);
+      const carbonBusinessCol    = pickColumn(carbonColumns, ['business_id']);
 
       let carbonRows = [];
-      if (carbonDateColumn && carbonBusinessColumn) {
-        const sumExpr = carbonEmissionColumn
-          ? `COALESCE(SUM(c.${carbonEmissionColumn}), 0)`
+      if (carbonDateCol && carbonBusinessCol) {
+        const sumExpr = carbonEmissionCol
+          ? `COALESCE(SUM(c.${carbonEmissionCol}), 0)`
           : '0::numeric';
-
-        const carbonQuery = `
-          SELECT
-            DATE(c.${carbonDateColumn}) AS date,
-            ${sumExpr} AS total_emissions,
-            COUNT(DISTINCT c.${carbonBusinessColumn}) AS businesses_active
-          FROM carbon_footprint_records c
-          WHERE c.${carbonDateColumn} >= NOW() - ($1::text || ' days')::interval
-          GROUP BY DATE(c.${carbonDateColumn})
-          ORDER BY date DESC
-        `;
-        const carbonResult = await pool.query(carbonQuery, [safeRange]);
-        carbonRows = carbonResult.rows;
+        const { rows } = await pool.query(
+          `SELECT
+             DATE(c.${carbonDateCol})                     AS date,
+             ${sumExpr}                                   AS total_emissions,
+             COUNT(DISTINCT c.${carbonBusinessCol})::int  AS businesses_active
+           FROM carbon_footprint_records c
+           WHERE c.${carbonDateCol} >= NOW() - ($1::text || ' days')::interval
+           GROUP BY DATE(c.${carbonDateCol})
+           ORDER BY date DESC`,
+          [safeRange]
+        );
+        carbonRows = rows;
       }
 
-      // Alert distribution by type
-      const alertsColumnsResult = await pool.query(`
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'alerts'
+      // Alert distribution
+      const alertColumnsResult = await pool.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'alerts'
       `);
-      const alertColumns = alertsColumnsResult.rows.map((row) => row.column_name);
-      const alertDateColumn = pickColumn(alertColumns, ['created_at']);
-      const alertTypeColumn = pickColumn(alertColumns, ['alert_type', 'risk_level']);
+      const alertColumns    = alertColumnsResult.rows.map(r => r.column_name);
+      const alertDateCol    = pickColumn(alertColumns, ['created_at']);
+      const alertTypeCol    = pickColumn(alertColumns, ['alert_type', 'risk_level']);
 
       let alertRows = [];
-      if (alertDateColumn && alertTypeColumn) {
-        const alertsQuery = `
-          SELECT
-            ${alertTypeColumn} AS alert_type,
-            COUNT(*) AS count
-          FROM alerts
-          WHERE ${alertDateColumn} >= NOW() - ($1::text || ' days')::interval
-          GROUP BY ${alertTypeColumn}
-        `;
-        const alertsResult = await pool.query(alertsQuery, [safeRange]);
-        alertRows = alertsResult.rows;
+      if (alertDateCol && alertTypeCol) {
+        const { rows } = await pool.query(
+          `SELECT
+             ${alertTypeCol} AS alert_type,
+             COUNT(*)::int   AS count
+           FROM alerts
+           WHERE ${alertDateCol} >= NOW() - ($1::text || ' days')::interval
+           GROUP BY ${alertTypeCol}`,
+          [safeRange]
+        );
+        alertRows = rows;
       }
 
-      // Approval rate by business
-      const approvalsQuery = `
-        SELECT
-          b.business_id,
-          b.business_name,
-          COUNT(CASE WHEN ma.status = 'approved' THEN 1 END) as approved_count,
-          COUNT(CASE WHEN ma.status = 'rejected' THEN 1 END) as rejected_count,
-          COUNT(*) as total_approvals
-        FROM business_profiles b
-        LEFT JOIN manager_approvals ma
-          ON b.business_id = ma.business_id
-         AND ma.created_at >= NOW() - ($1::text || ' days')::interval
-        GROUP BY b.business_id, b.business_name
-        ORDER BY total_approvals DESC
-      `;
-      const approvalsResult = await pool.query(approvalsQuery, [safeRange]);
+      // Approval rates — FROM business_profiles (not businesses)
+      const { rows: approvalRows } = await pool.query(
+        `SELECT
+           bp.business_id,
+           bp.business_name,
+           COUNT(CASE WHEN ma.status = 'approved'  THEN 1 END)::int AS approved_count,
+           COUNT(CASE WHEN ma.status = 'rejected'  THEN 1 END)::int AS rejected_count,
+           COUNT(*)::int                                             AS total_approvals
+         FROM business_profiles bp
+         LEFT JOIN manager_approvals ma
+                ON bp.business_id = ma.business_id
+               AND ma.created_at >= NOW() - ($1::text || ' days')::interval
+         GROUP BY bp.business_id, bp.business_name
+         ORDER BY total_approvals DESC`,
+        [safeRange]
+      );
+
+      // EcoTrust leaderboard
+      // FIXED: current_score (not total_points — column does not exist)
+      // FIXED: WHERE status = 'active' (not is_active = true)
+      const { rows: leaderboardRows } = await pool.query(
+        `SELECT
+           bp.business_id,
+           bp.business_name,
+           COALESCE(es.current_score, 0) AS total_points,
+           COALESCE(es.level, 'Newcomer') AS level
+         FROM business_profiles bp
+         LEFT JOIN ecotrust_scores es ON es.business_id = bp.business_id
+         WHERE bp.status = 'active'
+         ORDER BY es.current_score DESC NULLS LAST
+         LIMIT 20`
+      );
 
       return this._ok({
         analytics: {
-          time_range_days: safeRange,
-          carbon_trends: carbonRows,
-          alert_distribution: alertRows,
-          approval_rates: approvalsResult.rows,
-          generated_at: new Date().toISOString()
+          time_range_days:      safeRange,
+          carbon_trends:        carbonRows,
+          alert_distribution:   alertRows,
+          approval_rates:       approvalRows,
+          ecotrust_leaderboard: leaderboardRows,
+          generated_at:         new Date().toISOString()
         }
       });
     } catch (error) {
