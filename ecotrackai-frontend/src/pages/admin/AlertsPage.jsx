@@ -16,8 +16,9 @@ const AlertsPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
 
-  // Approved batches banner
+  // Approved batches (collapsible)
   const [approvedBatches, setApprovedBatches]       = useState([]);
+  const [showDeliveryList, setShowDeliveryList]     = useState(false);
   const [showPlanModal, setShowPlanModal]           = useState(false);
   const [selectedPrefill, setSelectedPrefill]       = useState(null);
 
@@ -126,60 +127,6 @@ const AlertsPage = () => {
           <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm flex items-center gap-2">
             <AlertCircle size={16} /> {error || requestError}
           </div>
-        )}
-
-        {/* ── Approved Batches Banner ─────────────────────────── */}
-        {approvedBatches.length > 0 && (
-          <section className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Truck size={16} className="text-orange-600" />
-                </div>
-                <div>
-                  <p className="font-bold text-orange-900 text-sm">
-                    {approvedBatches.length} batch{approvedBatches.length !== 1 ? 'es' : ''} ready for delivery
-                  </p>
-                  <p className="text-xs text-orange-600">Approved by Inventory Manager — plan a delivery now</p>
-                </div>
-              </div>
-              <button
-                onClick={() => handlePlanNow()}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
-              >
-                <Zap size={13} /> Plan Now
-              </button>
-            </div>
-
-            {/* Batch list */}
-            <div className="space-y-2">
-              {approvedBatches.map((batch) => (
-                <div
-                  key={batch.inventory_id}
-                  className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-orange-100"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      batch.risk_level === 'HIGH'   ? 'bg-red-500' :
-                      batch.risk_level === 'MEDIUM' ? 'bg-orange-400' : 'bg-green-500'
-                    }`} />
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{batch.product_name}</p>
-                      <p className="text-xs text-gray-500">
-                        Batch {batch.batch_number || '—'} · {batch.available_quantity} {batch.unit_of_measure || 'kg'} available · {batch.days_left}d left
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handlePlanNow(batch)}
-                    className="text-xs font-semibold text-orange-600 hover:text-orange-800 underline underline-offset-2 transition-colors"
-                  >
-                    Plan this batch
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
         )}
 
         {/* Admin Review Panel (escalated requests) */}
@@ -336,7 +283,7 @@ const AlertsPage = () => {
                 </div>
                 <p className="text-emerald-700 text-sm leading-relaxed">
                   <span className="font-bold text-red-600">{stats.high_risk}</span> high-risk product{stats.high_risk > 1 ? 's' : ''} detected.
-                  Click <span className="font-semibold text-emerald-600">"AI Insights"</span> on any HIGH risk product below to get Groq AI recommendations.
+                  Click <span className="font-semibold text-emerald-600">"AI Insights"</span> on any HIGH risk product below for AI recommendations.
                 </p>
               </div>
             ) : stats.medium_risk > 0 ? (
@@ -370,27 +317,88 @@ const AlertsPage = () => {
           />
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {[
-            { label: 'All', value: 'All' },
-            { label: `High (${stats.high_risk || 0})`, value: 'High' },
-            { label: `Medium (${stats.medium_risk || 0})`, value: 'Medium' },
-            { label: `Low (${stats.low_risk || 0})`, value: 'Low' },
-          ].map(({ label, value }) => (
+        {/* Filter Pills + Ready for Delivery Toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex gap-2 overflow-x-auto pb-1 flex-1">
+            {[
+              { label: 'All', value: 'All' },
+              { label: `High (${stats.high_risk || 0})`, value: 'High' },
+              { label: `Medium (${stats.medium_risk || 0})`, value: 'Medium' },
+              { label: `Low (${stats.low_risk || 0})`, value: 'Low' },
+            ].map(({ label, value }) => (
+              <button
+                key={value}
+                onClick={() => setSelectedFilter(value)}
+                className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                  selectedFilter === value
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Ready for Delivery toggle button */}
+          {approvedBatches.length > 0 && (
             <button
-              key={value}
-              onClick={() => setSelectedFilter(value)}
-              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-                selectedFilter === value
-                  ? 'bg-emerald-700 text-white'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              onClick={() => setShowDeliveryList(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                showDeliveryList
+                  ? 'bg-orange-600 text-white border-orange-600 shadow-sm'
+                  : 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100'
               }`}
             >
-              {label}
+              <Truck size={13} />
+              Ready for Delivery ({approvedBatches.length})
+              {showDeliveryList ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
-          ))}
+          )}
         </div>
+
+        {/* Collapsible approved batches list */}
+        {showDeliveryList && approvedBatches.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-bold text-orange-800 uppercase tracking-wide flex items-center gap-1.5">
+                <Zap size={12} className="text-orange-600" />
+                {approvedBatches.length} batch{approvedBatches.length !== 1 ? 'es' : ''} approved — ready to plan delivery
+              </p>
+              <button
+                onClick={() => handlePlanNow()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                <Truck size={12} /> Plan Now
+              </button>
+            </div>
+            {approvedBatches.map((batch) => (
+              <div
+                key={batch.inventory_id}
+                className="flex items-center justify-between bg-white rounded-xl px-4 py-2.5 border border-orange-100"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    batch.risk_level === 'HIGH'   ? 'bg-red-500' :
+                    batch.risk_level === 'MEDIUM' ? 'bg-orange-400' : 'bg-green-500'
+                  }`} />
+                  <div>
+                    <p className="text-xs font-semibold text-gray-800">{batch.product_name}</p>
+                    <p className="text-[10px] text-gray-500">
+                      Batch {batch.batch_number || '—'} · {batch.available_quantity} {batch.unit_of_measure || 'kg'} · {batch.days_left}d left
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handlePlanNow(batch)}
+                  className="text-xs font-semibold text-orange-600 hover:text-orange-800 underline underline-offset-2 transition-colors"
+                >
+                  Plan this batch
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Alerts Table */}
         <div>

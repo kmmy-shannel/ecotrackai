@@ -745,7 +745,7 @@ const AlertService = {
   // Used by the notification banner and Plan New Delivery form.
   async getApprovedBatches(businessId) {
     const { rows } = await pool.query(`
-      SELECT
+      SELECT DISTINCT ON (i.inventory_id)
         i.inventory_id,
         p.product_name,
         i.batch_number,
@@ -772,6 +772,8 @@ const AlertService = {
       WHERE i.business_id = $1
         AND i.quantity    > 0
       ORDER BY
+        i.inventory_id,
+        ma.reviewed_at DESC,
         CASE
           WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 1
           WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 2
