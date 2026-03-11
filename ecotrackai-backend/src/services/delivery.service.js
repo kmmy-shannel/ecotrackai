@@ -86,7 +86,8 @@ const DeliveryService = {
           dr.*,
           u.full_name AS driver_full_name,
           ma.review_notes AS decline_reason,
-          ma.manager_comment
+          ma.manager_comment,
+          (SELECT COUNT(*) FROM route_stops rs WHERE rs.route_id = dr.route_id)::int AS stop_count
         FROM delivery_routes dr
         LEFT JOIN users u ON u.user_id = dr.driver_user_id
         LEFT JOIN LATERAL (
