@@ -324,6 +324,7 @@ const SuperAdminModel = {
 
   // ─── ECOTRUST CONFIG ──────────────────────────────────────
 
+<<<<<<< HEAD
   // Find these functions — if they don't exist, ADD them at the bottom before module.exports
 
 async getEcoTrustConfig() {
@@ -348,6 +349,28 @@ async updateEcoTrustAction(actionId, { points_value, action_name, action_categor
   );
   return result.rows[0] || null;
 },
+=======
+  async getEcoTrustConfig() {
+    const { rows } = await pool.query(
+      `SELECT * FROM sustainable_actions ORDER BY action_id`
+    );
+    return rows;
+  },
+
+  async updateEcoTrustAction(actionId, { points_value, action_name, action_category, description }) {
+    const { rows } = await pool.query(
+      `UPDATE sustainable_actions
+       SET points_value    = $1,
+           action_name     = $2,
+           action_category = $3,
+           description     = $4
+       WHERE action_id = $5
+       RETURNING *`,
+      [points_value, action_name, action_category, description, actionId]
+    );
+    return rows[0] || null;
+  }
+>>>>>>> 27a6fdc4ba63885c04b0baebac3c089e682649e8
 };
 
 module.exports = SuperAdminModel;
