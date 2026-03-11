@@ -503,24 +503,63 @@ const DeliveryDetails = ({ delivery }) => {
 };
 
 // ── Route Map — Dagupan-constrained, auto-fits to stops ──
-const RouteMap = ({ originalStops, optimizedStops }) => {
-  const [mapLayer,  setMapLayer]  = useState('hybrid');
-  const [showLayers, setShowLayers] = useState(false);
-  const [activeView, setActiveView] = useState('both');
+// ── Road geometry fetcher ─────────────────────────────────
+const fetchRoadRoute = async (stops) => {
+  if (!stops || stops.length < 2) return null;
+  const valid = stops.filter(s => s.lat && s.lng);
+  if (valid.length < 2) return null;
 
-  // Valid stops with real Dagupan coordinates
+  // OSRM public API — no key needed, works for Philippines
+  const coords = valid.map(s => `${s.lng},${s.lat}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code !== 'Ok' || !data.routes?.[0]) return null;
+    // GeoJSON is [lng, lat] — Leaflet needs [lat, lng]
+    return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+  } catch {
+    return null;
+  }
+};
+
+// ── Route Map — Dagupan-constrained, road-snapped routes ──
+const RouteMap = ({ originalStops, optimizedStops }) => {
+  const [mapLayer,    setMapLayer]    = useState('hybrid');
+  const [showLayers,  setShowLayers]  = useState(false);
+  const [activeView,  setActiveView]  = useState('both');
+  const [origRoad,    setOrigRoad]    = useState(null);   // road polyline points
+  const [optRoad,     setOptRoad]     = useState(null);
+  const [loadingRoad, setLoadingRoad] = useState(false);
+
   const validOrig = (originalStops  || []).filter(s => s.lat && s.lng);
   const validOpt  = (optimizedStops || []).filter(s => s.lat && s.lng);
   const allValid  = validOrig.length > 0 ? validOrig : validOpt;
+  const fitPositions = allValid.length > 0 ? allValid.map(s => [s.lat, s.lng]) : null;
 
-  // Build [lat, lng] arrays for Polyline — this is what react-leaflet needs
-  const origPositions = validOrig.map(s => [s.lat, s.lng]);
-  const optPositions  = validOpt.map(s  => [s.lat, s.lng]);
-
-  // For MapFitBounds
-  const fitPositions = allValid.length > 0
-    ? allValid.map(s => [s.lat, s.lng])
-    : null;
+  // Fetch road geometries whenever stops change
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoadingRoad(true);
+      setOrigRoad(null);
+      setOptRoad(null);
+      const [o, p] = await Promise.all([
+        fetchRoadRoute(validOrig),
+        fetchRoadRoute(validOpt),
+      ]);
+      if (!cancelled) {
+        // Fallback to straight lines if OSRM fails
+        setOrigRoad(o || validOrig.map(s => [s.lat, s.lng]));
+        setOptRoad (p || validOpt.map (s => [s.lat, s.lng]));
+        setLoadingRoad(false);
+      }
+    };
+    if (allValid.length >= 2) load();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(originalStops), JSON.stringify(optimizedStops)]);
 
   const getIcon = (type) =>
     type === 'origin' ? originIcon :
@@ -531,6 +570,16 @@ const RouteMap = ({ originalStops, optimizedStops }) => {
       className="relative rounded-xl overflow-hidden border border-gray-200 shadow-sm"
       style={{ height: 380 }}
     >
+      {/* Loading overlay */}
+      {loadingRoad && (
+        <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-white bg-opacity-60 pointer-events-none">
+          <div className="bg-white rounded-lg px-4 py-2.5 shadow border border-gray-200 flex items-center gap-2 text-xs text-gray-600">
+            <div className="w-3 h-3 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
+            Snapping routes to roads…
+          </div>
+        </div>
+      )}
+
       {/* View toggle */}
       <div className="absolute top-3 left-3 z-[1000] flex bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden text-xs font-medium">
         {[['both','Both'], ['original','Original'], ['optimized','Optimized']].map(([v, label]) => (
@@ -579,39 +628,39 @@ const RouteMap = ({ originalStops, optimizedStops }) => {
           attribution={MAP_LAYERS[mapLayer].attribution}
           maxZoom={20}
         />
-
-        {/* Auto-fit to the stop markers */}
         <MapFitBounds positions={fitPositions} />
 
-        {/* Original route — dashed blue line */}
-        {(activeView === 'both' || activeView === 'original') && origPositions.length > 1 && (
+        {/* Original route — dashed blue, road-snapped */}
+        {(activeView === 'both' || activeView === 'original') && origRoad && origRoad.length > 1 && (
           <Polyline
-            positions={origPositions}
-            pathOptions={{ color: '#3b82f6', weight: 3, dashArray: '8 5', opacity: 0.85 }}
+            positions={origRoad}
+            pathOptions={{ color: '#3b82f6', weight: 4, dashArray: '10 6', opacity: 0.9 }}
           />
         )}
 
-        {/* Optimized route — solid green line */}
-        {(activeView === 'both' || activeView === 'optimized') && optPositions.length > 1 && (
+        {/* Optimized route — solid green, road-snapped */}
+        {(activeView === 'both' || activeView === 'optimized') && optRoad && optRoad.length > 1 && (
           <Polyline
-            positions={optPositions}
-            pathOptions={{ color: '#10b981', weight: 4, opacity: 0.95 }}
+            positions={optRoad}
+            pathOptions={{ color: '#10b981', weight: 5, opacity: 0.95 }}
           />
         )}
 
-        {/* Markers — show from whichever set is active */}
-        {(activeView === 'both' || activeView === 'original'   ? validOrig : []).map((stop, i) => (
+        {/* Original stop markers */}
+        {(activeView === 'both' || activeView === 'original') && validOrig.map((stop, i) => (
           <Marker key={`o-${i}`} position={[stop.lat, stop.lng]} icon={getIcon(stop.type)}>
             <Popup>
               <div className="text-xs min-w-[140px]">
                 <p className="font-bold capitalize">{stop.type}</p>
                 <p className="text-gray-600">{stop.location}</p>
-                <p className="text-green-700 font-mono text-[10px] mt-1">{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</p>
+                <p className="text-blue-600 font-mono text-[10px] mt-1">{stop.lat?.toFixed(5)}, {stop.lng?.toFixed(5)}</p>
               </div>
             </Popup>
           </Marker>
         ))}
-        {(activeView === 'optimized' ? validOpt : []).map((stop, i) => (
+
+        {/* Optimized stop markers */}
+        {(activeView === 'both' || activeView === 'optimized') && validOpt.map((stop, i) => (
           <Marker key={`p-${i}`} position={[stop.lat, stop.lng]} icon={getIcon(stop.type)}>
             <Popup>
               <div className="text-xs min-w-[140px]">
@@ -638,6 +687,14 @@ const RouteMap = ({ originalStops, optimizedStops }) => {
           </svg>
           <span className="text-gray-600">Optimized</span>
         </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+          <span className="text-gray-600">Origin</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+          <span className="text-gray-600">Destination</span>
+        </div>
       </div>
 
       {/* No data warning */}
@@ -651,7 +708,6 @@ const RouteMap = ({ originalStops, optimizedStops }) => {
     </div>
   );
 };
-
 // ── Stop list (before / after) ────────────────────────────
 const StopList = ({ title, stops, optimized }) => (
   <div className={`rounded-xl border overflow-hidden ${optimized ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
@@ -734,7 +790,7 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
               <p className="text-purple-200 text-sm">
                 {originalRoute?.deliveryCode}
                 {improvementPct ? ` · ${improvementPct}% efficiency gain` : ''}
-                {!usedFallback ? ' · Groq llama3-8b' : ' · Fallback estimate'}
+                {!usedFallback ? ' · Groq AI reordered' : ' · TSP Algorithm'}
               </p>
             </div>
           </div>
@@ -745,13 +801,33 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
 
         <div className="p-6 space-y-6">
 
-          {/* Fallback notice */}
-          {usedFallback && (
-            <div className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
-              Groq AI was unavailable — standard 20% estimate applied.
-            </div>
-          )}
+      {/* Fallback / info notice */}
+{usedFallback && (
+ <div className={`flex items-start gap-3 p-3 rounded-lg text-sm border ${
+  !usedFallback 
+    ? 'bg-purple-50 border-purple-200 text-purple-800' 
+    : 'bg-blue-50 border-blue-200 text-blue-800'
+}`}>
+  <Zap size={16} className={`mt-0.5 flex-shrink-0 ${!usedFallback ? 'text-purple-500' : 'text-blue-500'}`} />
+  <div>
+    <p className="font-semibold">
+      {!usedFallback ? 'Groq AI Route Optimization' : 'Nearest-Neighbor TSP Algorithm'}
+    </p>
+    {(originalRoute?.stops?.length || 0) <= 2
+      ? <p className="mt-0.5">
+          Only 2 stops detected (origin + destination). Add intermediate stops when planning 
+          a delivery to enable full stop-sequence reordering and see distinct route paths.
+        </p>
+      : <p className="mt-0.5">
+          {!usedFallback 
+            ? 'Groq AI analyzed stop coordinates and returned an optimized visiting sequence.'
+            : 'Stops analyzed using Nearest-Neighbor heuristic to minimize total travel distance.'
+          }
+        </p>
+    }
+  </div>
+</div>
+)}
 
           {/* Metric comparison table */}
           <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
