@@ -1,42 +1,33 @@
 // ============================================================
 // FILE: src/components/superadmin/BusinessRegistry.jsx
 //
-// FIX: Create modal had adminName/adminUsername/adminEmail fields
-//      but the backend POST /superadmin/businesses ONLY creates
-//      the business record (+ ecotrust_scores). It does NOT create
-//      an admin user — that must be done via the registration/
-//      auth flow separately.
-//
-//      Two choices:
-//        A) Remove the dead admin fields (clean, honest)
-//        B) Keep them, pass to backend, backend handles creation
-//
-//      Choice A implemented here (safe, no backend change needed).
-//      The modal now clearly states the admin must register
-//      separately via the business's own onboarding flow.
-//      Per system flow: "The Super Admin creates the first user
-//      account for this business separately."
+// FIXES:
+//   1. Modal shows real backend error messages via `createError`
+//      prop passed from SuperAdminDashboard (from useSuperAdmin)
+//   2. Client-side validation shows specific missing field message
+//   3. Error clears when modal opens or any field changes
 // ============================================================
 
 import React, { useState } from 'react';
 import {
   Plus, Pause, Play, CheckCircle, XCircle,
-  AlertCircle, Building2, Users, ChevronRight,
-  Mail, Hash, MapPin, Phone
+  AlertCircle, Building2, Users
 } from 'lucide-react';
 
 const BusinessRegistry = ({
-  businesses  = [],
-  pendingRegs = [],
+  businesses    = [],
+  pendingRegs   = [],
   onSuspend,
   onReactivate,
   onCreate,
   onApprove,
   onReject,
+  createError   = '',   // error string from useSuperAdmin passed by parent
 }) => {
   const [filterStatus,    setFilterStatus]    = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [submitting,      setSubmitting]      = useState(false);
+  const [modalError,      setModalError]      = useState('');
   const [rejectingId,     setRejectingId]     = useState(null);
   const [rejectReason,    setRejectReason]    = useState('');
 
@@ -49,7 +40,9 @@ const BusinessRegistry = ({
     address:            '',
   });
 
-  // Merge pending + active into one list
+  // Show local validation error first, fall back to backend error
+  const displayError = modalError || createError;
+
   const allBusinesses = [
     ...pendingRegs.map(b => ({ ...b, status: 'pending' })),
     ...businesses,
@@ -59,29 +52,53 @@ const BusinessRegistry = ({
     ? allBusinesses
     : allBusinesses.filter(b => b.status === filterStatus);
 
-  const resetForm = () => setFormData({
-    businessName: '', businessType: '', registrationNumber: '',
-    contactEmail: '', contactPhone: '', address: '',
-  });
+  const resetForm = () => {
+    setFormData({
+      businessName: '', businessType: '', registrationNumber: '',
+      contactEmail: '', contactPhone: '', address: '',
+    });
+    setModalError('');
+  };
+
+  const openModal  = () => { resetForm(); setShowCreateModal(true); };
+  const closeModal = () => { setShowCreateModal(false); resetForm(); };
+
+  const handleFieldChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setModalError(''); // clear on any input change
+  };
 
   const handleCreate = async () => {
-    if (!formData.businessName || !formData.businessType || !formData.registrationNumber) return;
+    setModalError('');
+
+    if (!formData.businessName.trim()) {
+      setModalError('Business name is required.');
+      return;
+    }
+    if (!formData.businessType) {
+      setModalError('Please select a business type.');
+      return;
+    }
+    if (!formData.registrationNumber.trim()) {
+      setModalError('Registration number is required.');
+      return;
+    }
+
     setSubmitting(true);
-    // FIX: Only send business fields — no adminName/adminEmail
-    // Backend POST /superadmin/businesses only creates business + ecotrust record
     const ok = await onCreate?.({
-      businessName:       formData.businessName,
+      businessName:       formData.businessName.trim(),
       businessType:       formData.businessType,
-      registrationNumber: formData.registrationNumber,
-      contactEmail:       formData.contactEmail   || undefined,
-      contactPhone:       formData.contactPhone   || undefined,
-      address:            formData.address        || undefined,
+      registrationNumber: formData.registrationNumber.trim(),
+      contactEmail:       formData.contactEmail.trim()  || undefined,
+      contactPhone:       formData.contactPhone.trim()  || undefined,
+      address:            formData.address.trim()       || undefined,
     });
     setSubmitting(false);
+
     if (ok) {
-      setShowCreateModal(false);
-      resetForm();
+      closeModal();
     }
+    // if !ok → createError from useSuperAdmin will appear via displayError
   };
 
   const handleReject = async (id) => {
@@ -95,12 +112,12 @@ const BusinessRegistry = ({
 
   const getStatusBadge = (status) => {
     const map = {
-      active:    { cls: 'bg-emerald-100 text-emerald-700', icon: CheckCircle,  label: 'ACTIVE'    },
-      suspended: { cls: 'bg-red-100 text-red-700',         icon: Pause,        label: 'SUSPENDED' },
-      pending:   { cls: 'bg-amber-100 text-amber-700',     icon: AlertCircle,  label: 'PENDING'   },
-      rejected:  { cls: 'bg-gray-100 text-gray-500',       icon: XCircle,      label: 'REJECTED'  },
+      active:    { cls: 'bg-emerald-100 text-emerald-700', icon: CheckCircle, label: 'ACTIVE'    },
+      suspended: { cls: 'bg-red-100    text-red-700',      icon: Pause,       label: 'SUSPENDED' },
+      pending:   { cls: 'bg-amber-100  text-amber-700',    icon: AlertCircle, label: 'PENDING'   },
+      rejected:  { cls: 'bg-gray-100   text-gray-500',     icon: XCircle,     label: 'REJECTED'  },
     };
-    const b = map[status] || map.active;
+    const b    = map[status] || map.active;
     const Icon = b.icon;
     return (
       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${b.cls}`}>
@@ -131,19 +148,15 @@ const BusinessRegistry = ({
                   <p className="font-bold text-gray-800">{b.business_name}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                     <span className="capitalize">{b.business_type}</span>
-                    {b.contact_email && <span className="flex items-center gap-1"><Mail size={10} />{b.contact_email}</span>}
+                    {b.contact_email && <span>{b.contact_email}</span>}
                     <span>Registered {new Date(b.created_at).toLocaleDateString('en-PH')}</span>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => onApprove?.(b.business_id)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-green-800 text-white rounded-xl text-sm font-semibold hover:bg-green-900 transition-colors"
-                  >
+                  <button onClick={() => onApprove?.(b.business_id)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-green-800 text-white rounded-xl text-sm font-semibold hover:bg-green-900 transition-colors">
                     <CheckCircle size={14} /> Approve
                   </button>
-
                   {rejectingId === b.business_id ? (
                     <div className="flex items-center gap-2">
                       <input
@@ -152,25 +165,19 @@ const BusinessRegistry = ({
                         placeholder="Rejection reason (min 10 chars)"
                         className="px-3 py-2 border border-gray-300 rounded-xl text-sm w-56 focus:outline-none focus:ring-2 focus:ring-red-400"
                       />
-                      <button
-                        onClick={() => handleReject(b.business_id)}
+                      <button onClick={() => handleReject(b.business_id)}
                         disabled={rejectReason.length < 10 || submitting}
-                        className="px-3 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
-                      >
+                        className="px-3 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50">
                         Confirm
                       </button>
-                      <button
-                        onClick={() => { setRejectingId(null); setRejectReason(''); }}
-                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 text-gray-600"
-                      >
+                      <button onClick={() => { setRejectingId(null); setRejectReason(''); }}
+                        className="px-3 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50 text-gray-600">
                         Cancel
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setRejectingId(b.business_id)}
-                      className="flex items-center gap-1.5 px-4 py-2 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition-colors"
-                    >
+                    <button onClick={() => setRejectingId(b.business_id)}
+                      className="flex items-center gap-1.5 px-4 py-2 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition-colors">
                       <XCircle size={14} /> Reject
                     </button>
                   )}
@@ -191,11 +198,8 @@ const BusinessRegistry = ({
               </div>
               <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wide">All Businesses</h3>
             </div>
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-            >
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="suspended">Suspended</option>
@@ -204,10 +208,8 @@ const BusinessRegistry = ({
             </select>
             <span className="text-xs text-gray-400 font-medium">{filtered.length} shown</span>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-800 text-white rounded-xl text-sm font-semibold hover:bg-green-900 transition-colors shadow-sm"
-          >
+          <button onClick={openModal}
+            className="flex items-center gap-2 px-4 py-2 bg-green-800 text-white rounded-xl text-sm font-semibold hover:bg-green-900 transition-colors shadow-sm">
             <Plus size={15} /> Create Business
           </button>
         </div>
@@ -255,10 +257,8 @@ const BusinessRegistry = ({
                       </span>
                     </td>
                     <td className="py-4 px-4">
-                      <div>
-                        <p className="text-green-800 font-bold text-sm">{b.ecotrust_points ?? 0} pts</p>
-                        <p className="text-gray-400 text-xs">{b.ecotrust_level || 'Newcomer'}</p>
-                      </div>
+                      <p className="text-green-800 font-bold text-sm">{b.ecotrust_points ?? 0} pts</p>
+                      <p className="text-gray-400 text-xs">{b.ecotrust_level || 'Newcomer'}</p>
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-1.5 text-gray-600">
@@ -276,9 +276,7 @@ const BusinessRegistry = ({
                                 onSuspend?.(b.business_id);
                               }
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-semibold transition-colors"
-                            title="Suspend business"
-                          >
+                            className="flex items-center gap-1 px-3 py-1.5 text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-semibold transition-colors">
                             <Pause size={12} /> Suspend
                           </button>
                         )}
@@ -289,9 +287,7 @@ const BusinessRegistry = ({
                                 onReactivate?.(b.business_id);
                               }
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-xs font-semibold transition-colors"
-                            title="Reactivate business"
-                          >
+                            className="flex items-center gap-1 px-3 py-1.5 text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-xs font-semibold transition-colors">
                             <Play size={12} /> Reactivate
                           </button>
                         )}
@@ -312,28 +308,34 @@ const BusinessRegistry = ({
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">Create New Business</h2>
-                {/* FIX: Honest note — admin account is separate per system flow */}
                 <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
                   <AlertCircle size={11} />
-                  Business will be active immediately. Admin account is set up separately via onboarding email.
+                  Business is active immediately. Admin registers separately via onboarding.
                 </p>
               </div>
-              <button onClick={() => { setShowCreateModal(false); resetForm(); }}
+              <button onClick={closeModal}
                 className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-xl leading-none">
                 ×
               </button>
             </div>
 
             <div className="p-6 space-y-4">
+
+              {/* Error banner — shows both client validation and backend errors */}
+              {displayError && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <XCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />
+                  <span>{displayError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
                   Business Name <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Dela Cruz Fruits Trading"
+                <input type="text" placeholder="e.g. Dela Cruz Fruits Trading"
                   value={formData.businessName}
-                  onChange={e => setFormData({ ...formData, businessName: e.target.value })}
+                  onChange={e => handleFieldChange('businessName', e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
@@ -343,11 +345,9 @@ const BusinessRegistry = ({
                   <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
                     Business Type <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={formData.businessType}
-                    onChange={e => setFormData({ ...formData, businessType: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-                  >
+                  <select value={formData.businessType}
+                    onChange={e => handleFieldChange('businessType', e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
                     <option value="">Select type...</option>
                     <option value="distributor">Distributor</option>
                     <option value="production">Production</option>
@@ -359,11 +359,9 @@ const BusinessRegistry = ({
                   <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
                     Registration No. <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. DTI-2024-00123"
+                  <input type="text" placeholder="e.g. DTI-2024-00123"
                     value={formData.registrationNumber}
-                    onChange={e => setFormData({ ...formData, registrationNumber: e.target.value })}
+                    onChange={e => handleFieldChange('registrationNumber', e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
@@ -371,66 +369,49 @@ const BusinessRegistry = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                    Contact Email
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="owner@business.com"
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Contact Email</label>
+                  <input type="email" placeholder="owner@business.com"
                     value={formData.contactEmail}
-                    onChange={e => setFormData({ ...formData, contactEmail: e.target.value })}
+                    onChange={e => handleFieldChange('contactEmail', e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                    Contact Phone
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="+63 9XX XXX XXXX"
+                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Contact Phone</label>
+                  <input type="tel" placeholder="+63 9XX XXX XXXX"
                     value={formData.contactPhone}
-                    onChange={e => setFormData({ ...formData, contactPhone: e.target.value })}
+                    onChange={e => handleFieldChange('contactPhone', e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 123 Divisoria, Manila"
+                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Address</label>
+                <input type="text" placeholder="e.g. 123 Divisoria, Manila"
                   value={formData.address}
-                  onChange={e => setFormData({ ...formData, address: e.target.value })}
+                  onChange={e => handleFieldChange('address', e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
 
-              {/* Honest info box per system flow */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <p className="text-xs text-blue-700 font-semibold mb-1">What happens after creation:</p>
                 <ol className="text-xs text-blue-600 space-y-1 list-decimal pl-4">
                   <li>Business profile is created with EcoTrust score at 0 (Newcomer)</li>
-                  <li>The business owner must register their admin account via the Register page using this business's registration number</li>
-                  <li>Once registered, the Super Admin approves their account from the Pending Registrations section above</li>
+                  <li>The business owner registers their admin account via the Register page using this business's registration number</li>
+                  <li>Once registered, approve their account from the Pending Registrations section above</li>
                 </ol>
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => { setShowCreateModal(false); resetForm(); }}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors"
-                >
+                <button onClick={closeModal}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors">
                   Cancel
                 </button>
-                <button
-                  onClick={handleCreate}
+                <button onClick={handleCreate}
                   disabled={submitting || !formData.businessName || !formData.businessType || !formData.registrationNumber}
-                  className="flex-1 px-4 py-2.5 bg-green-800 text-white rounded-xl font-semibold hover:bg-green-900 transition-colors disabled:opacity-50 text-sm shadow-sm"
-                >
+                  className="flex-1 px-4 py-2.5 bg-green-800 text-white rounded-xl font-semibold hover:bg-green-900 transition-colors disabled:opacity-50 text-sm shadow-sm">
                   {submitting ? 'Creating...' : 'Create Business'}
                 </button>
               </div>

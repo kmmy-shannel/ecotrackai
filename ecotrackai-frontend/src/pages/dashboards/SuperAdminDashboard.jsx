@@ -214,6 +214,7 @@ const SuperAdminDashboard = () => {
                 onCreate={vm.createBusiness}
                 onApprove={vm.approveBusiness}
                 onReject={vm.rejectBusiness}
+                createError={vm.error}
               />
             )}
             {activeTab === 'health' && (

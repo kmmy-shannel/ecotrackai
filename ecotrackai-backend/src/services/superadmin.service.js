@@ -138,10 +138,11 @@ const SuperAdminService = {
         business = result.data;
 
         // System flow: EcoTrust record created immediately at 0 / Newcomer
+        // No ON CONFLICT — ecotrust_scores has no unique constraint on business_id,
+        // only a PK on score_id. Plain INSERT is correct.
         await client.query(
           `INSERT INTO ecotrust_scores (business_id, current_score, total_points_earned, level)
-           VALUES ($1, 0, 0, 'Newcomer')
-           ON CONFLICT (business_id) DO NOTHING`,
+           VALUES ($1, 0, 0, 'Newcomer')`,
           [business.business_id]
         );
 
