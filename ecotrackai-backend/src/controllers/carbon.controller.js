@@ -63,9 +63,30 @@ const finalizeCarbonVerification = async (req, res) => {
     return sendError(res, error.status || 500, error.message || 'Failed to finalize carbon verification');
   }
 };
+const getPendingVerifications = async (req, res) => {
+  try {
+    const result = await CarbonService.getPendingVerifications(req.user);
+    if (!result.success) return sendError(res, 400, result.error);
+    return sendSuccess(res, 200, 'Pending verifications retrieved', result.data);
+  } catch (error) {
+    return sendError(res, 500, 'Failed to get pending verifications');
+  }
+};
+
+const getAllCarbonRecords = async (req, res) => {
+  try {
+    const result = await CarbonService.getAllCarbonRecords(req.user);
+    if (!result.success) return sendError(res, 400, result.error);
+    return sendSuccess(res, 200, 'Carbon records retrieved', result.data);
+  } catch (error) {
+    return sendError(res, 500, 'Failed to get carbon records');
+  }
+};
 
 module.exports = {
   getCarbonFootprint,
   getMonthlyComparison,
-  finalizeCarbonVerification
+  finalizeCarbonVerification,
+  getPendingVerifications,
+  getAllCarbonRecords
 };

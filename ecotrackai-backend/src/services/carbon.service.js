@@ -1,6 +1,7 @@
 const CarbonModel = require('../models/carbon.model');
 const AuditModel = require('../models/audit.model');
 const ApprovalService = require('./approval.service');
+const pool = require('../config/database');   // ADD THIS LINE
 
 const CO2_PER_LITER = 2.31;
 const ALLOWED_ROLES = new Set(['admin', 'sustainability_manager']);
@@ -287,7 +288,92 @@ const CarbonService = {
         notes
       );
       if (!finalizationResult.success) return finalizationResult;
+      if (normalizedDecision === 'verified') {
+        try {
+          // 1. Get delivery_id linked to this carbon record
+          const carbonRow = await pool.query(
+            `SELECT route_id FROM carbon_footprint_records WHERE record_id = $1`,
+            [carbonRecordId]
+          );
+          const deliveryId = carbonRow.rows[0]?.route_id;
 
+          if (deliveryId) {
+            // 2. Find all pending ecotrust transactions for this delivery
+            const pending = await pool.query(
+              `SELECT * FROM ecotrust_transactions 
+               WHERE related_record_id = $1 AND verification_status = 'pending'`,
+              [String(deliveryId)]
+            );
+
+            // 3. Finalize each one and add points
+            for (const tx of pending.rows) {
+              await pool.query(
+                `UPDATE ecotrust_transactions 
+                 SET verification_status = 'verified' 
+                 WHERE transaction_id = $1`,
+                [tx.transaction_id]
+              );
+
+             // REPLACE WITH (correct column names):
+await pool.query(
+  `UPDATE ecotrust_scores
+   SET current_score = current_score + $1,
+       total_points_earned = total_points_earned + $1,
+       last_updated = NOW()
+   WHERE business_id = $2`,
+  [tx.points_earned, tx.business_id]
+);
+            }
+
+            // 4. Recalculate level based on new total
+            // 4. Recalculate level based on new total
+            const scoreRow = await pool.query(
+              `SELECT current_score FROM ecotrust_scores WHERE business_id = $1`,
+              [ctx.businessId]
+            );
+            const total = scoreRow.rows[0]?.current_score || 0;
+            const newLevel = total >= 700 ? 'Eco Leader'
+                           : total >= 300 ? 'Eco Champion'
+                           : total >= 100 ? 'Eco Warrior'
+                           : 'Newcomer';
+
+            await pool.query(
+              `UPDATE ecotrust_scores SET level = $1 WHERE business_id = $2`,
+              [newLevel, ctx.businessId]
+            );
+
+          // Add carbon_verification points
+          const carbonActionRow = await pool.query(
+            `SELECT points_value FROM sustainable_actions
+             WHERE action_category = 'carbon_verification'
+             ORDER BY action_id DESC LIMIT 1`
+          );
+          const carbonPoints = carbonActionRow.rows[0]?.points_value || 20;
+
+          await pool.query(
+            `INSERT INTO ecotrust_transactions
+               (business_id, action_type, points_earned, verification_status,
+                related_record_type, related_record_id, created_at)
+             VALUES ($1, 'carbon_verified', $2, 'verified', 'carbon_record', $3, NOW())`,
+            [ctx.businessId, carbonPoints, carbonRecordId]
+          );
+
+          await pool.query(
+            `UPDATE ecotrust_scores
+             SET current_score = current_score + $1,
+                 total_points_earned = total_points_earned + $1,
+                 last_updated = NOW()
+             WHERE business_id = $2`,
+            [carbonPoints, ctx.businessId]
+          );
+
+          console.log(`[CarbonService] Released ${pending.rows.length} EcoTrust transactions for delivery ${deliveryId}`);
+        }
+        } catch (releaseErr) {
+          // Non-fatal — carbon verification still succeeds even if points release fails
+          console.error('[CarbonService] Failed to release EcoTrust points:', releaseErr.message);
+        }
+      }
       return this._ok({
         carbonRecordId,
         status: normalizedDecision,
@@ -298,7 +384,30 @@ const CarbonService = {
       console.error('[CarbonService.finalizeVerification]', error);
       return this._fail('Failed to finalize carbon verification');
     }
-  }
+  },
+  async getPendingVerifications(user) {
+    try {
+      const businessId = user?.businessId || user?.business_id;
+      if (!businessId) return { success: false, error: 'businessId required' };
+      const records = await CarbonModel.getPendingVerifications(businessId);
+      return { success: true, data: { records } };
+    } catch (error) {
+      console.error('[CarbonService.getPendingVerifications]', error);
+      return { success: false, error: 'Failed to fetch pending verifications' };
+    }
+  },
+
+  async getAllCarbonRecords(user) {
+    try {
+      const businessId = user?.businessId || user?.business_id;
+      if (!businessId) return { success: false, error: 'businessId required' };
+      const records = await CarbonModel.getAllByBusiness(businessId);
+      return { success: true, data: { records } };
+    } catch (error) {
+      console.error('[CarbonService.getAllCarbonRecords]', error);
+      return { success: false, error: 'Failed to fetch carbon records' };
+    }
+  },
 };
 
 module.exports = CarbonService;

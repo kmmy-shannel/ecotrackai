@@ -14,6 +14,7 @@ import EcoTrustConfig      from '../../components/superadmin/EcoTrustConfig';
 import AuditViewer         from '../../components/superadmin/AuditViewer';
 import AnalyticsOverview   from '../../components/superadmin/AnalyticsOverview';
 import FruitCatalog        from '../../components/superadmin/FruitCatalog';
+import superadminService from '../../services/superadmin.service';
 import authService         from '../../services/auth.service';
 import catalogService      from '../../services/catalog.service';
 import {
@@ -36,7 +37,25 @@ const SuperAdminDashboard = () => {
   const navigate   = useNavigate();
   const [activeTab, setActiveTab] = useState('registry');
   const vm = useSuperAdmin();
+  const [ecoTrustConfig, setEcoTrustConfig] = useState([]);
 
+  const loadEcoTrustConfig = async () => {
+    try {
+      const res = await superadminService.getEcoTrustConfig();
+      setEcoTrustConfig(res.data?.data?.config || []);
+    } catch (err) {
+      console.error('Failed to load EcoTrust config', err);
+    }
+  };
+
+  const handleUpdateEcoTrust = async (actionId, data) => {
+    try {
+      await superadminService.updateEcoTrustAction(actionId, data);
+      await loadEcoTrustConfig();
+    } catch (err) {
+      console.error('Failed to update EcoTrust action', err);
+    }
+  };
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === 'audit')     vm.loadAuditLogs();
@@ -227,11 +246,11 @@ const SuperAdminDashboard = () => {
               <FruitCatalog catalogService={catalogService} />
             )}
             {activeTab === 'ecotrust' && (
-              <EcoTrustConfig
-                config={vm.ecoConfig}
-                onUpdate={vm.updateEcoAction}
-                onLoad={vm.loadEcoConfig}
-              />
+             <EcoTrustConfig
+             config={ecoTrustConfig}
+             onLoad={loadEcoTrustConfig}
+             onUpdate={handleUpdateEcoTrust}
+           />
             )}
             {activeTab === 'audit' && (
               <AuditViewer

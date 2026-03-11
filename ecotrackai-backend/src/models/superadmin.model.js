@@ -324,26 +324,30 @@ const SuperAdminModel = {
 
   // ─── ECOTRUST CONFIG ──────────────────────────────────────
 
-  async getEcoTrustConfig() {
-    const { rows } = await pool.query(
-      `SELECT * FROM sustainable_actions ORDER BY action_id`
-    );
-    return rows;
-  },
+  // Find these functions — if they don't exist, ADD them at the bottom before module.exports
 
-  async updateEcoTrustAction(actionId, { points_value, action_name, action_category, description }) {
-    const { rows } = await pool.query(
-      `UPDATE sustainable_actions
-       SET points_value    = $1,
-           action_name     = $2,
-           action_category = $3,
-           description     = $4
-       WHERE action_id = $5
-       RETURNING *`,
-      [points_value, action_name, action_category, description, actionId]
-    );
-    return rows[0] || null;
-  }
+async getEcoTrustConfig() {
+  const result = await pool.query(
+    `SELECT action_id, action_name, action_category, points_value, description
+     FROM sustainable_actions
+     ORDER BY action_id ASC`
+  );
+  return result.rows;
+},
+
+async updateEcoTrustAction(actionId, { points_value, action_name, action_category, description }) {
+  const result = await pool.query(
+    `UPDATE sustainable_actions
+     SET points_value    = COALESCE($1, points_value),
+         action_name     = COALESCE($2, action_name),
+         action_category = COALESCE($3, action_category),
+         description     = COALESCE($4, description)
+     WHERE action_id = $5
+     RETURNING *`,
+    [points_value, action_name, action_category, description, actionId]
+  );
+  return result.rows[0] || null;
+},
 };
 
 module.exports = SuperAdminModel;

@@ -1,39 +1,28 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
-import { useSustainabilityApprovals } from '../../../hooks/useSustainabilityApprovals';
+import useSustainabilityApprovals from '../../../hooks/useSustainabilityApprovals';
 import SustainabilityManagerLayout from '../../../components/manager/sustainability/SustainabilityManagerLayout';
 import SustainabilityDashboardView from './SustainabilityDashboardView';
 import SustainabilityHistoryView   from './SustainabilityHistoryView';
 
 const SustainabilityManagerPage = () => {
-  const { user }         = useAuth();
-  const [searchParams]   = useSearchParams();
-  const businessId       = user?.businessId || user?.business_id;
+  const { user }       = useAuth();
+  const [searchParams] = useSearchParams();
 
-  // Reads ?tab= exactly like InventoryManagerPage and LogisticsManagerPage do
   const activeTab   = searchParams.get('tab') || 'pending';
-  const isHistory   = activeTab === 'history';
   const currentPage =
     activeTab === 'history' ? 'VERIFICATION HISTORY'  :
     activeTab === 'audit'   ? 'ECOTRUST AUDIT'         :
     activeTab === 'trends'  ? 'CARBON TRENDS'          :
                               'SUSTAINABILITY DASHBOARD';
 
+  // ── New hook API ──────────────────────────────────────────
   const {
-    pendingVerifications,
-    history,
+    historyRecords,
     loading,
     error,
-    success,
-    loadHistory,
-    verify,
-    requestRevision,
-  } = useSustainabilityApprovals(businessId);
-
-  React.useEffect(() => {
-    if (isHistory) loadHistory();
-  }, [isHistory, loadHistory]);
+  } = useSustainabilityApprovals();
 
   return (
     <SustainabilityManagerLayout currentPage={currentPage} user={user}>
@@ -43,24 +32,17 @@ const SustainabilityManagerPage = () => {
           {error}
         </div>
       )}
-      {success && (
-        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 text-green-700 px-4 py-3 text-sm font-medium">
-          {success}
-        </div>
-      )}
 
       {activeTab === 'pending' || activeTab === '' ? (
-        <SustainabilityDashboardView
-          verifications={pendingVerifications}
-          onVerify={verify}
-          onRequestRevision={requestRevision}
-          loading={loading}
-        />
+        // Dashboard view uses the hook internally — no props needed
+        <SustainabilityDashboardView />
+
       ) : activeTab === 'history' ? (
         <SustainabilityHistoryView
-          history={history}
+          history={historyRecords}
           loading={loading}
         />
+
       ) : activeTab === 'audit' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-800">EcoTrust Audit</h2>
@@ -68,6 +50,7 @@ const SustainabilityManagerPage = () => {
             View all EcoTrust transactions and flag suspicious entries for Super Admin review.
           </p>
         </div>
+
       ) : activeTab === 'trends' ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-800">Carbon Trends</h2>
@@ -75,6 +58,7 @@ const SustainabilityManagerPage = () => {
             Compare estimated vs actual carbon metrics across completed deliveries.
           </p>
         </div>
+
       ) : null}
 
     </SustainabilityManagerLayout>

@@ -232,7 +232,106 @@ const CarbonModel = {
     } catch (error) {
       return { success: false, error: this._handleDbError('updateVerificationStatus', error) };
     }
-  }
+    
+  },
+  async getPendingVerifications(businessId) {
+    if (!businessId) return [];
+    try {
+      const { rows } = await pool.query(
+        `SELECT 
+           cfr.record_id,
+           cfr.business_id,
+           cfr.route_id,
+           cfr.record_type,
+           cfr.total_carbon_kg,
+           cfr.transportation_carbon_kg,
+           cfr.storage_carbon_kg,
+           cfr.calculation_method,
+           cfr.factors_used,
+           cfr.verification_status,
+           cfr.is_actual,
+           cfr.created_at,
+           cfr.calculation_date,
+           dr.route_name,
+           dr.vehicle_type,
+           dr.completed_at,
+           dr.total_distance_km        AS actual_distance_km,
+           dr.estimated_fuel_consumption_liters AS estimated_fuel_liters,
+           dr.estimated_carbon_kg      AS estimated_carbon_kg
+         FROM carbon_footprint_records cfr
+         LEFT JOIN delivery_routes dr ON dr.route_id = cfr.route_id
+         WHERE cfr.business_id = $1
+           AND cfr.verification_status = 'pending'
+         ORDER BY cfr.created_at DESC`,
+        [businessId]
+      );
+      return rows;
+    } catch (error) {
+      console.error('[CarbonModel.getPendingVerifications]', error);
+      return [];
+    }
+  },
+  
+  async getAllByBusiness(businessId) {
+    if (!businessId) return [];
+    try {
+      const { rows } = await pool.query(
+        `SELECT 
+           cfr.record_id,
+           cfr.business_id,
+           cfr.route_id,
+           cfr.record_type,
+           cfr.total_carbon_kg,
+           cfr.transportation_carbon_kg,
+           cfr.storage_carbon_kg,
+           cfr.calculation_method,
+           cfr.factors_used,
+           cfr.verification_status,
+           cfr.is_actual,
+           cfr.created_at,
+           cfr.revision_notes,
+           cfr.verified_by,
+           cfr.verified_at,
+           dr.route_name,
+           dr.vehicle_type,
+           dr.total_distance_km        AS actual_distance_km,
+           dr.estimated_fuel_consumption_liters AS estimated_fuel_liters
+         FROM carbon_footprint_records cfr
+         LEFT JOIN delivery_routes dr ON dr.route_id = cfr.route_id
+         WHERE cfr.business_id = $1
+         ORDER BY cfr.created_at DESC`,
+        [businessId]
+      );
+      return rows;
+    } catch (error) {
+      console.error('[CarbonModel.getAllByBusiness]', error);
+      return [];
+    }
+  },
+  
+  async getById(recordId, businessId) {
+    if (!recordId || !businessId) return null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT 
+           cfr.*,
+           dr.route_name,
+           dr.vehicle_type,
+           dr.completed_at,
+           dr.total_distance_km        AS actual_distance_km,
+           dr.estimated_fuel_consumption_liters AS estimated_fuel_liters
+         FROM carbon_footprint_records cfr
+         LEFT JOIN delivery_routes dr ON dr.route_id = cfr.route_id
+         WHERE cfr.record_id = $1 AND cfr.business_id = $2`,
+        [recordId, businessId]
+      );
+      return rows[0] || null;
+    } catch (error) {
+      console.error('[CarbonModel.getById]', error);
+      return null;
+    }
+  },
 };
+
 
 module.exports = CarbonModel;
