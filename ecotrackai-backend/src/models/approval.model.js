@@ -605,27 +605,60 @@ const ApprovalModel = {
       }
 
       let resolvedActionId = payload.actionId || null;
-      let resolvedPoints = payload.pointsEarned;
+let resolvedPoints = payload.pointsEarned;
 
-      if (this._isNil(resolvedActionId)) {
-        const actionRef = payload.actionType || payload.action_id || null;
-        if (this._isNil(actionRef)) {
-          await client.query('ROLLBACK');
-          return { success: false, error: 'action_id or actionType is required' };
-        }
+if (this._isNil(resolvedActionId)) {
+  const actionRef = payload.actionType || payload.action_id || null;
+  if (this._isNil(actionRef)) {
+    await client.query('ROLLBACK');
+    return { success: false, error: 'action_id or actionType is required' };
+  }
 
-        const actionResult = await this._resolveEcoAction(client, actionRef);
-        if (!actionResult.success) {
-          await client.query('ROLLBACK');
-          return actionResult;
-        }
+  // ── NEW: Map actionType string to sustainable_actions category ──
+  const categoryMap = {
+    'spoilage_action':            'spoilage_prevention',
+    'approval_approved':          'spoilage_prevention',
+    'route_optimization':         'delivery_optimization',
+    'approval_approved_by_admin': 'spoilage_prevention',
+    'carbon_verified':            'carbon_verification',
+    'carbon_verification':        'carbon_verification',
+    'on_time_delivery':           'on_time_delivery',
+  };
 
-        resolvedActionId = actionResult.data.actionId;
-        if (this._isNil(resolvedPoints) && !this._isNil(actionResult.data.pointsValue)) {
-          resolvedPoints = actionResult.data.pointsValue;
-        }
+  const mappedCategory = categoryMap[actionRef] || null;
+
+  if (mappedCategory) {
+    // Look up action_id AND points_value from sustainable_actions by category
+    const categoryLookup = await client.query(
+      `SELECT action_id, points_value
+       FROM sustainable_actions
+       WHERE action_category = $1
+       ORDER BY action_id DESC
+       LIMIT 1`,
+      [mappedCategory]
+    );
+
+    if (categoryLookup.rows.length > 0) {
+      resolvedActionId = categoryLookup.rows[0].action_id;
+      if (this._isNil(resolvedPoints)) {
+        resolvedPoints = categoryLookup.rows[0].points_value;
       }
+    }
+  }
 
+  // ── Fallback: original resolver if category map didn't find anything ──
+  if (this._isNil(resolvedActionId)) {
+    const actionResult = await this._resolveEcoAction(client, actionRef);
+    if (!actionResult.success) {
+      await client.query('ROLLBACK');
+      return actionResult;
+    }
+    resolvedActionId = actionResult.data.actionId;
+    if (this._isNil(resolvedPoints) && !this._isNil(actionResult.data.pointsValue)) {
+      resolvedPoints = actionResult.data.pointsValue;
+    }
+  }
+}
       const duplicateQuery = `
         SELECT *
         FROM ecotrust_transactions
