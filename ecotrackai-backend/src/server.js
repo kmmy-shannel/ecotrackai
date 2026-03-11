@@ -18,6 +18,7 @@ const logisticsRoutes        = require('./routes/logistics.routes');
 const routeApprovalRoutes    = require('./routes/route.approval.routes');
 
 const superadminRoutes       = require('./routes/superadmin.routes');
+const catalogRoutes          = require('./routes/catalog.routes');
 
 
 const app = express();
@@ -49,6 +50,7 @@ app.use('/api/logistics',      logisticsRoutes);
 app.use('/api/route-approvals', routeApprovalRoutes);
 
 app.use('/api/superadmin',     superadminRoutes);
+app.use('/api/catalog',        catalogRoutes);
 
 
 app.use('/api',            indexRoutes);   // ← MUST be last, it matches all /api/*
