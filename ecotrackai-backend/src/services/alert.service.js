@@ -490,7 +490,6 @@ const AlertService = {
     for (const item of items) {
       const daysLeft = item.days_left;
 
-      // ✅ UPDATED risk classification — HIGH ≤4d, MEDIUM ≤9d, LOW 10d+
       let riskLevel;
       if (daysLeft <= 4)      riskLevel = 'HIGH';
       else if (daysLeft <= 7) riskLevel = 'MEDIUM';
@@ -564,28 +563,28 @@ const AlertService = {
           WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
           ELSE 'LOW'
         END AS risk_level,
-       CASE
-  WHEN ma.status = 'pending'           THEN 'pending_review'
-  WHEN ma.status = 'approved'          THEN 'approved'
-  WHEN ma.status = 'declined'          THEN 'declined'
-  WHEN ma.status = 'rejected'          THEN 'declined'
-  ELSE 'active'
-END AS status,
+        CASE
+          WHEN ma.status = 'pending'  THEN 'pending_review'
+          WHEN ma.status = 'approved' THEN 'approved'
+          WHEN ma.status = 'declined' THEN 'declined'
+          WHEN ma.status = 'rejected' THEN 'declined'
+          ELSE 'active'
+        END AS status,
         'spoilage_risk' AS alert_type,
         i.current_condition,
-ma.approval_id,
-ma.manager_comment,
-COALESCE(ma.review_notes, ma.manager_comment) AS decline_reason
+        ma.approval_id,
+        ma.manager_comment,
+        COALESCE(ma.review_notes, ma.manager_comment) AS decline_reason
       FROM inventory i
       JOIN products p ON i.product_id = p.product_id
       LEFT JOIN LATERAL (
-  SELECT approval_id, status, manager_comment, review_notes
-  FROM manager_approvals
-  WHERE alert_id = i.inventory_id
-    AND business_id = i.business_id
-  ORDER BY created_at DESC
-  LIMIT 1
-) ma ON true
+        SELECT approval_id, status, manager_comment, review_notes
+        FROM manager_approvals
+        WHERE alert_id = i.inventory_id
+          AND business_id = i.business_id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) ma ON true
       WHERE i.business_id = $1
         AND i.quantity > 0
         AND i.expected_expiry_date IS NOT NULL
@@ -611,7 +610,6 @@ COALESCE(ma.review_notes, ma.manager_comment) AS decline_reason
   },
 
   async submitAlertForApproval(alertId, businessId, user, options = {}) {
-    // Look up from inventory directly (matches how getAllAlerts returns inventory_id as id)
     const { rows } = await pool.query(`
       SELECT
         i.inventory_id AS id,
@@ -635,11 +633,10 @@ COALESCE(ma.review_notes, ma.manager_comment) AS decline_reason
         AND i.business_id = $2
         AND i.quantity > 0
     `, [alertId, businessId]);
-  
+
     const alert = rows[0];
     if (!alert) throw { status: 404, message: 'Alert not found' };
-  
-    // Check if already submitted (pending approval exists for this inventory item)
+
     const { rows: existing } = await pool.query(`
       SELECT approval_id FROM manager_approvals
       WHERE business_id = $1
@@ -647,38 +644,37 @@ COALESCE(ma.review_notes, ma.manager_comment) AS decline_reason
         AND status = 'pending'
       LIMIT 1
     `, [businessId, alert.id]);
-  
+
     if (existing.length > 0) {
       throw { status: 400, message: 'This alert is already pending manager review' };
     }
-  
+
     const ApprovalService = require('./approval.service');
-const payload = {
-  alertId: null,          // ← pass null so createFromAlert skips AlertModel.findByIdAndBusiness
-  inventoryId: alert.id,  // ← carry the real inventory_id separately for the approval record
-  productName: alert.product_name,
-  quantity: alert.quantity || 'N/A',
-  location: alert.location || 'N/A',
-  daysLeft: alert.days_left || 0,
-  riskLevel: alert.risk_level || 'MEDIUM',
-  priority: alert.risk_level || 'MEDIUM',
-  aiSuggestion: options.aiSuggestion || '',
-  requiredRole: 'inventory_manager',
-  approvalType: 'spoilage_action',
-  batchNumber: alert.batch_number || null
-};
+    const payload = {
+      alertId: null,
+      inventoryId: alert.id,
+      productName: alert.product_name,
+      quantity: alert.quantity || 'N/A',
+      location: alert.location || 'N/A',
+      daysLeft: alert.days_left || 0,
+      riskLevel: alert.risk_level || 'MEDIUM',
+      priority: alert.risk_level || 'MEDIUM',
+      aiSuggestion: options.aiSuggestion || '',
+      requiredRole: 'inventory_manager',
+      approvalType: 'spoilage_action',
+      batchNumber: alert.batch_number || null
+    };
 
-const result = await ApprovalService.createFromAlert(user, payload);
+    const result = await ApprovalService.createFromAlert(user, payload);
 
-// After approval created, write the inventory_id into alert_id so the LEFT JOIN can find it
-if (result?.success && result?.data?.approval?.approval_id) {
-  await pool.query(
-    `UPDATE manager_approvals SET alert_id = $1 WHERE approval_id = $2`,
-    [alert.id, result.data.approval.approval_id]
-  );
-}
+    if (result?.success && result?.data?.approval?.approval_id) {
+      await pool.query(
+        `UPDATE manager_approvals SET alert_id = $1 WHERE approval_id = $2`,
+        [alert.id, result.data.approval.approval_id]
+      );
+    }
 
-return result;
+    return result;
   },
 
   async deleteAlert(id, businessId) {
@@ -742,7 +738,50 @@ return result;
     `, [id, businessId]);
     if (!rows[0]) throw { status: 404, message: 'Inventory item not found' };
     return aiService.generateAlertInsights(rows[0]);
-  }
+  },
+
+  // ── NEW: Get all Inventory Manager approved batches that still
+  // have remaining plannable quantity (quantity > 0).
+  // Used by the notification banner and Plan New Delivery form.
+  async getApprovedBatches(businessId) {
+    const { rows } = await pool.query(`
+      SELECT
+        i.inventory_id,
+        p.product_name,
+        i.batch_number,
+        i.quantity            AS available_quantity,
+        i.unit_of_measure,
+        i.ripeness_stage,
+        i.expected_expiry_date,
+        (i.expected_expiry_date - CURRENT_DATE)::int AS days_left,
+        CASE
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
+          ELSE 'LOW'
+        END AS risk_level,
+        ma.approval_id,
+        ma.reviewed_at        AS approved_at
+      FROM inventory i
+      JOIN products p ON i.product_id = p.product_id
+      -- only batches where Inventory Manager has approved
+      JOIN manager_approvals ma
+        ON ma.alert_id    = i.inventory_id
+        AND ma.business_id = i.business_id
+        AND ma.required_role = 'inventory_manager'
+        AND ma.status        = 'approved'
+      WHERE i.business_id = $1
+        AND i.quantity    > 0
+      ORDER BY
+        CASE
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 1
+          WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 2
+          ELSE 3
+        END,
+        i.expected_expiry_date ASC
+    `, [businessId]);
+
+    return { approvedBatches: rows, count: rows.length };
+  },
 };
 
 module.exports = AlertService;

@@ -46,7 +46,7 @@ const normalizeDelivery = (raw) => {
         })
       : '—',
     stops,
-    stopCount:         parseInt(raw.stop_count || rawStops.length || 0),
+    stopCount: parseInt(raw.stop_count || raw.stops_count || rawStops.length || 0),
     totalDistance:     parseFloat(raw.total_distance_km                || 0).toFixed(1),
     estimatedDuration: parseInt(raw.estimated_duration_minutes         || 0),
     carbonEmissions:   parseFloat(raw.estimated_carbon_kg              || 0).toFixed(2),
@@ -175,42 +175,61 @@ export default function useDelivery() {
     setOptimizingRoute(delivery.id);
     setError('');
     try {
-      const response = await deliveryService.optimizeRoute(delivery.id);
-      const payload  = response?.data?.data ?? response?.data ?? response;
+      // Build the payload — ensure stops carry lat/lng for TSP reorder
+      const stopsWithCoords = (expandedStops[delivery.id] || delivery.stops || []).map(s => ({
+        id:            s.id       || s.stop_id,
+        type:          s.type     || s.stop_type || 'stop',
+        location:      s.location || s.location_name || 'Stop',
+        lat:           parseFloat(s.lat || s.latitude  || 0) || null,
+        lng:           parseFloat(s.lng || s.longitude || 0) || null,
+        products:      s.products || [],
+      }));
 
-      // After optimize, reload so the table shows 'optimized' status immediately
-      await loadDeliveries();
+      const response = await deliveryService.optimizeRoute(delivery.id, {
+        stops:             stopsWithCoords,
+        totalDistance:     delivery.totalDistance,
+        estimatedDuration: delivery.estimatedDuration,
+        fuelConsumption:   delivery.fuelConsumption,
+        carbonEmissions:   delivery.carbonEmissions,
+        deliveryCode:      delivery.deliveryCode,
+      });
 
-      // Use stops already expanded, or build from payload
-      const stops = expandedStops[delivery.id] || [];
+     // Log raw response to see what shape it actually is
+console.log('[optimizeRoute] raw response:', JSON.stringify(response?.data)?.slice(0, 300));
+const payload = response?.data?.data ?? response?.data ?? response;
+
+// Guard: if payload doesn't have the expected shape, throw clearly
+if (!payload?.originalRoute || !payload?.optimizedRoute) {
+  console.error('[optimizeRoute] Unexpected payload shape:', payload);
+  throw new Error('Optimization response missing route data');
+}
+
+// Do NOT reload here — wait until user actually confirms in the modal
+      // Status will update after applyOptimization() or when modal is closed
+      const normalizeStops = (arr) =>
+        (arr || []).map(s => ({
+          ...s,
+          lat: parseFloat(s.lat || 0) || null,
+          lng: parseFloat(s.lng || 0) || null,
+        }));
 
       const result = {
         deliveryId:    delivery.id,
-        currentStatus: 'optimized', // backend already set this
+        currentStatus: 'optimized',
         originalRoute: {
           deliveryCode:      delivery.deliveryCode,
           totalDistance:     payload.originalRoute?.totalDistance     ?? delivery.totalDistance,
           estimatedDuration: payload.originalRoute?.estimatedDuration ?? delivery.estimatedDuration,
           fuelConsumption:   payload.originalRoute?.fuelConsumption   ?? delivery.fuelConsumption,
           carbonEmissions:   payload.originalRoute?.carbonEmissions   ?? delivery.carbonEmissions,
-          // Use stops from backend payload — they have real lat/lng
-          stops: (payload.originalRoute?.stops ?? stops).map(s => ({
-            ...s,
-            lat: parseFloat(s.lat || 0) || null,
-            lng: parseFloat(s.lng || 0) || null,
-          })),
+          stops:             normalizeStops(payload.originalRoute?.stops ?? stopsWithCoords),
         },
         optimizedRoute: {
-          deliveryCode:      delivery.deliveryCode,
           totalDistance:     payload.optimizedRoute?.totalDistance     ?? payload.optimizedDistance    ?? delivery.totalDistance,
           estimatedDuration: payload.optimizedRoute?.estimatedDuration ?? payload.optimizedDuration   ?? delivery.estimatedDuration,
           fuelConsumption:   payload.optimizedRoute?.fuelConsumption   ?? payload.optimizedFuel        ?? delivery.fuelConsumption,
           carbonEmissions:   payload.optimizedRoute?.carbonEmissions   ?? payload.optimizedCarbon     ?? delivery.carbonEmissions,
-          stops: (payload.optimizedRoute?.stops ?? stops).map(s => ({
-            ...s,
-            lat: parseFloat(s.lat || 0) || null,
-            lng: parseFloat(s.lng || 0) || null,
-          })),
+          stops:             normalizeStops(payload.optimizedRoute?.stops ?? stopsWithCoords),
         },
         savings: payload.savings ?? {
           distance:  payload.savingsKm   ?? 0,
@@ -257,9 +276,11 @@ export default function useDelivery() {
     }
   };
 
-  const closeOptimizationModal = () => {
+  const closeOptimizationModal = async () => {
     setShowOptimizationModal(false);
     setOptimizationResult(null);
+    // Reload to sync whatever status the backend set (optimized or unchanged)
+    await loadDeliveries();
   };
 
   // ── Summary stats (only delivered routes count toward actuals) ─

@@ -1,17 +1,15 @@
 import axios from 'axios';
 import authService from './auth.service';
-import api from './api';  // ← ADD THIS ONE IMPORT
+import api from './api';
 
 const API_URL = `${process.env.REACT_APP_API_URL}/alerts`;
 
 class AlertService {
-  // Get authorization headers
   getAuthHeader() {
     const token = authService.getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // Sync alerts from products
   async syncAlerts() {
     try {
       const response = await axios.post(
@@ -26,7 +24,6 @@ class AlertService {
     }
   }
 
-  // Get all alerts
   async getAllAlerts() {
     try {
       const response = await axios.get(API_URL, {
@@ -40,7 +37,6 @@ class AlertService {
     }
   }
 
-  // Get alert statistics
   async getAlertStats() {
     try {
       const response = await axios.get(`${API_URL}/stats`, {
@@ -53,7 +49,6 @@ class AlertService {
     }
   }
 
-  // Get AI insights for an alert
   async getAIInsights(alertId) {
     try {
       const response = await axios.get(`${API_URL}/${alertId}/insights`, {
@@ -66,7 +61,6 @@ class AlertService {
     }
   }
 
-  // Update alert status
   async updateAlertStatus(alertId, status) {
     try {
       const response = await axios.put(
@@ -81,7 +75,6 @@ class AlertService {
     }
   }
 
-  // Delete alert
   async deleteAlert(alertId) {
     try {
       const response = await axios.delete(`${API_URL}/${alertId}`, {
@@ -94,14 +87,27 @@ class AlertService {
     }
   }
 
-  // Submit active alert for manager approval
-  // ← REPLACED: now uses shared api instance so auth token is handled automatically
   async submitForApproval(alertId, body = {}) {
     try {
       const response = await api.post(`/alerts/${alertId}/submit`, body);
       return response.data;
     } catch (error) {
       console.error('Submit alert for approval error:', error);
+      throw error;
+    }
+  }
+
+  // GET /api/alerts/approved-batches
+  // Returns all Inventory Manager approved batches with remaining quantity.
+  // Used by the notification banner on AlertsPage.
+  async getApprovedBatches() {
+    try {
+      const response = await axios.get(`${API_URL}/approved-batches`, {
+        headers: this.getAuthHeader()
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Get approved batches error:', error);
       throw error;
     }
   }

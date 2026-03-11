@@ -2,26 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import authService from '../../services/auth.service';
+import alertService from '../../services/alert.service';
 import useAlerts from '../../hooks/useAlerts';
 import approvalService from '../../services/approval.service';
+import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
 import {
-  Search, Sparkles, X, TrendingDown,
+  Search, Sparkles, X, TrendingDown, Truck,
   Package, Clock, ShieldCheck, AlertCircle, CheckCircle2,
-  XCircle, MessageSquare, ChevronDown, ChevronUp
+  XCircle, MessageSquare, ChevronDown, ChevronUp, Zap
 } from 'lucide-react';
 
 const AlertsPage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
 
+  // Approved batches banner
+  const [approvedBatches, setApprovedBatches]       = useState([]);
+  const [showPlanModal, setShowPlanModal]           = useState(false);
+  const [selectedPrefill, setSelectedPrefill]       = useState(null);
+
   // Pending admin-escalated requests
-  const [adminRequests, setAdminRequests]         = useState([]);
-  const [loadingRequests, setLoadingRequests]     = useState(false);
-  const [expandedRequest, setExpandedRequest]     = useState(null);
-  const [adminComments, setAdminComments]         = useState({});
-  const [submittingId, setSubmittingId]           = useState(null);
-  const [requestSuccess, setRequestSuccess]       = useState('');
-  const [requestError, setRequestError]           = useState('');
+  const [adminRequests, setAdminRequests]           = useState([]);
+  const [loadingRequests, setLoadingRequests]       = useState(false);
+  const [expandedRequest, setExpandedRequest]       = useState(null);
+  const [adminComments, setAdminComments]           = useState({});
+  const [submittingId, setSubmittingId]             = useState(null);
+  const [requestSuccess, setRequestSuccess]         = useState('');
+  const [requestError, setRequestError]             = useState('');
 
   const {
     filteredAlerts, loading, stats, error, success,
@@ -37,7 +44,18 @@ const AlertsPage = () => {
     if (!currentUser) { navigate('/'); return; }
     setUser(currentUser);
     fetchAdminRequests();
+    fetchApprovedBatches();
   }, [navigate]);
+
+  const fetchApprovedBatches = async () => {
+    try {
+      const res = await alertService.getApprovedBatches();
+      const list = res?.data?.approvedBatches || res?.approvedBatches || [];
+      setApprovedBatches(Array.isArray(list) ? list : []);
+    } catch {
+      setApprovedBatches([]);
+    }
+  };
 
   const fetchAdminRequests = async () => {
     try {
@@ -67,6 +85,29 @@ const AlertsPage = () => {
     }
   };
 
+  const handlePlanNow = (batch = null) => {
+    if (batch) {
+      setSelectedPrefill({
+        inventoryId:  batch.inventory_id,
+        productName:  batch.product_name,
+        batchNumber:  batch.batch_number,
+        quantity:     `${batch.available_quantity} ${batch.unit_of_measure || 'kg'}`,
+        daysLeft:     batch.days_left,
+        riskLevel:    batch.risk_level,
+      });
+    } else {
+      setSelectedPrefill(null);
+    }
+    setShowPlanModal(true);
+  };
+
+  const handlePlanSuccess = () => {
+    setShowPlanModal(false);
+    setSelectedPrefill(null);
+    // Refresh approved batches so banner updates
+    fetchApprovedBatches();
+  };
+
   const handleReview = (decision) => submitReview(decision);
 
   if (!user) return null;
@@ -85,6 +126,60 @@ const AlertsPage = () => {
           <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm flex items-center gap-2">
             <AlertCircle size={16} /> {error || requestError}
           </div>
+        )}
+
+        {/* ── Approved Batches Banner ─────────────────────────── */}
+        {approvedBatches.length > 0 && (
+          <section className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Truck size={16} className="text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-bold text-orange-900 text-sm">
+                    {approvedBatches.length} batch{approvedBatches.length !== 1 ? 'es' : ''} ready for delivery
+                  </p>
+                  <p className="text-xs text-orange-600">Approved by Inventory Manager — plan a delivery now</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handlePlanNow()}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
+              >
+                <Zap size={13} /> Plan Now
+              </button>
+            </div>
+
+            {/* Batch list */}
+            <div className="space-y-2">
+              {approvedBatches.map((batch) => (
+                <div
+                  key={batch.inventory_id}
+                  className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-orange-100"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      batch.risk_level === 'HIGH'   ? 'bg-red-500' :
+                      batch.risk_level === 'MEDIUM' ? 'bg-orange-400' : 'bg-green-500'
+                    }`} />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{batch.product_name}</p>
+                      <p className="text-xs text-gray-500">
+                        Batch {batch.batch_number || '—'} · {batch.available_quantity} {batch.unit_of_measure || 'kg'} available · {batch.days_left}d left
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handlePlanNow(batch)}
+                    className="text-xs font-semibold text-orange-600 hover:text-orange-800 underline underline-offset-2 transition-colors"
+                  >
+                    Plan this batch
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Admin Review Panel (escalated requests) */}
@@ -143,7 +238,6 @@ const AlertsPage = () => {
                       {/* Expanded Details */}
                       {isExpanded && (
                         <div className="border-t border-emerald-100 px-5 py-4 space-y-4">
-                          {/* Product Info */}
                           <div className="grid grid-cols-3 gap-3 bg-emerald-50 rounded-xl p-4">
                             <div>
                               <p className="text-xs text-emerald-600 mb-0.5">Quantity</p>
@@ -161,7 +255,6 @@ const AlertsPage = () => {
                             </div>
                           </div>
 
-                          {/* AI Suggestion */}
                           {req.ai_suggestion && (
                             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                               <div className="flex items-center gap-1.5 mb-1">
@@ -172,7 +265,6 @@ const AlertsPage = () => {
                             </div>
                           )}
 
-                          {/* Manager's Comment */}
                           {req.manager_comment && (
                             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                               <div className="flex items-center gap-1.5 mb-1">
@@ -183,7 +275,6 @@ const AlertsPage = () => {
                             </div>
                           )}
 
-                          {/* Admin Comment Input */}
                           <div>
                             <label className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-1.5 block">
                               Your Decision Note (optional)
@@ -197,7 +288,6 @@ const AlertsPage = () => {
                             />
                           </div>
 
-                          {/* Admin Action Buttons */}
                           <div className="flex gap-3">
                             <button
                               onClick={() => handleAdminDecision(id, 'approved')}
@@ -349,11 +439,20 @@ const AlertsPage = () => {
           onReview={handleReview}
         />
       )}
+
+      {/* Plan New Delivery Modal */}
+      {showPlanModal && (
+        <PlanNewDeliveryModal
+          prefill={selectedPrefill}
+          onClose={() => { setShowPlanModal(false); setSelectedPrefill(null); }}
+          onSuccess={handlePlanSuccess}
+        />
+      )}
     </Layout>
   );
 };
 
-/* Helpers */
+/* ── Helpers ─────────────────────────────────────────────── */
 
 const RiskBadge = ({ level }) => {
   const map = {
@@ -377,33 +476,33 @@ const statusConfig = {
 const ProductRow = ({ alert, onDelete, onGetInsights, getProductImage, getRiskBadgeColor, getRiskBadgeText }) => (
   <div className={`px-5 py-4 grid grid-cols-6 gap-4 items-center hover:bg-emerald-50 transition-colors ${
     alert.status === 'pending_review' ? 'bg-emerald-50/30' :
-    alert.status === 'approved'       ? 'bg-emerald-50/30'  :
-    alert.status === 'declined'       ? 'bg-red-50/30'    : ''
+    alert.status === 'approved'       ? 'bg-emerald-50/30' :
+    alert.status === 'declined'       ? 'bg-red-50/30'     : ''
   }`}>
     <div className="flex items-center gap-3">
       <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
         {getProductImage(alert.product_name)}
       </div>
       <div>
-  <p className="font-semibold text-emerald-900 text-sm truncate">{alert.product_name}</p>
-  {statusConfig[alert.status] && (
-    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusConfig[alert.status].className}`}>
-      {statusConfig[alert.status].label}
-    </span>
-  )}
-  {alert.status === 'declined' && alert.decline_reason && (
-    <p className="text-xs text-red-500 mt-1 italic">
-      ✗ "{alert.decline_reason}"
-    </p>
-  )}
-</div>
+        <p className="font-semibold text-emerald-900 text-sm truncate">{alert.product_name}</p>
+        {statusConfig[alert.status] && (
+          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusConfig[alert.status].className}`}>
+            {statusConfig[alert.status].label}
+          </span>
+        )}
+        {alert.status === 'declined' && alert.decline_reason && (
+          <p className="text-xs text-red-500 mt-1 italic">
+            ✗ "{alert.decline_reason}"
+          </p>
+        )}
+      </div>
     </div>
     <div className="text-center text-sm font-medium text-emerald-700">
       {alert.batch_number || alert.batchNumber || '—'}
     </div>
     <div className="text-center text-sm font-medium text-emerald-700">
-      {alert.current_quantity !== undefined && alert.current_quantity !== null 
-        ? `${alert.current_quantity} ${alert.unit_of_measure || 'kg'}` 
+      {alert.current_quantity !== undefined && alert.current_quantity !== null
+        ? `${alert.current_quantity} ${alert.unit_of_measure || 'kg'}`
         : (alert.quantity || '—')}
     </div>
     <div className="text-center text-sm font-medium text-emerald-700">
@@ -434,21 +533,18 @@ const ProductRow = ({ alert, onDelete, onGetInsights, getProductImage, getRiskBa
         </span>
       )}
       {alert.status === 'declined' && (
-  <div className="flex flex-col items-end gap-1">
-    <button
-      onClick={() => onGetInsights(alert)}
-      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-full transition-colors inline-flex items-center gap-1"
-    >
-      <Sparkles size={11} /> Re-analyze & Resubmit
-    </button>
-  </div>
-)}
-
+        <button
+          onClick={() => onGetInsights(alert)}
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-full transition-colors inline-flex items-center gap-1"
+        >
+          <Sparkles size={11} /> Re-analyze & Resubmit
+        </button>
+      )}
     </div>
   </div>
 );
 
-/* AI Insights Modal */
+/* ── AI Insights Modal ───────────────────────────────────── */
 
 const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -464,15 +560,15 @@ const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => (
             <div>
               <h2 className="text-xl font-bold">AI Insights</h2>
               {insights && (
-               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                insights.recommendations?.length > 0
-                  ? 'bg-emerald-400 text-emerald-900'
-                  : 'bg-emerald-300 text-emerald-900'
-              }`}>
-                {insights.recommendations?.length > 0 
-                  ? '✓ Groq AI · llama-3.1-8b-instant' 
-                  : '⚠ Fallback Data'}
-              </span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  insights.recommendations?.length > 0
+                    ? 'bg-emerald-400 text-emerald-900'
+                    : 'bg-emerald-300 text-emerald-900'
+                }`}>
+                  {insights.recommendations?.length > 0
+                    ? '✓ Groq AI · llama-3.1-8b-instant'
+                    : '⚠ Fallback Data'}
+                </span>
               )}
             </div>
           </div>
@@ -547,18 +643,18 @@ const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => (
       <div className="border-t border-emerald-100 p-4 bg-emerald-50 space-y-3 flex-shrink-0">
         {!loading && insights && (
           <div className="flex gap-3">
-           <button
-  onClick={() => { onReview('accepted'); onClose(); }}
-  className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl text-sm transition-colors"
->
-  ✓ Accept Recommendations
-</button>
-<button
-  onClick={() => { onReview('rejected'); onClose(); }}
-  className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors"
->
-  ✗ Reject Recommendations
-</button>
+            <button
+              onClick={() => { onReview('accepted'); onClose(); }}
+              className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl text-sm transition-colors"
+            >
+              ✓ Accept Recommendations
+            </button>
+            <button
+              onClick={() => { onReview('rejected'); onClose(); }}
+              className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors"
+            >
+              ✗ Reject Recommendations
+            </button>
           </div>
         )}
         <button
