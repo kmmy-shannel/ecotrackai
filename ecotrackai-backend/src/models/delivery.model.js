@@ -110,10 +110,10 @@ const DeliveryModel = {
         JSON.stringify(destinationLocation || {}),
         vehicleType,
         driverUserId || null,
-        totalDistanceKm               || 0,
-        estimatedDurationMinutes      || 0,
-        estimatedFuelConsumptionLiters|| 0,
-        estimatedCarbonKg             || 0,
+        Math.floor(totalDistanceKm * 100) / 100 || 0,
+        Math.floor(estimatedDurationMinutes) || 0,
+        Math.floor(estimatedFuelConsumptionLiters) || 0,
+        Math.floor(estimatedCarbonKg) || 0,
       ]);
 
       return { success: true, data: result.rows[0] };
@@ -175,7 +175,18 @@ const DeliveryModel = {
         RETURNING *
       `, values);
 
-      return { success: true, data: result.rows[0] };
+      // Safety net: ensure location_name is always saved even if dynamic insert missed it
+      const insertedRow = result.rows[0];
+      if (insertedRow && (insertedRow.location_name === null || insertedRow.location_name === undefined)) {
+        try {
+          await pool.query(
+            `UPDATE route_stops SET location_name = $1 WHERE stop_id = $2`,
+            [name, insertedRow.stop_id]
+          );
+          insertedRow.location_name = name;
+        } catch (_) { /* non-fatal */ }
+      }
+      return { success: true, data: insertedRow };
     } catch (err) {
       console.error('[DeliveryModel.createStop]', err.message);
       return { success: false, error: err.message };

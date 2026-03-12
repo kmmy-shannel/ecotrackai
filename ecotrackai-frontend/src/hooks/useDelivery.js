@@ -92,6 +92,7 @@ export default function useDelivery() {
   const [optimizingRoute,       setOptimizingRoute]       = useState(null);
   const [optimizationResult,    setOptimizationResult]    = useState(null);
   const [showOptimizationModal, setShowOptimizationModal] = useState(false);
+  const [confirmModal,          setConfirmModal]          = useState(null); // { type, id, isResubmit? }
 
   const flash = (setter, msg, ms = 4000) => {
     setter(msg);
@@ -159,14 +160,47 @@ export default function useDelivery() {
     flash(setSuccess, 'Delivery route created successfully');
   };
 
+  // ── Submit route directly for logistics approval ──────────
+  const submitRouteForApproval = async (deliveryId, isResubmit = false) => {
+    setConfirmModal({ type: 'submit', id: deliveryId, isResubmit });
+  };
+
+  const confirmSubmit = async (deliveryId, isResubmit = false) => {
+    try {
+      const res  = await deliveryService.submitForApproval(deliveryId);
+      const body = res?.data ?? res;
+      if (body?.success === false) {
+        flash(setError, body.message || body.error || 'Submission failed');
+        return false;
+      }
+      const msg = isResubmit
+        ? 'Route resubmitted for logistics manager approval'
+        : 'Route submitted for logistics manager approval';
+      flash(setSuccess, msg);
+      await loadDeliveries();
+      return true;
+    } catch (err) {
+      console.error('[useDelivery] submitForApproval error:', err);
+      flash(setError, err.response?.data?.message || err.response?.data?.error || 'Failed to submit route for approval');
+      return false;
+    } finally {
+      setConfirmModal(null);
+    }
+  };
+
   const deleteDelivery = async (id) => {
-    if (!window.confirm('Delete this delivery route?')) return;
+    setConfirmModal({ type: 'delete', id });
+  };
+
+  const confirmDelete = async (id) => {
     try {
       await deliveryService.deleteDelivery(id);
-      setDeliveries(prev => prev.filter(d => d.id !== id));
       flash(setSuccess, 'Route deleted');
+      await loadDeliveries();
     } catch (err) {
       flash(setError, err.response?.data?.message || 'Failed to delete route');
+    } finally {
+      setConfirmModal(null);
     }
   };
 
@@ -283,36 +317,48 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     await loadDeliveries();
   };
 
-  // ── Summary stats (only delivered routes count toward actuals) ─
-  // totalDeliveries = all routes today
-  // totalDistance   = only delivered routes (actual driver arrived + completed)
-  // fuelSaved       = savings from optimized+delivered routes
-  // co2Reduced      = CO₂ savings from optimized+delivered routes
-  const today = new Date().toLocaleDateString('en-US', {
-    month: 'numeric', day: 'numeric', year: 'numeric'
-  });
+  // ── Summary stats from backend actual metrics API ──────
+  const [metricsSummary, setMetricsSummary] = useState({});
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
-  const deliveredToday = deliveries.filter(
-    d => d.status === 'delivered' && d.date === today
-  );
-  const todayAll = deliveries.filter(d => d.date === today);
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await deliveryService.getMetricsSummary();
+        setMetricsSummary(response.data || {});
+      } catch (err) {
+        console.warn('[useDelivery] metrics API failed:', err);
+        // Fallback to local calc
+        const today = new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+        const deliveredToday = deliveries.filter(d => d.status === 'delivered' && d.date === today);
+        setMetricsSummary({
+          totalDeliveries: deliveries.length,
+          inProgress: deliveries.filter(d => d.status === 'in_transit').length,
+          totalDistance: deliveredToday.reduce((s, d) => s + parseFloat(d.totalDistance || 0), 0).toFixed(1),
+          fuelSaved: '0.0',
+    // co2Reduced: '0.00' // Removed
+        });
+      } finally {
+        setMetricsLoading(false);
+      }
+    };
+    fetchMetrics();
+  }, [deliveries]);
 
-  const summaryStats = {
-    totalDeliveries: todayAll.length,
-    inProgress:      deliveries.filter(d => d.status === 'in_transit').length,
-    // Only count distance from actually completed deliveries
-    totalDistance: deliveredToday
-      .reduce((s, d) => s + parseFloat(d.totalDistance || 0), 0)
-      .toFixed(1),
-    // Fuel saved = estimated fuel of delivered routes × 0.20 (represents optimization savings)
-    // Will be replaced by real data once driver mobile app tracks actual fuel
-    fuelSaved: deliveredToday
-      .reduce((s, d) => s + parseFloat(d.fuelConsumption || 0) * 0.20, 0)
-      .toFixed(1),
-    co2Reduced: deliveredToday
-      .reduce((s, d) => s + parseFloat(d.carbonEmissions || 0) * 0.20, 0)
-      .toFixed(2),
+  const summaryStats = metricsLoading ? {
+    totalDeliveries: 0,
+    totalDistance: '—',
+    fuelSaved: '—',
+    co2Reduced: '—',
+    inProgress: 0
+  } : {
+    totalDeliveries: parseInt(metricsSummary.totalDeliveries || 0),
+    totalDistance: metricsSummary.totalDistance || '0.0',
+    fuelSaved: metricsSummary.fuelSaved || '0.0',
+    // co2Reduced: metricsSummary.co2Reduced || '0.00', // Removed per feedback
+    inProgress: parseInt(metricsSummary.inProgress || 0),
   };
+
 
   // ── Filtered list ─────────────────────────────────────────
   const filtered = deliveries.filter(d => {
@@ -330,11 +376,14 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     searchTerm, showAddModal,
     expandedDelivery, expandedStops,
     optimizingRoute, optimizationResult, showOptimizationModal,
+    confirmModal, setConfirmModal,
     summaryStats,
     setSearchTerm, setShowAddModal,
     setExpandedDelivery: handleExpandDelivery,
-    deleteDelivery, optimizeRoute, applyOptimization,
+    deleteDelivery, confirmDelete,
+    optimizeRoute, applyOptimization,
     handleDeliveryCreated, closeOptimizationModal,
+    submitRouteForApproval, confirmSubmit,
     getStatusBadge,
   };
 }

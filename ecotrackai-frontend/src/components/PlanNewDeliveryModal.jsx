@@ -284,13 +284,6 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
       .finally(() => setInventoryLoading(false));
   }, []);
 
-  // ── Computed: total allocated per inventoryId across ALL stops ────────────
-  const getAllocatedQty = (inventoryId) =>
-    stops.reduce((sum, stop) => {
-      const found = (stop.products || []).find(p => p.inventoryId === inventoryId);
-      return sum + (found ? parseFloat(found.quantityAssigned) || 0 : 0);
-    }, 0);
-
   // ── Auto-computed total load from all stops ───────────────────────────────
   const totalLoad = stops.reduce((sum, stop) =>
     sum + (stop.products || []).reduce((s2, p) => s2 + (parseFloat(p.quantityAssigned) || 0), 0)
@@ -304,9 +297,47 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
     setRouteError(null);
     try {
       const data = await deliveryService.calculateRoute(valid.map(s => [s.lng, s.lat]));
-      if (data?.data?.routes?.[0]) {
-        const r = data.data.routes[0].summary;
-        setEstimatedDistance({ distance: (r.distance / 1000).toFixed(2), duration: Math.round(r.duration / 60) });
+      // ORS v2 response is wrapped by backend sendSuccess: { success, message, data: <ORS_data> }
+      const orsData = data?.data ?? data;
+      const route   = orsData?.routes?.[0];
+      if (route) {
+        const summary = route.summary ?? route.segments?.[0]?.steps?.reduce(
+          (acc, s) => ({ distance: acc.distance + s.distance, duration: acc.duration + s.duration }),
+          { distance: 0, duration: 0 }
+        ) ?? { distance: 0, duration: 0 };
+
+        const orsDistKm = summary.distance / 1000;
+        const orsDurMin = Math.round(summary.duration / 60);
+
+        // Sanity check: reject ORS result if avg speed < 5 km/h (unrealistic road detour)
+        // Fall back to haversine distance + 25 km/h urban estimate
+        const orsSpeedKmh = orsDurMin > 0 ? (orsDistKm / orsDurMin) * 60 : 999;
+        let finalDistKm, finalDurMin;
+
+        if (orsDistKm > 0 && orsSpeedKmh >= 5) {
+          finalDistKm = orsDistKm;
+          finalDurMin = orsDurMin;
+        } else {
+          // Haversine straight-line fallback
+          const R = 6371;
+          let hvTotal = 0;
+          for (let i = 0; i < valid.length - 1; i++) {
+            const [lng1, lat1] = [valid[i].lng, valid[i].lat];
+            const [lng2, lat2] = [valid[i+1].lng, valid[i+1].lat];
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+            hvTotal += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          }
+          finalDistKm = hvTotal;
+          finalDurMin = Math.max(1, Math.round((hvTotal / 25) * 60)); // 25 km/h urban
+        }
+
+        const distKm   = finalDistKm.toFixed(2);
+        const durHours = Math.floor(finalDurMin / 60);
+        const durMins  = finalDurMin % 60;
+        const durLabel = durHours > 0 ? `${durHours}h ${durMins}m` : `${finalDurMin} min`;
+        setEstimatedDistance({ distance: distKm, duration: finalDurMin, durationLabel: durLabel });
       }
     } catch { setRouteError('Could not calculate route distance.'); }
   }, [stops]);
@@ -419,10 +450,25 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
     return Object.keys(errs).length === 0;
   };
 
+  // ── Fuel & carbon estimation per vehicle type ─────────────────────────────
+  // Consumption rates (liters/km): van 0.10, refrigerated_truck 0.18, truck 0.14, motorcycle 0.04
+  // Carbon factor: diesel ≈ 2.68 kg CO₂/liter
+  const FUEL_RATES = { van: 0.10, refrigerated_truck: 0.18, truck: 0.14, motorcycle: 0.04 };
+  const CARBON_PER_LITER = 2.68;
+
+  const computeFuelAndCarbon = (distKm, vehicleType) => {
+    const rate = FUEL_RATES[vehicleType] ?? 0.10;
+    const fuel = parseFloat((distKm * rate).toFixed(2));
+    const carbon = parseFloat((fuel * CARBON_PER_LITER).toFixed(2));
+    return { fuel, carbon };
+  };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
     try {
       setLoading(true);
+      const distKm = parseFloat(estimatedDistance?.distance ?? 0);
+      const { fuel, carbon } = computeFuelAndCarbon(distKm, formData.vehicleType);
       await deliveryService.createDelivery({
         routeName:    `Route-${Date.now()}`,
         deliveryDate: formData.deliveryDate,
@@ -444,8 +490,10 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
           type:     s.type,
           products: s.products
         })),
-        totalDistance:     estimatedDistance?.distance,
-        estimatedDuration: estimatedDistance?.duration
+        totalDistance:     distKm || null,
+        estimatedDuration: estimatedDistance?.duration ?? null,
+        estimatedFuelConsumption: fuel,
+        estimatedCarbon:  carbon,
       });
       onSuccess?.();
     } catch (error) {
@@ -721,7 +769,12 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
                   <Navigation size={18} className="text-green-700 flex-shrink-0" />
                   <div>
                     <p className="text-xs font-semibold text-green-800">Estimated Route</p>
-                    <p className="text-[11px] text-green-600">{estimatedDistance.distance} km · {estimatedDistance.duration} min</p>
+                    <p className="text-[11px] text-green-600">
+                      {estimatedDistance.distance} km · {estimatedDistance.durationLabel ?? `${estimatedDistance.duration} min`}
+                      {stops.filter(s => s.lat && s.lng).length > 0 && (
+                        <span className="ml-1 text-green-500">· {stops.filter(s => s.lat && s.lng).length} stop{stops.filter(s => s.lat && s.lng).length !== 1 ? 's' : ''}</span>
+                      )}
+                    </p>
                   </div>
                 </div>
               )}

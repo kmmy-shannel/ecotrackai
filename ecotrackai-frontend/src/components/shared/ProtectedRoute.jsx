@@ -1,35 +1,41 @@
+// ============================================================
+// FILE: src/components/shared/ProtectedRoute.jsx
+// ============================================================
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { getDashboardRoute, isRoleAllowed } from '../../utils/rolePermissions';
 
 /**
- * ProtectedRoute Component - Guards routes based on authentication and role
- * Redirects to login if not authenticated
- * Redirects to unauthorized if role doesn't match
+ * Wraps a route element with role-based access control.
+ *
+ * Props:
+ *   element      — the JSX element to render if authorized
+ *   requiredRole — string or string[] of allowed roles
+ *
+ * Behaviour:
+ *   • Still loading  → render nothing (avoids flash-redirect)
+ *   • Not authed     → redirect to /login
+ *   • Wrong role     → redirect to /unauthorized
+ *   • Authorized     → render element
  */
-export const ProtectedRoute = ({ requiredRole, element, children, redirectTo = '/' }) => {
+const ProtectedRoute = ({ element, requiredRole }) => {
   const { isAuthenticated, role, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <p>Loading...</p>
-      </div>
-    );
-  }
+  // Wait for auth state to resolve before making any redirect decision
+  if (loading) return null;
 
   if (!isAuthenticated) {
-    return <Navigate to={redirectTo} replace />;
+    return <Navigate to="/login" replace />;
   }
 
-  if (requiredRole && !isRoleAllowed(role, requiredRole)) {
-    return <Navigate to="/unauthorized" replace />;
+  if (requiredRole) {
+    const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+    if (!allowed.includes(role)) {
+      return <Navigate to="/unauthorized" replace />;
+    }
   }
 
-  if (element) return element;
-  if (children) return <>{children}</>;
-  return <Navigate to={getDashboardRoute(role)} replace />;
+  return element;
 };
 
 export default ProtectedRoute;

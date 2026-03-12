@@ -18,11 +18,17 @@ const assertRouteTransition = (currentStatus, nextStatus, actionLabel) => {
 };
 
 class DeliveryService {
+  async getMetricsSummary() {
+    const response = await api.get('/deliveries/metrics');
+    return response.data;
+  }
+
   async getAllDeliveries(params = {}) {
     const response = await api.get('/deliveries', { params });
     return response.data;
     
   }
+
   async getDraftDeliveries() {
     const response = await api.get('/deliveries/drafts');
     return response.data;

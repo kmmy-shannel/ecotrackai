@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
 import {
   Plus, Search, Trash2, MapPin, Navigation,
-  Sparkles, TrendingDown, Clock, Fuel, Leaf,
+  Sparkles, TrendingDown, Fuel, Leaf,
   ChevronDown, ChevronUp, Route, Package, Layers, X,
   CheckCircle, AlertTriangle, Zap
 } from 'lucide-react';
@@ -71,6 +71,7 @@ const DeliveryRoutesPage = () => {
     setSearchTerm, setShowAddModal, setExpandedDelivery,
     deleteDelivery, optimizeRoute, applyOptimization,
     handleDeliveryCreated, closeOptimizationModal, getStatusBadge,
+    submitRouteForApproval,
   } = useDelivery();
   const [draftDeliveries, setDraftDeliveries] = useState([]);
   const [loadingDrafts, setLoadingDrafts]     = useState(false);
@@ -224,7 +225,7 @@ const DeliveryRoutesPage = () => {
         />
         <SummaryCard
           title="CO₂ Reduced"
-          value={`${summaryStats.co2Reduced} kg`}
+          value={`${summaryStats.co2Reduced ?? '0.00'} kg`}
           subtitle="From completed deliveries"
           icon={<Leaf />} color="emerald" trend="down"
         />
@@ -294,7 +295,6 @@ const DeliveryRoutesPage = () => {
                         <td className="px-6 py-4">
                           <div className="space-y-1 text-sm">
                             <div className="flex items-center gap-2 text-gray-700"><Navigation size={14} className="text-blue-500" /><span>{delivery.totalDistance} km</span></div>
-                            <div className="flex items-center gap-2 text-gray-700"><Clock size={14} className="text-purple-500" /><span>{delivery.estimatedDuration} min</span></div>
                             <div className="flex items-center gap-2 text-gray-700"><Leaf size={14} className="text-green-500" /><span>{delivery.carbonEmissions} kg CO₂</span></div>
                           </div>
                         </td>
@@ -350,12 +350,7 @@ const DeliveryRoutesPage = () => {
         ? 'Resubmit this declined route for Logistics Manager approval?'
         : 'Submit this route for Logistics Manager approval?';
       if (!window.confirm(msg)) return;
-      try {
-        await deliveryService.submitForApproval(delivery.id);
-        await handleDeliveryCreated();
-      } catch (err) {
-        console.error(err);
-      }
+      await submitRouteForApproval(delivery.id, isResubmit);
     }}
     className={`p-2 rounded-lg transition-colors ${
       delivery.status === 'declined'
@@ -492,11 +487,10 @@ const DeliveryDetails = ({ delivery }) => {
           )
         }
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
+      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
         <div><p className="text-xs text-gray-500 mb-1">Vehicle</p><p className="text-sm font-semibold">{delivery.vehicleType?.replace(/_/g, ' ')}</p></div>
         <div><p className="text-xs text-gray-500 mb-1">Fuel</p><p className="text-sm font-semibold">{delivery.fuelConsumption} L</p></div>
         <div><p className="text-xs text-gray-500 mb-1">Distance</p><p className="text-sm font-semibold">{delivery.totalDistance} km</p></div>
-        <div><p className="text-xs text-gray-500 mb-1">Duration</p><p className="text-sm font-semibold">{delivery.estimatedDuration} min</p></div>
       </div>
     </div>
   );
@@ -753,13 +747,6 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
       pctVal: savings?.distance, base: originalRoute?.totalDistance,
     },
     {
-      label: 'Duration', icon: <Clock size={14} />, color: 'text-purple-600',
-      orig:  `${originalRoute?.estimatedDuration ?? 0} min`,
-      opt:   `${optimizedRoute?.estimatedDuration ?? 0} min`,
-      saved: `${savings?.time ?? 0} min`,
-      pctVal: savings?.time, base: originalRoute?.estimatedDuration,
-    },
-    {
       label: 'Fuel', icon: <Fuel size={14} />, color: 'text-orange-500',
       orig:  `${fmt(originalRoute?.fuelConsumption)} L`,
       opt:   `${fmt(optimizedRoute?.fuelConsumption)} L`,
@@ -790,7 +777,7 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
               <p className="text-purple-200 text-sm">
                 {originalRoute?.deliveryCode}
                 {improvementPct ? ` · ${improvementPct}% efficiency gain` : ''}
-                {!usedFallback ? ' · Groq AI reordered' : ' · TSP Algorithm'}
+                {!usedFallback ? ' · AI optimized' : ' · TSP Algorithm'}
               </p>
             </div>
           </div>
@@ -811,7 +798,7 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
   <Zap size={16} className={`mt-0.5 flex-shrink-0 ${!usedFallback ? 'text-purple-500' : 'text-blue-500'}`} />
   <div>
     <p className="font-semibold">
-      {!usedFallback ? 'Groq AI Route Optimization' : 'Nearest-Neighbor TSP Algorithm'}
+      {!usedFallback ? 'AI Route Optimization' : 'Nearest-Neighbor TSP Algorithm'}
     </p>
     {(originalRoute?.stops?.length || 0) <= 2
       ? <p className="mt-0.5">
@@ -820,7 +807,7 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
         </p>
       : <p className="mt-0.5">
           {!usedFallback 
-            ? 'Groq AI analyzed stop coordinates and returned an optimized visiting sequence.'
+            ? 'AI analyzed stop coordinates and returned an optimized visiting sequence.'
             : 'Stops analyzed using Nearest-Neighbor heuristic to minimize total travel distance.'
           }
         </p>
@@ -880,12 +867,7 @@ const OptimizationModal = ({ result, onClose, onApply }) => {
           <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-5 border border-purple-200">
             <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <Zap size={16} className="text-purple-600" />
-              Groq AI Recommendations
-              {!usedFallback && (
-                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-normal ml-1">
-                  llama3-8b-8192
-                </span>
-              )}
+              AI Recommendations
             </h4>
             <ul className="space-y-2.5">
               {(aiRecommendations || []).map((rec, i) => (

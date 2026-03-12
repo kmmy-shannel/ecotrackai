@@ -6,7 +6,8 @@ const pool          = require('../config/database');
 
 // ── Emission constants (IPCC standard) ───────────────────
 const CO2_PER_LITRE = 2.31;   // kg CO₂ per litre diesel
-const FUEL_PER_KM   = 0.08;   // litres per km (average delivery truck)
+const FUEL_PER_KM   = 0.10;   // litres per km default (van)
+const FUEL_RATES    = { van: 0.10, refrigerated_truck: 0.18, truck: 0.14, motorcycle: 0.04 };
 
 // ── Real Groq AI call ─────────────────────────────────────
 async function callGroqAI(prompt) {
@@ -70,11 +71,27 @@ const DeliveryService = {
   _fail: (msg)  => ({ success: false, error: msg }),
   _ok:   (data) => ({ success: true,  data }),
 
-  _canTransition(from, to) {
+_canTransition(from, to) {
     return (ALLOWED_TRANSITIONS[from] || []).includes(to);
   },
 
-  // ── Get all routes ──────────────────────────────────────
+  _haversineDistance(coords) {
+    if (coords.length < 2) return 15; // min
+    let total = 0;
+    const R = 6371;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [lng1, lat1] = coords[i];
+      const [lng2, lat2] = coords[i + 1];
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLng = ((lng2 - lng1) * Math.PI) / 180;
+      const x = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+      total += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+    return Math.round(total * 100) / 100;
+  },
+
+
+// ── Get all routes ──────────────────────────────────────
   async getAllDeliveries(user) {
     if (user.role === 'driver')
       return DeliveryModel.findByDriverUserId(user.userId);
@@ -107,6 +124,43 @@ const DeliveryService = {
       return DeliveryModel.findAllByBusiness(user.businessId);
     }
   },
+
+  // ── Get accurate metrics summary from actual delivery logs ─────
+  async getActualMetricsSummary(user) {
+    try {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const { rows } = await pool.query(`
+        SELECT 
+          COUNT(DISTINCT dl.route_id) as delivered_today,
+          COALESCE(SUM(dl.actual_distance_km), 0) as total_actual_distance,
+          COALESCE(SUM(dl.actual_fuel_used_liters), 0) as total_actual_fuel,
+          COALESCE(SUM(dl.actual_carbon_kg), 0) as total_actual_carbon,
+          -- Optimization savings: only for routes that had optimization applied
+          COALESCE(SUM(ro.savings_km), 0) as total_distance_saved,
+          COALESCE(SUM(ro.savings_fuel), 0) as total_fuel_saved,
+          COALESCE(SUM(ro.savings_co2), 0) as total_co2_saved
+        FROM delivery_logs dl
+        LEFT JOIN route_optimizations ro ON ro.route_id = dl.route_id AND ro.status = 'approved'
+        INNER JOIN delivery_routes dr ON dr.route_id = dl.route_id
+        WHERE dr.business_id = $1 
+          AND DATE(dl.delivery_date) = $2::date
+      `, [user.businessId, today]);
+      
+      const metrics = rows[0];
+      return this._ok({
+        totalDeliveries: parseInt(metrics.delivered_today),
+        totalDistance: parseFloat(metrics.total_actual_distance).toFixed(1),
+        inProgress: 0, // TODO: count in_transit routes
+        fuelSaved: parseFloat(metrics.total_fuel_saved).toFixed(1),
+        co2Reduced: parseFloat(metrics.total_co2_saved).toFixed(2),
+        ...metrics
+      });
+    } catch (err) {
+      console.error('[DeliveryService.getActualMetricsSummary]', err);
+      return this._fail('Failed to compute metrics');
+    }
+  },
+
   // ── Get single route with stops ─────────────────────────
   async getDelivery(routeId, user) {
     const routeResult = await DeliveryModel.findById(routeId, user.businessId);
@@ -128,8 +182,8 @@ const DeliveryService = {
 
   // ── Create route ────────────────────────────────────────
   async createDelivery(user, body) {
-    if (!['admin', 'logistics_manager'].includes(user.role))
-      return this._fail('Only admin or logistics manager can create routes');
+if (!['admin', 'logistics_manager', 'manager'].includes(user.role))
+      return this._fail('Only admin, logistics_manager, or manager can create routes');
 
     const { routeName, originLocation, destinationLocation,
             vehicleType, driverUserId, stops = [] } = body;
@@ -137,22 +191,109 @@ const DeliveryService = {
    if (!routeName || !originLocation || !destinationLocation || !vehicleType)
   return this._fail('routeName, originLocation, destinationLocation, vehicleType are required');
 
-    const stopCount                      = stops.length;
-    const estimatedDistanceKm            = parseFloat(body.totalDistanceKm)                || (10 + stopCount * 5);
-    const estimatedDurationMinutes       = parseInt(body.estimatedDurationMinutes)         || Math.ceil(estimatedDistanceKm * 2);
-    const estimatedFuelConsumptionLiters = parseFloat(body.estimatedFuelConsumptionLiters) || +(estimatedDistanceKm * FUEL_PER_KM).toFixed(2);
-    const estimatedCarbonKg              = parseFloat(body.estimatedCarbonKg)              || +(estimatedFuelConsumptionLiters * CO2_PER_LITRE).toFixed(2);
+    const stopCount = stops.length;
+    const fuelPerKm = FUEL_RATES[vehicleType] ?? FUEL_PER_KM; // vehicle-specific rate
+
+    // ── Compute REAL metrics using OpenRouteService ─────────
+    let estimatedDistanceKm = 0;
+    let estimatedDurationMinutes = 0;
+    let estimatedFuelConsumptionLiters = 0;
+    let estimatedCarbonKg = 0;
+
+    const allStops = stops.length >= 2 ? stops : [
+      { location: originLocation, type: 'origin', products: [] },
+      { location: destinationLocation, type: 'destination', products: [] },
+    ];
+
+    // Extract coordinates [lng, lat] for ORS (handles nested/flat location)
+    const coordinates = allStops
+      .map(raw => {
+        const loc = raw.location || raw;
+        const lat = parseFloat(loc.lat || loc.latitude || loc.lat || 0);
+        const lng = parseFloat(loc.lng || loc.longitude || loc.lng || 0);
+        return [lng, lat];
+      })
+      .filter(([lng, lat]) => !isNaN(lng) && !isNaN(lat) && lng !== 0 && lat !== 0);
+
+    if (coordinates.length >= 2) {
+      try {
+        const ORS_KEY = process.env.OPENROUTE_API_KEY;
+        if (!ORS_KEY) throw new Error('OPENROUTE_API_KEY missing');
+
+        const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
+          method: 'POST',
+          headers: {
+            'Authorization': ORS_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, application/geo+json'
+          },
+          body: JSON.stringify({ coordinates })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`ORS ${response.status}: ${errorText.slice(0, 100)}`);
+        }
+
+        const data = await response.json();
+        // ORS returns either JSON (routes[0].summary) or GeoJSON (features[0].properties.summary)
+        const orsSummary = data.routes?.[0]?.summary ?? data.features?.[0]?.properties?.summary ?? {};
+        const orsDistKm  = parseFloat(orsSummary.distance || 0) / 1000; // meters → km
+        const orsDurMin  = parseFloat(orsSummary.duration || 0) / 60;   // seconds → minutes
+
+        // Sanity check: ORS road-routes very short straight-line distances through long detours
+        // in dense urban grids (e.g. Dagupan one-way streets). If ORS duration implies an
+        // average speed below 5 km/h (slower than walking), it's an unrealistic road detour —
+        // use haversine distance + 30 km/h urban speed estimate instead.
+        const haversineKm   = this._haversineDistance(coordinates);
+        const orsSpeedKmh   = orsDurMin > 0 ? (orsDistKm / orsDurMin) * 60 : 999;
+        const useORS        = orsDistKm > 0 && orsSpeedKmh >= 5; // reject if avg speed < 5 km/h
+
+        if (useORS) {
+          estimatedDistanceKm      = orsDistKm;
+          estimatedDurationMinutes = Math.round(orsDurMin);
+        } else {
+          // ORS gave an implausible detour — use straight-line distance with urban speed
+          console.warn(`[createDelivery] ORS rejected (${orsSpeedKmh.toFixed(1)} km/h avg), using haversine: ${haversineKm.toFixed(2)} km`);
+          estimatedDistanceKm      = haversineKm;
+          // Urban Dagupan driving: ~25 km/h avg including stops and traffic
+          estimatedDurationMinutes = Math.max(1, Math.round((haversineKm / 25) * 60));
+        }
+
+        estimatedFuelConsumptionLiters = Math.floor(estimatedDistanceKm * fuelPerKm * 100);
+        estimatedCarbonKg = Math.floor(estimatedFuelConsumptionLiters * CO2_PER_LITRE / 100 * 100);
+        estimatedDistanceKm = Math.floor(estimatedDistanceKm * 100) / 100;
+
+        console.log(`[createDelivery] Final: ${estimatedDistanceKm.toFixed(2)}km, ${estimatedDurationMinutes}min (ORS ${useORS ? 'accepted' : 'rejected'})`);
+      } catch (orsErr) {
+        console.warn('[createDelivery] ORS failed, using haversine fallback:', orsErr.message);
+        const haversineKm            = this._haversineDistance(coordinates);
+        estimatedDistanceKm          = haversineKm;
+        estimatedDurationMinutes     = Math.max(1, Math.round((haversineKm / 25) * 60));
+        estimatedFuelConsumptionLiters = Math.floor(estimatedDistanceKm * fuelPerKm * 100);
+        estimatedCarbonKg = Math.floor(estimatedFuelConsumptionLiters * CO2_PER_LITRE / 100 * 100);
+        estimatedDistanceKm = Math.floor(estimatedDistanceKm * 100) / 100;
+      }
+    } else {
+      // No valid coords — cannot compute route
+      console.warn('[createDelivery] No valid coordinates for route calculation');
+      estimatedDistanceKm            = 0;
+      estimatedDurationMinutes       = 0;
+      estimatedFuelConsumptionLiters = 0;
+      estimatedCarbonKg              = 0;
+    }
 
     const routeResult = await DeliveryModel.create(user.businessId, {
       routeName,
       routeType: stopCount > 0 ? 'multi-stop' : 'single',
       originLocation, destinationLocation,
       vehicleType, driverUserId,
-      totalDistanceKm:               estimatedDistanceKm,
+      totalDistanceKm: estimatedDistanceKm,
       estimatedDurationMinutes,
       estimatedFuelConsumptionLiters,
       estimatedCarbonKg,
     });
+
 
     if (!routeResult.success) return routeResult;
 
@@ -164,12 +305,6 @@ const DeliveryService = {
     // ── If stops array is provided in full (from modal), use it directly.
     // ── Otherwise fall back to separate originLocation/destinationLocation params.
 
-    const allStops = stops.length >= 2
-      ? stops  // modal always sends full array including origin + destination
-      : [
-          { location: originLocation,      type: 'origin',      products: [] },
-          { location: destinationLocation, type: 'destination', products: [] },
-        ];
 
     for (let i = 0; i < allStops.length; i++) {
       const raw  = allStops[i];

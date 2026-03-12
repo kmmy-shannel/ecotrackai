@@ -191,6 +191,13 @@ const getDrivers = async (req, res) => {
                  : sendError(res, 400, result.error);
 };
 
+// ── Get actual metrics summary ────────────────────────────
+const getMetricsSummary = async (req, res) => {
+  const result = await DeliveryService.getActualMetricsSummary(req.user);
+  result.success ? sendSuccess(res, 200, 'Metrics summary', result.data)
+                 : sendError(res, 400, result.error);
+};
+
 // ── Direct status patch (used by logistics manager) ──────
 const updateRouteStatus = async (req, res) => {
   const { status } = req.body;
@@ -199,6 +206,7 @@ const updateRouteStatus = async (req, res) => {
   result.success ? sendSuccess(res, 200, 'Route status updated', result.data)
                  : sendError(res, 400, result.error);
 };
+
 
 // ── ORS proxy ─────────────────────────────────────────────
 const calculateRoute = async (req, res) => {
@@ -263,7 +271,8 @@ module.exports = {
   getAllDeliveries, getDelivery, createDelivery,
   optimizeRoute, submitForApproval, applyOptimization,
   startDelivery, markStopArrived, markStopDeparted,
-  completeDelivery, deleteDelivery, getDrivers,
+  completeDelivery, deleteDelivery, getDrivers, getMetricsSummary,
   updateRouteStatus,
   calculateRoute,getDraftDeliveries,
 };
+
