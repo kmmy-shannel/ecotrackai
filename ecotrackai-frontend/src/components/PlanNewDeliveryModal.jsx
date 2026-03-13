@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Rectangle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -284,6 +285,14 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
       .finally(() => setInventoryLoading(false));
   }, []);
 
+  // Prevent background scroll while modal is open
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // ── Auto-computed total load from all stops ───────────────────────────────
   const totalLoad = stops.reduce((sum, stop) =>
     sum + (stop.products || []).reduce((s2, p) => s2 + (parseFloat(p.quantityAssigned) || 0), 0)
@@ -507,9 +516,12 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
   const getStopLabel  = (type, index) => type === 'origin' ? 'Origin' : type === 'destination' ? 'Destination' : `Stop ${index}`;
   const getStopDot    = (type) => type === 'origin' ? 'bg-green-600' : type === 'destination' ? 'bg-red-500' : 'bg-blue-500';
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  // Render at document.body level so the backdrop covers sidebar/header; blur whole viewport
+  return createPortal(
     <>
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4">
         <div className="bg-white rounded-2xl max-w-6xl w-full h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-green-100">
 
           {/* Header */}
@@ -882,7 +894,8 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
           onClose={() => setBatchPickerStopIndex(null)}
         />
       )}
-    </>
+    </>,
+    typeof document !== 'undefined' ? document.body : null
   );
 };
 

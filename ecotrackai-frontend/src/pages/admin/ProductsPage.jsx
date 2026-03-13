@@ -175,6 +175,15 @@ const STYLES = `
   .pr-btn-dl:disabled{opacity:.5;cursor:not-allowed}
   .pr-det-cell{background:#f8fdf9;border-radius:11px;padding:10px 12px;border:1px solid rgba(82,183,136,.1)}
   .pr-rule{height:1px;background:rgba(82,183,136,.1);margin:12px 0}
+
+  /* ── Banner ── */
+  .pr-banner{background:linear-gradient(130deg,#0f2419 0%,#1a3d2b 50%,#2d6a4f 100%);border-radius:20px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 6px 24px rgba(26,61,43,0.22);border:1px solid rgba(82,183,136,0.12);position:relative;overflow:hidden}
+  .pr-banner::after{content:'';position:absolute;right:-50px;top:-50px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,0.03);pointer-events:none}
+  .pr-pulse-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0;animation:pr-pulse 2.5s ease infinite;box-shadow:0 0 0 3px rgba(74,222,128,0.18)}
+  .pr-btn-ghost{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;background:rgba(255,255,255,0.08);color:#fff;border-radius:11px;font-size:12.5px;font-weight:600;border:1px solid rgba(255,255,255,0.14);cursor:pointer;transition:background .15s,transform .13s;white-space:nowrap}
+  .pr-btn-ghost:hover{background:rgba(255,255,255,0.15);transform:translateY(-1px)}
+  .pr-btn-solid{display:inline-flex;align-items:center;gap:6px;padding:8px 17px;background:#fff;color:#1a3d2b;border-radius:11px;font-size:12.5px;font-weight:800;border:none;cursor:pointer;transition:transform .13s,box-shadow .15s;box-shadow:0 2px 8px rgba(0,0,0,0.1);white-space:nowrap}
+  .pr-btn-solid:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(0,0,0,0.14)}
 `;
 
 if (typeof document !== 'undefined' && !document.getElementById('pr-sty')) {
@@ -616,6 +625,52 @@ const ProductsPage = () => {
   return (
     <Layout currentPage="Product Management" user={user}>
       <div className="pr-root pr-page" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+        {/* ── Banner ── */}
+        <div className="pr-banner">
+          <div style={{ position:'relative', zIndex:1 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7 }}>
+              <div style={{ width:26, height:26, borderRadius:7, background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.14)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <Package size={13} style={{ color:'#86efac' }} />
+              </div>
+              <span style={{ fontSize:10, fontWeight:800, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'.1em' }}>
+                EcoTrackAI — Inventory Management
+              </span>
+            </div>
+            <h1 style={{ color:'#fff', fontSize:20, fontWeight:900, margin:'0 0 7px', letterSpacing:'-.4px' }}>Product Inventory</h1>
+            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <div className="pr-pulse-dot" />
+                <span style={{ fontSize:11, color:'rgba(255,255,255,0.6)', fontWeight:500 }}>System Operational</span>
+              </div>
+              <span style={{ fontSize:10, color:'rgba(255,255,255,0.25)' }}>|</span>
+              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                <Clock size={10} style={{ color:'rgba(255,255,255,0.35)' }} />
+                <span style={{ fontSize:11, color:'rgba(255,255,255,0.45)' }}>
+                  {new Date().toLocaleDateString('en-PH', { weekday:'short', month:'short', day:'numeric', year:'numeric' })}
+                </span>
+              </div>
+              {(counts['HIGH'] || 0) > 0 && (
+                <>
+                  <span style={{ fontSize:10, color:'rgba(255,255,255,0.25)' }}>|</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                    <CircleAlert size={11} style={{ color:'#fca5a5' }} />
+                    <span style={{ fontSize:11, color:'#fca5a5', fontWeight:600 }}>{counts['HIGH']} high-risk batch{counts['HIGH'] > 1 ? 'es' : ''} need attention</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, zIndex:1, flexWrap:'wrap', alignItems:'center' }}>
+            <button className="pr-btn-ghost" onClick={load} disabled={loading}>
+              <RefreshCw size={12} style={loading ? { animation:'pr-spin .7s linear infinite' } : {}} />
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button className="pr-btn-solid" onClick={() => setShowAdd(true)}>
+              <Plus size={13} /> Add Product
+            </button>
+          </div>
+        </div>
 
         {/* ── Stat cards ── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>

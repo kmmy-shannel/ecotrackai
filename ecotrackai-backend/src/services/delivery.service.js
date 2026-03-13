@@ -450,7 +450,9 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
     const saveResult = await DeliveryModel.saveOptimization(routeId, user.businessId, opt);
     if (!saveResult.success) return saveResult;
 
-    await DeliveryModel.updateStatus(routeId, user.businessId, 'optimized');
+    // Status is NOT updated to 'optimized' here intentionally.
+    // The status only changes when the user clicks 'Submit for Approval'.
+    // This way, cancelling the AI modal does not change the route status.
 
     const shapeStop = s => ({
       type:     s.type,

@@ -54,6 +54,7 @@ const normalizeDelivery = (raw) => {
     vehicleType:       raw.vehicle_type || '—',
     status:            raw.status       || 'planned',
     declineReason:     raw.decline_reason || raw.manager_comment || null,
+    aiOptimized:       Boolean(raw.ai_optimized || raw.optimized_distance || raw.savings_km),
     originName:        buildName(origin),
     destName:          buildName(dest),
     // Keep raw coords for map use
