@@ -1,14 +1,31 @@
-// ============================================================
-// FILE: src/services/ecotrust.service.js
-// LAYER: Service — EcoTrust API calls
-// ============================================================
+  // ============================================================
+  // FILE: ecotrackai-frontend/src/services/ecotrust.service.js
+  // ============================================================
+  import axios from 'axios';
 
-import api from './api';
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-const ecotrustService = {
-  getScore:        ()     => api.get('/ecotrust/score'),
-  getTransactions: ()     => api.get('/ecotrust/transactions'),
-  getLeaderboard:  ()     => api.get('/ecotrust/leaderboard'),
-};
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
-export default ecotrustService;
+  const ecoTrustService = {
+    // GET /api/ecotrust/score
+    getScore: async () => {
+      const res = await axios.get(`${API_URL}/ecotrust/score`, {
+        headers: getAuthHeaders(),
+      });
+      return res.data;
+    },
+
+    // GET /api/ecotrust/actions
+    getSustainableActions: async () => {
+      const res = await axios.get(`${API_URL}/ecotrust/actions`, {
+        headers: getAuthHeaders(),
+      });
+      return res.data;
+    },
+  };
+
+  export default ecoTrustService;

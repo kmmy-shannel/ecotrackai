@@ -649,7 +649,7 @@ const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => (
 
       {/* Footer */}
       <div className="border-t border-emerald-100 p-4 bg-emerald-50 space-y-3 flex-shrink-0">
-        {!loading && insights && (
+        {!loading && insights && alert?.risk_level !== 'LOW' && (
           <div className="flex gap-3">
             <button
               onClick={() => { onReview('accepted'); onClose(); }}
@@ -663,6 +663,14 @@ const AIInsightsModal = ({ alert, insights, loading, onClose, onReview }) => (
             >
               ✗ Reject Recommendations
             </button>
+          </div>
+        )}
+        {!loading && insights && alert?.risk_level === 'LOW' && (
+          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-100 border border-emerald-200 rounded-xl">
+            <span className="text-emerald-600 text-lg">🌱</span>
+            <p className="text-xs text-emerald-700 font-medium">
+              Low risk — no manager approval needed. This batch can be added to delivery directly.
+            </p>
           </div>
         )}
         <button

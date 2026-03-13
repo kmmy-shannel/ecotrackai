@@ -711,6 +711,51 @@ const AlertService = {
     const targetStatus = normalizeSpoilageStatus(status);
     const updated = await AlertModel.updateStatusById(id, businessId, targetStatus);
     if (!updated) throw { status: 404, message: 'Alert not found' };
+
+    // ── Award EcoTrust points when inventory manager approves a HIGH risk alert ──
+    // Only HIGH risk alerts earn points. Reads value from sustainable_actions
+    // so superadmin config changes take effect immediately.
+    if (targetStatus === 'approved') {
+      try {
+        const { rows: riskRows } = await pool.query(`
+          SELECT
+            CASE
+              WHEN (expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
+              WHEN (expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
+              ELSE 'LOW'
+            END AS risk_level
+          FROM inventory
+          WHERE inventory_id = $1 AND business_id = $2
+        `, [id, businessId]);
+
+        const riskLevel = riskRows[0]?.risk_level;
+
+        if (riskLevel === 'HIGH') {
+          await pool.query(`
+            INSERT INTO ecotrust_transactions
+              (business_id, action_type, points_earned,
+               related_record_type, related_record_id,
+               verification_status, transaction_date, created_at)
+            SELECT
+              $1,
+              'Spoilage Alert Approved',
+              sa.points_value,
+              'alert',
+              $2,
+              'verified',
+              CURRENT_DATE,
+              NOW()
+            FROM sustainable_actions sa
+            WHERE sa.action_name = 'Spoilage Alert Approved'
+            LIMIT 1
+          `, [businessId, id]);
+        }
+      } catch (ecoErr) {
+        // Non-fatal — approval still succeeds even if points logging fails
+        console.error('[AlertService.updateAlertStatus][ecotrust]', ecoErr.message);
+      }
+    }
+
     return { alert: updated };
   },
 

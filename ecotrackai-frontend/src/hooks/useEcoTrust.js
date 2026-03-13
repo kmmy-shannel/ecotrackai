@@ -1,63 +1,62 @@
-import { useCallback, useEffect, useState } from 'react';
-import api from '../services/api';
+// ============================================================
+// FILE: ecotrackai-frontend/src/hooks/useEcoTrust.js
+// ============================================================
+import { useState, useEffect, useCallback } from 'react';
+import ecoTrustService from '../services/ecotrust.service';
 
-/*
- * STEP 6 — Verify the EcoScore Hook Reads Correctly
- * 
- * This hook should call:
- * GET /api/ecotrust/score/:businessId
- * 
- * Expected response shape:
- * {
- *   total_points: number,
- *   level: string,
- *   transactions: array
- * }
- * 
- * The current implementation maps the response to handle
- * different possible response structures.
- */
+export default function useEcoTrust(businessId) {
+  const [score,       setScore]       = useState(0);
+  const [level,       setLevel]       = useState('Newcomer');
+  const [levelNumber, setLevelNumber] = useState(1);
+  const [nextLevel,   setNextLevel]   = useState(null);
+  const [pointsToNext,setPointsToNext]= useState(0);
+  const [progressPct, setProgressPct] = useState(0);
+  const [transactions,setTransactions]= useState([]);
+  const [breakdown,   setBreakdown]   = useState([]);
+  const [actions,     setActions]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState('');
 
-const useEcoTrust = (businessId) => {
-  const [score, setScore] = useState(0);
-  const [level, setLevel] = useState('Newcomer');
-  const [nextLevelPoints, setNextLevelPoints] = useState(0);
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const loadEcoTrust = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     setError('');
     try {
-      const response = await api.get('/ecotrust/score', { params: { business_id: businessId } });
-      const payload = response?.data?.data || response?.data || {};
-      setScore(payload.current_score || payload.score || 0);
+      // Fetch score + actions in parallel
+      const [scoreRes, actionsRes] = await Promise.all([
+        ecoTrustService.getScore(),
+        ecoTrustService.getSustainableActions(),
+      ]);
 
-      setLevel(payload.level || 'Newcomer');
-      setNextLevelPoints(payload.nextLevelPoints || payload.next_level_points || 0);
-      setTransactions(payload.transactions || []);
+      // Score data — backend wraps in sendSuccess → { success, message, data }
+      const s = scoreRes?.data ?? scoreRes;
+      setScore(s.current_score       ?? 0);
+      setLevel(s.level               ?? 'Newcomer');
+      setLevelNumber(s.level_number  ?? 1);
+      setNextLevel(s.next_level      ?? null);
+      setPointsToNext(s.points_to_next ?? 0);
+      setProgressPct(s.progress_pct  ?? 0);
+      setTransactions(s.transactions ?? []);
+      setBreakdown(s.breakdown       ?? []);
+
+      // Actions data
+      const a = actionsRes?.data ?? actionsRes;
+      setActions(Array.isArray(a) ? a : []);
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to load EcoTrust data');
+      console.error('[useEcoTrust] load error:', err);
+      setError(err.response?.data?.message || 'Failed to load EcoTrust data');
     } finally {
       setLoading(false);
     }
   }, [businessId]);
 
-  useEffect(() => {
-    loadEcoTrust();
-  }, [loadEcoTrust]);
+  useEffect(() => { load(); }, [load]);
 
   return {
-    score,
-    level,
-    nextLevelPoints,
-    transactions,
-    loading,
-    error,
-    refresh: loadEcoTrust,
+    score, level, levelNumber,
+    nextLevel, pointsToNext, progressPct,
+    transactions, breakdown, actions,
+    loading, error,
+    refresh: load,
   };
-};
-
-export default useEcoTrust;
+}
