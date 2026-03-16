@@ -391,8 +391,12 @@ const DeliveryService = {
       const products = stop.products || stop.items || [];
       for (const item of products) {
         const inventoryId = item.inventoryId || item.inventory_id || null;
-        const qty = parseFloat(item.quantity_to_deliver || item.quantity || 0);
-        if (!inventoryId || qty <= 0) continue;
+        // quantityAssigned may arrive as '' (empty string) from the modal before user types a value
+        const rawQty = (item.quantityAssigned !== '' && item.quantityAssigned != null)
+          ? item.quantityAssigned
+          : (item.quantity_to_deliver ?? item.quantity ?? 0);
+        const qty = parseFloat(rawQty) || 0;
+        if (!inventoryId || qty <= 0 || isNaN(qty)) continue;
 
         try {
           const updated = await InventoryModel.reserveQuantity(inventoryId, businessId, qty);
@@ -510,11 +514,12 @@ const DeliveryService = {
     const cancelReason = reason.trim() || 'Cancelled by admin.';
 
     // 3. Status-specific actions ────────────────────────────────
+    let reservationsReleased = false;
 
-    // planned: just release reservations and delete (cleanest outcome)
+    // planned: release reservations but KEEP the route (mark as cancelled below)
     if (route.status === 'planned') {
       await this._releaseRouteReservations(routeId, user.businessId);
-      return DeliveryModel.deleteRoute(routeId, user.businessId);
+      reservationsReleased = true;
     }
 
     // awaiting_approval: supersede any pending approval records first
@@ -534,13 +539,13 @@ const DeliveryService = {
     }
 
     // approved or in_transit: the driver may have already been notified/started.
-    // We do NOT delete the route — we change status to 'cancelled' so the
-    // history record is preserved and the driver dashboard can show the alert.
-    // The Logistics Manager is also recorded as needing notification (done via
-    // the status change which their dashboard polls).
+    // We do NOT delete the route — we change status to 'cancelled' so the history
+    // record is preserved and the driver dashboard can show the alert.
 
-    // 4. Release inventory reservations for all statuses (not planned, handled above)
-    await this._releaseRouteReservations(routeId, user.businessId);
+    // 4. Release inventory reservations for all statuses (skip if already done)
+    if (!reservationsReleased) {
+      await this._releaseRouteReservations(routeId, user.businessId);
+    }
 
     // 5. Set route status to 'cancelled' with the reason in notes
     try {
@@ -772,6 +777,17 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
 
     const routeResult = await DeliveryModel.findById(routeId, user.businessId);
     if (!routeResult.success) return routeResult;
+
+    // APPROVED: permanently deduct reserved inventory
+    if (newStatus === 'approved') {
+      await this._confirmRouteReservations(routeId, user.businessId);
+    }
+
+    // DECLINED or reset to PLANNED: release reservations back to available
+    if (newStatus === 'declined' || newStatus === 'planned') {
+      await this._releaseRouteReservations(routeId, user.businessId);
+    }
+
     return DeliveryModel.updateStatus(routeId, user.businessId, newStatus);
   },
 
@@ -865,7 +881,8 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
 
   // ── Delete (planned only) ─────────────────────────────────
   async deleteDelivery(routeId, user) {
-    if (user.role !== 'admin') return this._fail('Only admin can delete routes');
+    if (!['admin', 'logistics_manager'].includes(user.role))
+      return this._fail('Only admin or logistics_manager can delete routes');
     const routeResult = await DeliveryModel.findById(routeId, user.businessId);
     if (!routeResult.success) return routeResult;
     await this._releaseRouteReservations(routeId, user.businessId);

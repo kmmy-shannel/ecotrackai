@@ -183,12 +183,20 @@ const deleteDelivery = async (req, res) => {
 //   in_transit         → reservations released, status → cancelled (driver alerted)
 //   completed/delivered → 400 blocked
 const cancelDelivery = async (req, res) => {
-  const reason = req.body?.reason || req.body?.cancel_reason || '';
-  const result = await DeliveryService.cancelDelivery(req.params.id, req.user, reason);
-  if (result.success) {
-    sendSuccess(res, 200, result.data.message, result.data);
-  } else {
-    sendError(res, 400, result.error);
+  try {
+    const reason = req.body?.reason || req.body?.cancel_reason || '';
+    const result = await DeliveryService.cancelDelivery(req.params.id, req.user, reason);
+
+    if (result && result.success) {
+      const payload = result.data || {};
+      return sendSuccess(res, 200, payload.message || 'Delivery cancelled', payload);
+    }
+
+    const errMsg = result?.error || 'Failed to cancel delivery';
+    return sendError(res, 400, errMsg);
+  } catch (err) {
+    console.error('[cancelDelivery controller]', err.message);
+    return sendError(res, 500, 'Failed to cancel delivery');
   }
 };
 

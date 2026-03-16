@@ -57,8 +57,8 @@ const InventoryModel = {
 
         -- Fix #4: expose reservation fields so the frontend can show
         -- "available" vs "total" stock clearly
-        i.reserved_quantity,
-        GREATEST(i.quantity - i.reserved_quantity, 0) AS available_quantity,
+        COALESCE(i.reserved_quantity, 0) AS reserved_quantity,
+        GREATEST(i.quantity - COALESCE(i.reserved_quantity, 0), 0) AS available_quantity,
 
         i.created_at,
         i.updated_at,
@@ -81,7 +81,7 @@ const InventoryModel = {
       FROM inventory i
       JOIN products p ON i.product_id = p.product_id
       WHERE i.business_id = $1
-        AND i.current_condition != 'Spoiled'
+        AND LOWER(i.current_condition) != 'spoiled'
       ORDER BY i.expected_expiry_date ASC
     `, [businessId]);
 
@@ -101,7 +101,7 @@ const InventoryModel = {
         -- We now let i.* handle it naturally — no override needed.
 
         -- Fix #4: computed available_quantity for single-record view
-        GREATEST(i.quantity - i.reserved_quantity, 0) AS available_quantity,
+        GREATEST(i.quantity - COALESCE(i.reserved_quantity, 0), 0) AS available_quantity,
 
         p.product_name,
         p.storage_category,
@@ -167,7 +167,7 @@ const InventoryModel = {
       quantity,
       unit_of_measure           || 'kg',
       batch_number,
-      current_condition         || 'Excellent',
+      (current_condition || 'good').toLowerCase(),
       ripeness_stage             || null,
       simulated_storage_temp    || null,
       simulated_storage_humidity || null,
@@ -217,8 +217,8 @@ const InventoryModel = {
     const { rows } = await pool.query(`
       SELECT
         i.quantity AS total_quantity,
-        i.reserved_quantity,
-        GREATEST(i.quantity - i.reserved_quantity, 0) AS available_quantity
+        COALESCE(i.reserved_quantity, 0) AS reserved_quantity,
+        GREATEST(i.quantity - COALESCE(i.reserved_quantity, 0), 0) AS available_quantity
       FROM inventory i
       WHERE i.inventory_id = $1
         AND i.business_id  = $2
@@ -294,8 +294,7 @@ const InventoryModel = {
       JOIN products p ON i.product_id = p.product_id
       WHERE i.business_id = $1
         AND p.product_name = ANY($2::text[])
-        AND i.current_condition != 'Spoiled'
-        AND i.quantity > 0
+        AND LOWER(i.current_condition) != 'spoiled'
     `, [businessId, avoidList]);
 
     return rows.map(r => r.product_name);
@@ -308,8 +307,8 @@ const InventoryModel = {
       SELECT
         COUNT(*)                                                    AS total_batches,
         COALESCE(SUM(i.quantity), 0)                               AS total_quantity,
-        COALESCE(SUM(GREATEST(i.quantity - i.reserved_quantity, 0)), 0) AS available_quantity,
-        COALESCE(SUM(i.reserved_quantity), 0)                      AS total_reserved,
+        COALESCE(SUM(GREATEST(i.quantity - COALESCE(i.reserved_quantity, 0), 0)), 0) AS available_quantity,
+        COALESCE(SUM(COALESCE(i.reserved_quantity, 0)), 0)                          AS total_reserved,
         COUNT(*) FILTER (
           WHERE (i.expected_expiry_date - CURRENT_DATE) <= 2
         )                                                           AS expiring_critical,
@@ -317,11 +316,11 @@ const InventoryModel = {
           WHERE (i.expected_expiry_date - CURRENT_DATE) BETWEEN 3 AND 5
         )                                                           AS expiring_soon,
         COUNT(*) FILTER (
-          WHERE i.current_condition IN ('Poor', 'Spoiled')
+          WHERE LOWER(i.current_condition) IN ('poor', 'spoiled')
         )                                                           AS poor_condition
       FROM inventory i
       WHERE i.business_id = $1
-        AND i.current_condition != 'Spoiled'
+        AND LOWER(i.current_condition) != 'spoiled'
     `, [businessId]);
 
     return rows[0];

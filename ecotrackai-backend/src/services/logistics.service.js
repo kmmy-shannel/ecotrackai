@@ -118,6 +118,14 @@ await pool.query(
   [approval.delivery_id, businessId, parsedDriverUserId]
 );
 
+      // Permanently deduct reserved inventory now that route is approved
+      try {
+        const DeliveryService = require('./delivery.service');
+        await DeliveryService._confirmRouteReservations(approval.delivery_id, businessId);
+      } catch (reservationError) {
+        console.error('[LogisticsService.approveRoute][reservations]', reservationError.message);
+      }
+
       // Mark optimization as approved
       await pool.query(
         `UPDATE route_optimizations SET status='approved' WHERE route_id=$1`,
@@ -172,6 +180,14 @@ await pool.query(
         `UPDATE delivery_routes SET status='declined' WHERE route_id=$1 AND business_id=$2`,
         [approval.delivery_id, user.businessId]
       );
+
+      // Release reserved inventory back to available so admin can re-plan freely
+      try {
+        const DeliveryService = require('./delivery.service');
+        await DeliveryService._releaseRouteReservations(approval.delivery_id, user.businessId);
+      } catch (reservationError) {
+        console.error('[LogisticsService.declineRoute][reservations]', reservationError.message);
+      }
 
       return this._ok({ message: 'Route declined. Admin has been notified.' });
     } catch (e) {

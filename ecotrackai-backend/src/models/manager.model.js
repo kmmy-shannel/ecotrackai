@@ -3,6 +3,7 @@
 // Adds logistics-specific queries alongside existing ones
 // ============================================================
 const pool = require('../config/database');
+const DeliveryService = require('../services/delivery.service');
 
 const MANAGED_ROLES = [
   'inventory_manager',
@@ -315,6 +316,13 @@ const ManagerModel = {
           WHERE action_name = 'Route Optimization Approved'
           LIMIT 1
         `, [businessId, deliveryId]);
+
+        // Deduct any reserved inventory now that the route is approved
+        try {
+          await DeliveryService._confirmRouteReservations(deliveryId, businessId);
+        } catch (err) {
+          console.error('[approveLogistics] confirm reservations failed:', err.message);
+        }
       }
 
       await client.query('COMMIT');
@@ -365,6 +373,13 @@ const ManagerModel = {
           SET status = 'planned', updated_at = NOW()
           WHERE route_id = $1 AND business_id = $2
         `, [deliveryId, businessId]);
+
+        // Release any reserved inventory back to available
+        try {
+          await DeliveryService._releaseRouteReservations(deliveryId, businessId);
+        } catch (err) {
+          console.error('[declineLogistics] release reservations failed:', err.message);
+        }
       }
 
       await client.query('COMMIT');

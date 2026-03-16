@@ -8,11 +8,13 @@ const pool = require('../config/database');
 // FIXED: Changed from '../middleware/auth' to '../middleware/auth.middleware'
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { sendSuccess, sendError } = require('../utils/response.utils');
+const DeliveryService = require('../services/delivery.service');
 
 // GET /api/route-approvals  — list pending route approvals for the LM
 const getRouteApprovals = async (req, res) => {
   try {
-    const { businessId, role } = req.user;
+    const businessId = req.user.businessId || req.user.business_id;
+    const role = req.user.role;
     if (role !== 'logistics_manager') return sendError(res, 403, 'Access denied');
 
     const { rows } = await pool.query(`
@@ -58,7 +60,8 @@ const getRouteApprovals = async (req, res) => {
 // PUT /api/route-approvals/:id/approve  — LM approves the route
 const approveRouteOptimization = async (req, res) => {
   try {
-    const { businessId, role } = req.user;
+    const businessId = req.user.businessId || req.user.business_id;
+    const role = req.user.role;
     if (role !== 'logistics_manager') return sendError(res, 403, 'Access denied');
 
     const { id } = req.params;
@@ -81,7 +84,7 @@ const approveRouteOptimization = async (req, res) => {
     if (rows[0].delivery_id) {
   const driverUserId = req.body.driverUserId || req.body.driver_user_id || null;
 
-  await pool.query(
+  const { rowCount } = await pool.query(
     `UPDATE delivery_routes
      SET status = 'approved',
          driver_user_id = COALESCE($3, driver_user_id),
@@ -90,6 +93,19 @@ const approveRouteOptimization = async (req, res) => {
     [rows[0].delivery_id, businessId, driverUserId]
   );
 }
+
+    if (rowCount === 0) {
+      console.warn('[approveRouteOptimization] delivery_routes update matched 0 rows — check businessId and route_id');
+    }
+
+    // Permanently deduct any reserved inventory for this route now that it's approved
+    if (rows[0].delivery_id) {
+      try {
+        await DeliveryService._confirmRouteReservations(rows[0].delivery_id, businessId);
+      } catch (err) {
+        console.error('[approveRouteOptimization] confirm reservations failed:', err.message);
+      }
+    }
 
     sendSuccess(res, 200, 'Route approved — driver has been notified');
   } catch (error) {
@@ -101,7 +117,8 @@ const approveRouteOptimization = async (req, res) => {
 // PUT /api/route-approvals/:id/decline  — LM declines the route
 const declineRouteOptimization = async (req, res) => {
   try {
-    const { businessId, role } = req.user;
+    const businessId = req.user.businessId || req.user.business_id;
+    const role = req.user.role;
     if (role !== 'logistics_manager') return sendError(res, 403, 'Access denied');
 
     const { id } = req.params;
@@ -127,11 +144,22 @@ const declineRouteOptimization = async (req, res) => {
 
     // Route → 'declined' (not 'planned') — admin sees it in Declined filter
     if (rows[0].delivery_id) {
-      await pool.query(
+      const { rowCount: declinedCount } = await pool.query(
         `UPDATE delivery_routes SET status = 'declined', updated_at = NOW()
          WHERE route_id = $1 AND business_id = $2`,
         [rows[0].delivery_id, businessId]
       );
+
+      if (declinedCount === 0) {
+        console.warn('[declineRouteOptimization] delivery_routes update matched 0 rows — check businessId and route_id');
+      }
+
+      // Release any reserved inventory back to available stock
+      try {
+        await DeliveryService._releaseRouteReservations(rows[0].delivery_id, businessId);
+      } catch (err) {
+        console.error('[declineRouteOptimization] release reservations failed:', err.message);
+      }
     }
 
     sendSuccess(res, 200, 'Route declined — admin has been notified');

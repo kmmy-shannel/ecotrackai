@@ -388,7 +388,7 @@ const DeliveryModel = {
   },
 
   // ── Fix #2: Delete a route ────────────────────────────────────────────────────
-  // ONLY allows deletion when status = 'planned'.
+  // Allows deletion when status is 'planned' or 'cancelled'.
   async deleteRoute(routeId, businessId) {
     try {
       const check = await pool.query(
@@ -401,7 +401,7 @@ const DeliveryModel = {
 
       const { status, route_name } = check.rows[0];
 
-      if (status !== 'planned') {
+      if (!['planned', 'cancelled'].includes(status)) {
         const reasons = {
           optimized:         `"${route_name}" has been AI-optimized. Submit it for approval or reset it to planned first.`,
           awaiting_approval: `"${route_name}" is awaiting Logistics Manager approval and cannot be deleted.`,
@@ -413,8 +413,22 @@ const DeliveryModel = {
         };
         return {
           success: false,
-          error: reasons[status] || `Cannot delete a route with status "${status}". Only planned routes can be deleted.`,
+          error: reasons[status] || `Cannot delete a route with status "${status}". Only planned or cancelled routes can be deleted.`,
         };
+      }
+
+      // Clean up dependent approvals to avoid FK violations (only safe for planned/cancelled)
+      try {
+        await pool.query(`DELETE FROM manager_approvals WHERE delivery_id = $1`, [routeId]);
+      } catch (err) {
+        console.warn('[deleteRoute] manager_approvals cleanup skipped:', err.message);
+      }
+
+      // Optional cleanup: remove any orphaned optimization rows for this route
+      try {
+        await pool.query(`DELETE FROM route_optimizations WHERE route_id = $1`, [routeId]);
+      } catch (err) {
+        console.warn('[deleteRoute] route_optimizations cleanup skipped:', err.message);
       }
 
       await pool.query(`DELETE FROM route_stops WHERE route_id = $1`, [routeId]);

@@ -157,12 +157,22 @@ const BatchPickerModal = ({ inventory, stops, stopIndex, onAdd, onClose }) => {
       return sum + (found ? parseFloat(found.quantityAssigned) || 0 : 0);
     }, 0);
 
+  // Available stock for a batch = backend available_quantity (already net of reservations)
+  // minus anything allocated across all stops in this modal session.
+  const getRemaining = (item) => {
+    const baseAvailable = item.available_quantity != null
+      ? Number(item.available_quantity)
+      : Number(item.quantity) - Number(item.reserved_quantity || 0);
+    const allocated = getAllocated(item.inventory_id);
+    return Math.max(0, baseAvailable - allocated);
+  };
+
   // Already added to THIS stop
   const alreadyInStop = (inventoryId) =>
     (stops[stopIndex]?.products || []).some(p => p.inventoryId === inventoryId);
 
   const filtered = inventory.filter(item => {
-    const remaining = item.quantity - getAllocated(item.inventory_id);
+    const remaining = getRemaining(item);
     return remaining > 0 && !alreadyInStop(item.inventory_id) &&
       item.product_name.toLowerCase().includes(search.toLowerCase());
   });
@@ -203,9 +213,10 @@ const BatchPickerModal = ({ inventory, stops, stopIndex, onAdd, onClose }) => {
             </div>
           ) : (
             filtered.map(item => {
-              const allocated = getAllocated(item.inventory_id);
-              const remaining = item.quantity - allocated;
-              const pct = Math.round((remaining / item.quantity) * 100);
+              const remaining = getRemaining(item);
+              const pct = item.quantity > 0
+                ? Math.round((remaining / item.quantity) * 100)
+                : 0;
               return (
                 <button
                   key={item.inventory_id}
@@ -716,7 +727,12 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
                                   const found = (s2.products || []).find(p => p.inventoryId === product.inventoryId);
                                   return sum + (found ? parseFloat(found.quantityAssigned) || 0 : 0);
                                 }, 0);
-                                const maxAllowed = item ? item.quantity - otherAllocated : 0;
+                                const baseAvailable = item
+                                  ? (item.available_quantity != null
+                                      ? Number(item.available_quantity)
+                                      : Number(item.quantity) - Number(item.reserved_quantity || 0))
+                                  : 0;
+                                const maxAllowed = Math.max(0, baseAvailable - otherAllocated);
                                 const currentQty = parseFloat(product.quantityAssigned) || 0;
                                 const isOver = currentQty > maxAllowed;
 

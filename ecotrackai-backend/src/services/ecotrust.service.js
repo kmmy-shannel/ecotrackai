@@ -126,6 +126,14 @@ const EcoTrustService = {
       return this._fail(err.message);
     }
   },
+
+  // Compatibility shim: some controllers call recalculateBusinessScore().
+  // We simply delegate to getScore which already recomputes totals on the fly.
+  async recalculateBusinessScore(context = {}) {
+    const businessId = context.businessId || context.business_id;
+    if (!businessId) return this._fail('businessId is required');
+    return this.getScore(businessId);
+  },
 };
 
 module.exports = EcoTrustService;

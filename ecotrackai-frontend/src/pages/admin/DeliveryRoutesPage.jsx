@@ -200,7 +200,8 @@ const fmt = (v, dp = 2) => Number(v || 0).toFixed(dp);
 const pct = (val, base) => (base > 0 ? `${Math.round((Number(val)/Number(base))*100)}%` : '0%');
 
 // ── Delete: only planned ──────────────────────────────────────────────────────
-const DELETABLE_STATUSES = ['planned'];
+// Allow hard delete for routes that never started, or have been cancelled.
+const DELETABLE_STATUSES = ['planned', 'cancelled'];
 const canDelete = (status) => DELETABLE_STATUSES.includes(status);
 const deleteBlockReason = (status) => {
   const map = {
@@ -715,6 +716,83 @@ const CancelDeliveryModal = ({ delivery, onConfirm, onCancel, loading }) => {
   );
 };
 
+/* ─── ApprovalConfirmModal ───────────────────────────────────────────────────── */
+const ApprovalConfirmModal = ({ delivery, onConfirm, onCancel, loading }) => {
+  const isResubmit  = delivery?.status === 'declined';
+  const isOptimized = delivery?.status === 'optimized';
+
+  return (
+    <div className="dr-del-modal-back dr-root">
+      <div className="dr-del-modal" style={{ maxWidth: 480 }}>
+        <div className="dr-del-hd" style={{ background: isResubmit ? 'linear-gradient(135deg,#c2410c,#9a3412)' : 'linear-gradient(135deg,#1a3d2b,#2d6a4f)' }}>
+          <div className="dr-del-icon"><CheckCircle size={20} style={{ color:'#fff' }} /></div>
+          <div>
+            <p style={{ color:'#fff',fontWeight:800,fontSize:14,margin:0 }}>
+              {isResubmit ? 'Resubmit for Approval' : 'Submit for Logistics Approval'}
+            </p>
+            <p style={{ color:'rgba(255,255,255,0.65)',fontSize:11,margin:0 }}>
+              {isResubmit ? 'Previously declined — sending back for review' : isOptimized ? 'AI optimized route ready for review' : 'Route will be sent to Logistics Manager'}
+            </p>
+          </div>
+        </div>
+
+        <div className="dr-del-body" style={{ paddingTop:20 }}>
+          <div className="dr-del-info">
+            <div style={{ width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <Truck size={16} style={{ color:'#1a3d2b' }} />
+            </div>
+            <div>
+              <p style={{ fontSize:12.5,fontWeight:700,color:'#111827',margin:0 }}>{delivery?.deliveryCode||delivery?.route_name||'Delivery Route'}</p>
+              <p style={{ fontSize:11,color:'#6b7280',margin:'2px 0 4px' }}>{delivery?.driver||'No driver assigned'} · {delivery?.stopCount||0} stops</p>
+              <span className={statusCls(delivery?.status)} style={{ display:'inline-flex' }}>{delivery?.status?.replace(/_/g,' ')}</span>
+            </div>
+          </div>
+
+          {!isOptimized && !isResubmit && (
+            <div style={{ display:'flex',alignItems:'start',gap:8,padding:'10px 12px',background:'linear-gradient(135deg,#eff6ff,#dbeafe)',border:'1px solid #bfdbfe',borderRadius:10,marginBottom:4 }}>
+              <AlertCircle size={13} style={{ color:'#2563eb',flexShrink:0,marginTop:1 }} />
+              <div>
+                <p style={{ fontSize:12,fontWeight:700,color:'#1e40af',margin:'0 0 2px' }}>Optimization is optional</p>
+                <p style={{ fontSize:11.5,color:'#3b82f6',margin:0,lineHeight:1.5 }}>You can submit without running AI optimization first. The Logistics Manager will review the route as planned.</p>
+              </div>
+            </div>
+          )}
+
+          {isOptimized && (
+            <div style={{ display:'flex',alignItems:'start',gap:8,padding:'10px 12px',background:'linear-gradient(135deg,#f0fdf4,#d8f3dc)',border:'1px solid #86efac',borderRadius:10,marginBottom:4 }}>
+              <Sparkles size={13} style={{ color:'#16a34a',flexShrink:0,marginTop:1 }} />
+              <p style={{ fontSize:11.5,color:'#166534',margin:0,lineHeight:1.5 }}>This route has been AI optimized. The Logistics Manager will see the original vs optimized metrics comparison before deciding.</p>
+            </div>
+          )}
+
+          {isResubmit && (delivery?.declineReason||delivery?.decline_reason) && (
+            <div className="dr-decline-card" style={{ marginBottom:8 }}>
+              <p style={{ fontSize:11,fontWeight:700,color:'#991b1b',margin:'0 0 4px' }}>Previous decline reason:</p>
+              <p style={{ fontSize:12,color:'#b91c1c',margin:0 }}>"{delivery.declineReason||delivery.decline_reason}"</p>
+            </div>
+          )}
+
+          <p style={{ fontSize:13,color:'#374151',margin:'10px 0 0',lineHeight:1.6 }}>
+            {isResubmit
+              ? 'The Logistics Manager will be notified and can approve or decline again.'
+              : 'The Logistics Manager will review this route and approve or decline it. You will be notified of their decision.'}
+          </p>
+        </div>
+
+        <div className="dr-del-foot">
+          <button className="dr-del-cancel" onClick={onCancel} disabled={loading}>Go Back</button>
+          <button className="dr-del-confirm" onClick={onConfirm} disabled={loading} style={{ background: isResubmit ? '#c2410c' : '#1a3d2b' }}>
+            {loading
+              ? <><span style={{ width:13,height:13,border:'2px solid rgba(255,255,255,0.4)',borderTopColor:'#fff',borderRadius:'50%',animation:'dr-spin .65s linear infinite',display:'inline-block' }} />Submitting…</>
+              : <><CheckCircle size={13} />{isResubmit ? 'Yes, Resubmit Route' : 'Yes, Submit for Approval'}</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ─── DeliveryRoutesPage ────────────────────────────────────────────────────── */
 const DeliveryRoutesPage = () => {
   const { user } = useAuth();
@@ -723,7 +801,7 @@ const DeliveryRoutesPage = () => {
     searchTerm, showAddModal, expandedDelivery, expandedStops,
     optimizingRoute, optimizationResult, showOptimizationModal, summaryStats,
     setSearchTerm, setShowAddModal, setExpandedDelivery,
-    deleteDelivery, optimizeRoute, applyOptimization,
+    deleteDelivery, confirmDelete, optimizeRoute, applyOptimization,
     handleDeliveryCreated, closeOptimizationModal,
     submitRouteForApproval,
     refreshDeliveries,
@@ -742,6 +820,10 @@ const DeliveryRoutesPage = () => {
   const [confirmCancelRoute, setConfirmCancelRoute] = useState(null);
   const [cancelLoading,      setCancelLoading]      = useState(false);
   const [cancelError,        setCancelError]        = useState('');
+
+  // Approval submit state
+  const [approvalTarget,  setApprovalTarget]  = useState(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
 
   const fetchDrafts = async () => {
     try { setLoadingDrafts(true); const r = await deliveryService.getDraftDeliveries(); setDraftDeliveries(r?.data?.drafts||r?.drafts||[]); }
@@ -765,7 +847,7 @@ const DeliveryRoutesPage = () => {
     if (!confirmDeleteRoute) return;
     setDeleteLoading(true);
     try {
-      await deleteDelivery(confirmDeleteRoute.id);
+      await confirmDelete(confirmDeleteRoute.id);
       setConfirmDeleteRoute(null);
     } catch {
       setConfirmDeleteRoute(null);
@@ -812,6 +894,20 @@ const DeliveryRoutesPage = () => {
     }
   };
 
+  const confirmApprovalSubmit = async () => {
+    if (!approvalTarget) return;
+    setApprovalLoading(true);
+    try {
+      const isResubmit = approvalTarget.status === 'declined';
+      await submitRouteForApproval(approvalTarget.id, isResubmit);
+      setApprovalTarget(null);
+    } catch {
+      setApprovalTarget(null);
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
   if (!user) return null;
 
   const today = new Date().toLocaleDateString('en-PH',{ weekday:'short',month:'short',day:'numeric',year:'numeric' });
@@ -836,6 +932,16 @@ const DeliveryRoutesPage = () => {
           onConfirm={confirmCancelAction}
           onCancel={() => { setConfirmCancelRoute(null); setCancelError(''); }}
           loading={cancelLoading}
+        />
+      )}
+
+      {/* Approval confirm modal */}
+      {approvalTarget && (
+        <ApprovalConfirmModal
+          delivery={approvalTarget}
+          onConfirm={confirmApprovalSubmit}
+          onCancel={() => setApprovalTarget(null)}
+          loading={approvalLoading}
         />
       )}
 
@@ -1042,12 +1148,8 @@ const DeliveryRoutesPage = () => {
                         {(delivery.status==='planned'||delivery.status==='optimized'||delivery.status==='declined') && (
                           <button
                             className={`dr-act ${delivery.status==='declined'?'dr-act-resubmit':'dr-act-approve'}`}
-                            onClick={async () => {
-                              const isR = delivery.status==='declined';
-                              if (!window.confirm(isR?'Resubmit for Logistics Manager approval?':'Submit for Logistics Manager approval?')) return;
-                              await submitRouteForApproval(delivery.id, isR);
-                            }}
-                            title={delivery.status==='declined'?'Resubmit':'Submit for Approval'}>
+                            onClick={() => setApprovalTarget(delivery)}
+                            title={delivery.status==='declined'?'Resubmit for Approval':'Submit for Approval'}>
                             <CheckCircle size={16}/>
                           </button>
                         )}

@@ -20,6 +20,7 @@ const routeApprovalRoutes    = require('./routes/route.approval.routes');
 const superadminRoutes       = require('./routes/superadmin.routes');
 const catalogRoutes          = require('./routes/catalog.routes');
 const ecotrustRoutes         = require('./routes/ecotrust.routes');
+const { ensureInventoryReservedColumn } = require('./utils/ensureInventoryReservedColumn');
 
 
 const app = express();
@@ -60,6 +61,11 @@ app.use('/api/catalog',        catalogRoutes);
 app.use('/api/ecotrust',   ecotrustRoutes);
 
 app.use('/api',            indexRoutes);   // ← MUST be last, it matches all /api/*
+
+// Run lightweight, idempotent schema guard on startup so reservations work everywhere.
+ensureInventoryReservedColumn().catch((err) => {
+  console.error('[server] ensureInventoryReservedColumn failed:', err.message);
+});
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'EcoTrackAI API is running' });

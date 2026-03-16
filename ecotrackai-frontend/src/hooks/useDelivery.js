@@ -162,8 +162,9 @@ export default function useDelivery() {
   };
 
   // ── Submit route directly for logistics approval ──────────
+  // Called by ApprovalConfirmModal's onConfirm — submits immediately.
   const submitRouteForApproval = async (deliveryId, isResubmit = false) => {
-    setConfirmModal({ type: 'submit', id: deliveryId, isResubmit });
+    return confirmSubmit(deliveryId, isResubmit);
   };
 
   const confirmSubmit = async (deliveryId, isResubmit = false) => {
@@ -385,6 +386,7 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     optimizeRoute, applyOptimization,
     handleDeliveryCreated, closeOptimizationModal,
     submitRouteForApproval, confirmSubmit,
+    refreshDeliveries: loadDeliveries,
     getStatusBadge,
   };
 }

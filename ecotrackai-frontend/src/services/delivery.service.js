@@ -19,7 +19,7 @@ const assertRouteTransition = (currentStatus, nextStatus, actionLabel) => {
 
 class DeliveryService {
   async getMetricsSummary() {
-    const response = await api.get('/deliveries/metrics');
+    const response = await api.get('/deliveries/metrics-summary');
     return response.data;
   }
 
@@ -96,14 +96,14 @@ class DeliveryService {
 
   // ── ADDED: submit optimized route for logistics manager approval ──
   async submitForApproval(routeId) {
-    const response = await api.post(`/deliveries/${routeId}/submit-for-approval`);
+    const response = await api.post(`/deliveries/${routeId}/submit-approval`);
     return response.data;
   }
   // ─────────────────────────────────────────────────────────────────
 
   async applyOptimization(deliveryId, optimizedRoute, currentStatus) {
     assertRouteTransition(currentStatus, 'awaiting_approval', 'applyOptimization');
-    const response = await api.put(`/deliveries/${deliveryId}/apply-optimization`, { optimizedRoute });
+    const response = await api.post(`/deliveries/${deliveryId}/apply-optimization`, { optimizedRoute });
     return response.data;
   }
 
@@ -118,7 +118,7 @@ class DeliveryService {
     if (routeStatus && String(routeStatus).toLowerCase() !== 'in_transit') {
       throw new Error('Cannot mark stop arrived unless route is in_transit');
     }
-    const response = await api.post(`/deliveries/${routeId}/stops/${stopId}/arrive`, gpsPayload);
+    const response = await api.post(`/deliveries/${routeId}/stops/${stopId}/arrived`, gpsPayload);
     return response.data;
   }
 
@@ -126,7 +126,7 @@ class DeliveryService {
     if (routeStatus && String(routeStatus).toLowerCase() !== 'in_transit') {
       throw new Error('Cannot mark stop departed unless route is in_transit');
     }
-    const response = await api.post(`/deliveries/${routeId}/stops/${stopId}/depart`, body);
+    const response = await api.post(`/deliveries/${routeId}/stops/${stopId}/departed`, body);
     return response.data;
   }
 
