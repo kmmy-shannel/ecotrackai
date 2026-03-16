@@ -11,6 +11,7 @@ const catalogRoutes = require('./routes/catalog.routes');
 const superadminRoutes = require('./routes/superadmin.routes');
 const managerApprovalsRoutes = require('./routes/managerApprovals.routes');
 const alertRoutes = require('./routes/alert.routes');
+const ecotrustRoutes = require('./routes/ecotrust.routes');
 const AlertService = require('./services/alert.service');
 const app = express();
 
@@ -38,6 +39,7 @@ app.use('/api/catalog', catalogRoutes);
 app.use('/api/super-admin', superadminRoutes);
 app.use('/api/manager', managerApprovalsRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/ecotrust', ecotrustRoutes);
 
 // Manager base check (helps verify correct backend instance is running)
 app.get('/api/manager', (req, res) => {
@@ -116,6 +118,7 @@ console.log('/api/managers');
 console.log('/api/products')
 console.log('/api/catalog')
 console.log('/api/health\n');
+console.log('/api/ecotrust');
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

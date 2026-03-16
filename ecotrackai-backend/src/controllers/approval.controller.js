@@ -1,5 +1,21 @@
-const ApprovalService = require('../services/approval.service');
+// ============================================================
+// FILE: src/controllers/approval.controller.js
+//
+// Fix #4 changes:
+//   approveRouteOptimization() — after setting route to 'approved',
+//     call DeliveryService._confirmRouteReservations() so the
+//     reserved stock is permanently deducted from inventory.
+//
+//   declineRouteOptimization() — after setting route to 'declined',
+//     call DeliveryService._releaseRouteReservations() so the
+//     reservation is lifted and the stock goes back to available.
+//
+// Everything else is completely unchanged.
+// ============================================================
+const ApprovalService  = require('../services/approval.service');
+const DeliveryService  = require('../services/delivery.service');
 const { sendSuccess, sendError } = require('../utils/response.utils');
+const pool = require('../config/database');
 
 // GET /api/approvals?status=pending
 const getApprovals = async (req, res) => {
@@ -7,7 +23,7 @@ const getApprovals = async (req, res) => {
     const result = await ApprovalService.getApprovals(
       req.user,
       req.query.status || 'pending',
-      req.query.role || null        // ← admin passes role=inventory_manager
+      req.query.role   || null
     );
     sendSuccess(res, 200, 'Approvals retrieved', result);
   } catch (error) {
@@ -44,7 +60,7 @@ const getSustainabilityApprovals = async (req, res) => {
     }
 
     return sendSuccess(res, 200, 'Sustainability approvals fetched', {
-      approvals: result.data?.approvals || []
+      approvals: result.data?.approvals || [],
     });
   } catch (error) {
     console.error('Get sustainability approvals error:', error);
@@ -52,14 +68,13 @@ const getSustainabilityApprovals = async (req, res) => {
   }
 };
 
-
 // GET /api/approvals/history?limit=50
 const getApprovalHistory = async (req, res) => {
   try {
     const result = await ApprovalService.getApprovalHistory(
       req.user,
       req.query.limit || 50,
-      req.query.role || null        // ← admin passes role=inventory_manager
+      req.query.role  || null
     );
     sendSuccess(res, 200, 'Approval history retrieved', result);
   } catch (error) {
@@ -110,6 +125,7 @@ const createFromAlert = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to create approval');
   }
 };
+
 // POST /api/approvals/:approvalId/request-admin
 const requestAdminReview = async (req, res) => {
   try {
@@ -151,6 +167,7 @@ const adminReviewRequest = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to submit admin review');
   }
 };
+
 const createFromDelivery = async (req, res) => {
   try {
     const result = await ApprovalService.createFromDelivery(req.user, req.body);
@@ -160,6 +177,7 @@ const createFromDelivery = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to create route approval');
   }
 };
+
 // GET /api/route-approvals  — list pending route approvals for the LM
 const getRouteApprovals = async (req, res) => {
   try {
@@ -207,19 +225,21 @@ const getRouteApprovals = async (req, res) => {
 };
 
 // PUT /api/route-approvals/:id/approve  — LM approves the route
+// Fix #4: after route is set to 'approved', confirm (permanently deduct)
+// the reserved inventory quantities for this route.
 const approveRouteOptimization = async (req, res) => {
   try {
     const { businessId, role } = req.user;
     if (role !== 'logistics_manager') return sendError(res, 403, 'Access denied');
 
-    const { id } = req.params;
+    const { id }     = req.params;
     const { notes = '' } = req.body;
 
     const { rows } = await pool.query(
       `SELECT * FROM manager_approvals WHERE approval_id = $1 AND business_id = $2`,
       [id, businessId]
     );
-    if (!rows[0])             return sendError(res, 404, 'Approval not found');
+    if (!rows[0])               return sendError(res, 404, 'Approval not found');
     if (rows[0].status !== 'pending')
       return sendError(res, 400, `Approval already ${rows[0].status}`);
 
@@ -235,6 +255,15 @@ const approveRouteOptimization = async (req, res) => {
          WHERE route_id = $1 AND business_id = $2`,
         [rows[0].delivery_id, businessId]
       );
+
+      // Fix #4: permanently deduct the reserved stock from inventory
+      // Non-fatal: if delivery_items is missing we log and continue
+      try {
+        await DeliveryService._confirmRouteReservations(rows[0].delivery_id, businessId);
+        console.log(`[approveRouteOptimization] reservations confirmed for route ${rows[0].delivery_id}`);
+      } catch (reservationErr) {
+        console.error('[approveRouteOptimization] reservation confirmation failed (non-fatal):', reservationErr.message);
+      }
     }
 
     sendSuccess(res, 200, 'Route approved — driver has been notified');
@@ -245,14 +274,14 @@ const approveRouteOptimization = async (req, res) => {
 };
 
 // PUT /api/route-approvals/:id/decline  — LM declines the route
-// KEY FIX: sets route to 'declined' (NOT back to 'planned') so admin can see
-// it in the Delivery Routes page Declined filter and know to re-plan it.
+// Fix #4: after route is set to 'declined', release the reserved
+// inventory quantities so stock goes back to available.
 const declineRouteOptimization = async (req, res) => {
   try {
     const { businessId, role } = req.user;
     if (role !== 'logistics_manager') return sendError(res, 403, 'Access denied');
 
-    const { id } = req.params;
+    const { id }         = req.params;
     const { reason = '' } = req.body;
 
     if (!reason.trim()) return sendError(res, 400, 'A reason is required when declining');
@@ -261,11 +290,10 @@ const declineRouteOptimization = async (req, res) => {
       `SELECT * FROM manager_approvals WHERE approval_id = $1 AND business_id = $2`,
       [id, businessId]
     );
-    if (!rows[0])             return sendError(res, 404, 'Approval not found');
+    if (!rows[0])               return sendError(res, 404, 'Approval not found');
     if (rows[0].status !== 'pending')
       return sendError(res, 400, `Approval already ${rows[0].status}`);
 
-    // Save decline reason so admin can read it
     await pool.query(
       `UPDATE manager_approvals
        SET status = 'declined', review_notes = $2, updated_at = NOW()
@@ -273,13 +301,21 @@ const declineRouteOptimization = async (req, res) => {
       [id, reason]
     );
 
-    // Route → 'declined' (not 'planned') — admin sees it in Declined filter
+    // Route → 'declined' — admin sees it in Declined filter
     if (rows[0].delivery_id) {
       await pool.query(
         `UPDATE delivery_routes SET status = 'declined', updated_at = NOW()
          WHERE route_id = $1 AND business_id = $2`,
         [rows[0].delivery_id, businessId]
       );
+
+      // Fix #4: release reserved inventory so stock goes back to available
+      try {
+        await DeliveryService._releaseRouteReservations(rows[0].delivery_id, businessId);
+        console.log(`[declineRouteOptimization] reservations released for route ${rows[0].delivery_id}`);
+      } catch (reservationErr) {
+        console.error('[declineRouteOptimization] reservation release failed (non-fatal):', reservationErr.message);
+      }
     }
 
     sendSuccess(res, 200, 'Route declined — admin has been notified');
@@ -314,6 +350,7 @@ const getRouteApprovalStats = async (req, res) => {
     sendError(res, 500, 'Failed to fetch stats');
   }
 };
+
 module.exports = {
   getApprovals,
   getPendingCount,
@@ -321,11 +358,13 @@ module.exports = {
   approveItem,
   rejectItem,
   createFromAlert,
-   requestAdminReview,   
-  getAdminRequests,     
+  requestAdminReview,
+  getAdminRequests,
   adminReviewRequest,
-  createFromDelivery, getRouteApprovals,
+  createFromDelivery,
+  getRouteApprovals,
   approveRouteOptimization,
   declineRouteOptimization,
-  getRouteApprovalStats,getSustainabilityApprovals
+  getRouteApprovalStats,
+  getSustainabilityApprovals,
 };

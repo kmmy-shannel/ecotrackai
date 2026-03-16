@@ -33,7 +33,10 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use('/api/ecotrust', (req, res, next) => {
+  console.log('[DEBUG] /api/ecotrust intercepted EARLY', req.path);
+  next();
+});
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/auth',       authRoutes);
 app.use('/api/managers',   managerRoutes);
@@ -65,7 +68,7 @@ app.get('/api/health', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
-
+console.log('[server] ecotrust route registered');
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

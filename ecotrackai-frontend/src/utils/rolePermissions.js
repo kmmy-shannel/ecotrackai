@@ -104,6 +104,7 @@ export const getRoleNavItems = (role) => {
       { label: 'Delivery', path: '/deliveries', icon: 'truck' },
       { label: 'Alerts', path: '/alerts', icon: 'bell' },
       { label: 'EcoTrust', path: '/ecoscore', icon: 'leaf' },
+      { label: 'Carbon', path: '/carbon', icon: 'leaf' }, 
       { label: 'Managers', path: '/managers', icon: 'users' },
     ],
     [ROLES.INVENTORY_MANAGER]: [

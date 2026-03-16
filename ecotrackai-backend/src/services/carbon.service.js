@@ -8,7 +8,7 @@ const ALLOWED_ROLES = new Set(['admin', 'sustainability_manager']);
 const CARBON_TRANSITIONS = {
   pending: new Set(['verified', 'revision_requested']),
   verified: new Set([]),
-  revision_requested: new Set([])
+  revision_requested: new Set(['pending']),
 };
 
 const CarbonService = {

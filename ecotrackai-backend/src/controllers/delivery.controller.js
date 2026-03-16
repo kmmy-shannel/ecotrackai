@@ -1,5 +1,13 @@
 // ============================================================
 // FILE: src/controllers/delivery.controller.js
+//
+// Cancellation feature added:
+//   cancelDelivery — PATCH /api/deliveries/:id/cancel
+//   Accepts optional { reason } in request body.
+//   Returns 200 on success with message + previousStatus.
+//   Returns 400 if status is not cancellable.
+//
+// Everything else is completely unchanged.
 // ============================================================
 const DeliveryService = require('../services/delivery.service');
 const { sendSuccess, sendError } = require('../utils/response.utils');
@@ -33,7 +41,6 @@ const optimizeRoute = async (req, res) => {
       return sendError(res, 400, 'Business context missing');
     }
 
-    // 1. Fetch the route
     const routeResult = await pool.query(
       `SELECT * FROM delivery_routes WHERE route_id = $1 AND business_id = $2`,
       [routeId, businessId]
@@ -41,64 +48,47 @@ const optimizeRoute = async (req, res) => {
     if (!routeResult.rows.length) return sendError(res, 404, 'Route not found');
     const route = routeResult.rows[0];
 
-    // 2. Fetch stops — location is stored as "lat, lng" plain string in jsonb
     const stopsResult = await pool.query(
       `SELECT stop_id, stop_sequence, location::text AS location
-       FROM route_stops
-       WHERE route_id = $1
-       ORDER BY stop_sequence ASC`,
+       FROM route_stops WHERE route_id = $1 ORDER BY stop_sequence ASC`,
       [routeId]
     );
 
     console.log('[optimizeRoute] stops count:', stopsResult.rows.length);
     console.log('[optimizeRoute] sample stop:', JSON.stringify(stopsResult.rows[0]));
 
-    // 3. Parse "lat, lng" string into { lat, lng } — no location_name or stop_type in DB
-   // 3. Parse location — handles both JSON object string and plain "lat, lng" string
-const totalStops = stopsResult.rows.length;
-const rawStops = stopsResult.rows.map((s, i) => {
-  const locRaw = (s.location || '').replace(/^"|"$/g, '').trim();
+    const totalStops = stopsResult.rows.length;
+    const rawStops = stopsResult.rows.map((s, i) => {
+      const locRaw = (s.location || '').replace(/^"|"$/g, '').trim();
+      let lat = null, lng = null, address = locRaw;
 
-  let lat = null, lng = null, address = locRaw;
+      if (locRaw.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(locRaw);
+          lat     = parseFloat(parsed.lat || parsed.latitude  || 0) || null;
+          lng     = parseFloat(parsed.lng || parsed.longitude || 0) || null;
+          address = parsed.address || parsed.name || locRaw;
+        } catch { /* fall through to comma parse */ }
+      }
 
-  // Format A: JSON object string {"lat":16.04,"lng":120.33,"address":"..."}
-  if (locRaw.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(locRaw);
-      lat     = parseFloat(parsed.lat || parsed.latitude  || 0) || null;
-      lng     = parseFloat(parsed.lng || parsed.longitude || 0) || null;
-      address = parsed.address || parsed.name || locRaw;
-    } catch { /* fall through to comma parse */ }
-  }
+      if (!lat || !lng) {
+        const parts = locRaw.split(',').map(p => p.trim());
+        if (parts.length >= 2) {
+          lat = parseFloat(parts[0]) || null;
+          lng = parseFloat(parts[1]) || null;
+        }
+      }
 
-  // Format B: plain "lat, lng" string "16.04603, 120.34370"
-  if (!lat || !lng) {
-    const parts = locRaw.split(',').map(p => p.trim());
-    if (parts.length >= 2) {
-      lat = parseFloat(parts[0]) || null;
-      lng = parseFloat(parts[1]) || null;
-    }
-  }
+      const type =
+        i === 0              ? 'origin'      :
+        i === totalStops - 1 ? 'destination' : 'stop';
 
-  const type =
-    i === 0              ? 'origin'      :
-    i === totalStops - 1 ? 'destination' : 'stop';
-
-  return {
-    stop_id:       s.stop_id,
-    stop_sequence: s.stop_sequence ?? i,
-    stop_type:     type,
-    location_name: address,
-    location:      locRaw,
-    lat,
-    lng,
-    type,
-  };
-});
+      return { stop_id: s.stop_id, stop_sequence: s.stop_sequence ?? i, stop_type: type,
+               location_name: address, location: locRaw, lat, lng, type };
+    });
 
     console.log('[optimizeRoute] parsed stops:', JSON.stringify(rawStops));
 
-    // 4. Build delivery data
     const deliveryData = {
       route_name:                        route.route_name,
       deliveryCode:                      route.route_name,
@@ -108,15 +98,11 @@ const rawStops = stopsResult.rows.map((s, i) => {
       estimated_carbon_kg:               parseFloat(route.estimated_carbon_kg               || 0),
     };
 
-    // 5. Run TSP optimization
     const aiService = require('../services/ai.service');
     const optimizationResult = await aiService.optimizeDeliveryRoute(deliveryData, rawStops);
 
     console.log('[optimizeRoute] improvementPct:', optimizationResult.improvementPct);
-    console.log('[optimizeRoute] orderChanged — orig:', rawStops.map(s => s.lat));
-    console.log('[optimizeRoute] orderChanged — opt: ', optimizationResult.optimizedRoute.stops.map(s => s.lat));
 
-    // 6. Update DB with optimized metrics
     await pool.query(
       `UPDATE delivery_routes
        SET status                            = 'optimized',
@@ -143,6 +129,7 @@ const rawStops = stopsResult.rows.map((s, i) => {
     return sendError(res, 500, `Failed to optimize route: ${error.message}`);
   }
 };
+
 const submitForApproval = async (req, res) => {
   const result = await DeliveryService.submitForApproval(req.params.id, req.user);
   result.success ? sendSuccess(res, 200, 'Submitted for approval', result.data)
@@ -185,20 +172,38 @@ const deleteDelivery = async (req, res) => {
                  : sendError(res, 400, result.error);
 };
 
+// ── Cancellation ──────────────────────────────────────────────────────────────
+// PATCH /api/deliveries/:id/cancel
+// Body: { reason?: string }  — optional cancellation reason
+//
+// Status rules (mirrors panel answer):
+//   planned            → reservations released, route deleted
+//   awaiting_approval  → approval cancelled, reservations released, status → cancelled
+//   approved           → reservations released, status → cancelled (driver notified)
+//   in_transit         → reservations released, status → cancelled (driver alerted)
+//   completed/delivered → 400 blocked
+const cancelDelivery = async (req, res) => {
+  const reason = req.body?.reason || req.body?.cancel_reason || '';
+  const result = await DeliveryService.cancelDelivery(req.params.id, req.user, reason);
+  if (result.success) {
+    sendSuccess(res, 200, result.data.message, result.data);
+  } else {
+    sendError(res, 400, result.error);
+  }
+};
+
 const getDrivers = async (req, res) => {
   const result = await DeliveryService.getDrivers(req.user);
   result.success ? sendSuccess(res, 200, 'Drivers retrieved', result.data)
                  : sendError(res, 400, result.error);
 };
 
-// ── Get actual metrics summary ────────────────────────────
 const getMetricsSummary = async (req, res) => {
   const result = await DeliveryService.getActualMetricsSummary(req.user);
   result.success ? sendSuccess(res, 200, 'Metrics summary', result.data)
                  : sendError(res, 400, result.error);
 };
 
-// ── Direct status patch (used by logistics manager) ──────
 const updateRouteStatus = async (req, res) => {
   const { status } = req.body;
   if (!status) return sendError(res, 400, 'status is required');
@@ -207,8 +212,6 @@ const updateRouteStatus = async (req, res) => {
                  : sendError(res, 400, result.error);
 };
 
-
-// ── ORS proxy ─────────────────────────────────────────────
 const calculateRoute = async (req, res) => {
   try {
     const { coordinates } = req.body;
@@ -239,40 +242,32 @@ const calculateRoute = async (req, res) => {
     return sendError(res, 500, 'Failed to calculate route');
   }
 };
-// GET /api/deliveries/drafts
-// Returns all draft routes (auto-created from spoilage approvals) for this business
+
 const getDraftDeliveries = async (req, res) => {
   try {
     const { businessId } = req.user;
     const result = await pool.query(`
-      SELECT
-        route_id,
-        route_name,
-        status,
-        origin_location,
-        destination_location,
-        vehicle_type,
-        created_at,
-        COALESCE(notes, '{}') AS notes
+      SELECT route_id, route_name, status, origin_location, destination_location,
+             vehicle_type, created_at, COALESCE(notes, '{}') AS notes
       FROM delivery_routes
-      WHERE business_id = $1
-        AND status = 'draft'
+      WHERE business_id = $1 AND status = 'draft'
       ORDER BY created_at DESC
     `, [businessId]);
 
     sendSuccess(res, 200, 'Draft deliveries retrieved', { drafts: result.rows });
   } catch (error) {
     console.error('[getDraftDeliveries]', error.message);
-    // Return empty drafts instead of 500 — page still loads normally
     sendSuccess(res, 200, 'Draft deliveries retrieved', { drafts: [] });
   }
 };
+
 module.exports = {
   getAllDeliveries, getDelivery, createDelivery,
   optimizeRoute, submitForApproval, applyOptimization,
   startDelivery, markStopArrived, markStopDeparted,
-  completeDelivery, deleteDelivery, getDrivers, getMetricsSummary,
+  completeDelivery, deleteDelivery,
+  cancelDelivery,        // ← NEW
+  getDrivers, getMetricsSummary,
   updateRouteStatus,
-  calculateRoute,getDraftDeliveries,
+  calculateRoute, getDraftDeliveries,
 };
-

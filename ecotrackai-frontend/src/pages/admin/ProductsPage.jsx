@@ -6,7 +6,7 @@ import {
   CalendarArrowUp, CalendarArrowDown, ArrowUpAZ,
   ArrowDownWideNarrow, ArrowUpNarrowWide, TrendingUp,
   Thermometer, Snowflake, Wind, CircleAlert,
-  CheckCircle2, Minus
+  CheckCircle2, Minus, Droplets, Lock
 } from 'lucide-react';
 import Layout from '../../components/Layout';
 import inventoryService from '../../services/inventory.service';
@@ -75,11 +75,13 @@ const STYLES = `
 
   /* Table */
   .pr-table{background:#fff;border-radius:20px;overflow:hidden;border:1px solid rgba(82,183,136,.14);box-shadow:0 3px 18px rgba(26,61,43,.07)}
-  .pr-thead{display:grid;grid-template-columns:2.2fr 1.6fr .9fr 1fr .95fr 70px;gap:10px;padding:12px 20px;background:linear-gradient(to right,#f8fdf9,#edfaf2);border-bottom:1px solid rgba(82,183,136,.11);align-items:center}
+
+  /* Fix #4: updated column widths — added Available column */
+  .pr-thead{display:grid;grid-template-columns:2fr 1.5fr .85fr 1.1fr .9fr .85fr 70px;gap:10px;padding:12px 20px;background:linear-gradient(to right,#f8fdf9,#edfaf2);border-bottom:1px solid rgba(82,183,136,.11);align-items:center}
   .pr-th{font-size:10px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:3px;background:none;border:none;cursor:pointer;padding:0;transition:color .13s}
   .pr-th:hover{color:#374151}
   .pr-th-r{cursor:default!important}
-  .pr-row{display:grid;grid-template-columns:2.2fr 1.6fr .9fr 1fr .95fr 70px;gap:10px;padding:14px 20px;border-bottom:1px solid rgba(82,183,136,.07);align-items:center;transition:background .13s;animation:pr-slide .22s ease both}
+  .pr-row{display:grid;grid-template-columns:2fr 1.5fr .85fr 1.1fr .9fr .85fr 70px;gap:10px;padding:14px 20px;border-bottom:1px solid rgba(82,183,136,.07);align-items:center;transition:background .13s;animation:pr-slide .22s ease both}
   .pr-row:hover{background:linear-gradient(to right,#f8fdf9,#fafffe)}
   .pr-row:last-child{border-bottom:none}
   .pr-row:nth-child(1){animation-delay:.03s}.pr-row:nth-child(2){animation-delay:.06s}
@@ -127,7 +129,7 @@ const STYLES = `
   /* Action buttons */
   .pr-act{width:30px;height:30px;border-radius:8px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,transform .12s;color:#9ca3af}
   .pr-act:hover{transform:scale(1.12)}
-  .pr-act-eye:hover{background:#d8f3dc;color:#166534!important}
+  .pr-act-eye:hover{background:#d8f3dc;color:#166634!important}
   .pr-act-del:hover{background:#fee2e2;color:#991b1b!important}
 
   /* Table footer */
@@ -145,7 +147,7 @@ const STYLES = `
   /* Modal */
   .pr-backdrop{position:fixed;inset:0;background:rgba(8,20,12,.52);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;animation:pr-in .16s ease both}
   .pr-modal{background:#fff;border-radius:24px;box-shadow:0 32px 80px rgba(0,0,0,.22);width:100%;max-width:500px;max-height:92vh;overflow-y:auto;animation:pr-pop .2s cubic-bezier(.34,1.4,.64,1) both}
-  .pr-modal-sm{max-width:380px}
+  .pr-modal-sm{max-width:420px}
   .pr-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 16px;border-bottom:1px solid rgba(82,183,136,.11);position:sticky;top:0;background:#fff;z-index:2;border-radius:24px 24px 0 0}
   .pr-modal-body{padding:18px 22px;display:flex;flex-direction:column;gap:16px}
   .pr-modal-foot{display:flex;gap:9px;padding:14px 22px 20px;border-top:1px solid rgba(82,183,136,.09);position:sticky;bottom:0;background:#fff;border-radius:0 0 24px 24px}
@@ -184,6 +186,24 @@ const STYLES = `
   .pr-btn-ghost:hover{background:rgba(255,255,255,0.15);transform:translateY(-1px)}
   .pr-btn-solid{display:inline-flex;align-items:center;gap:6px;padding:8px 17px;background:#fff;color:#1a3d2b;border-radius:11px;font-size:12.5px;font-weight:800;border:none;cursor:pointer;transition:transform .13s,box-shadow .15s;box-shadow:0 2px 8px rgba(0,0,0,0.1);white-space:nowrap}
   .pr-btn-solid:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(0,0,0,0.14)}
+
+  /* ── Fix #3: Storage conditions highlight strip in detail modal ── */
+  .pr-cond-strip{background:linear-gradient(135deg,#f0fdf4,#e6f7ee);border:1px solid rgba(82,183,136,.25);border-radius:13px;padding:13px 15px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .pr-cond-cell{background:#fff;border-radius:9px;padding:9px 11px;border:1px solid rgba(82,183,136,.13);display:flex;flex-direction:column;gap:3px}
+  .pr-cond-lbl{font-size:9px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:4px}
+  .pr-cond-val{font-size:13px;font-weight:800;color:#1a3d2b;text-transform:capitalize}
+  .pr-cond-val-missing{font-size:12px;font-weight:500;color:#d1d5db;font-style:italic}
+
+  /* ── Fix #4: Reservation bar in table row ── */
+  .pr-qty-bar-wrap{height:4px;border-radius:99px;background:#e5e7eb;overflow:hidden;margin-top:4px;width:100%}
+  .pr-qty-bar-fill{height:100%;border-radius:99px;transition:width .4s ease}
+  .pr-reserved-pill{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:99px;font-size:9.5px;font-weight:700;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+
+  /* ── Fix #4: Reservation breakdown in detail modal ── */
+  .pr-avail-strip{background:linear-gradient(135deg,#f0fdf4,#e6f7ee);border:1px solid rgba(82,183,136,.25);border-radius:13px;padding:13px 15px}
+  .pr-avail-bar-wrap{height:8px;border-radius:99px;background:#e5e7eb;overflow:hidden;margin:8px 0 4px}
+  .pr-avail-bar-avail{height:100%;border-radius:99px 0 0 99px;background:linear-gradient(to right,#4ade80,#16a34a);display:inline-block}
+  .pr-avail-bar-reserv{height:100%;background:linear-gradient(to right,#fb923c,#ea580c);display:inline-block}
 `;
 
 if (typeof document !== 'undefined' && !document.getElementById('pr-sty')) {
@@ -232,7 +252,19 @@ const StorIcon = ({ s = '' }) => {
 const genBatch = (name) =>
   `${name.toUpperCase()}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(Date.now()).slice(-3)}`;
 
-/* ─── Sort options (icons only, no emojis) ──────────────────────────────────── */
+/* ─── Fix #4: parse reservation fields safely ──────────────────────────────── */
+// available_quantity and reserved_quantity are returned by the fixed model.
+// Fall back gracefully for items fetched before the migration ran.
+const getQtyBreakdown = (item) => {
+  const total    = Number(item.quantity || 0);
+  const reserved = Number(item.reserved_quantity || 0);
+  const available = item.available_quantity != null
+    ? Number(item.available_quantity)
+    : Math.max(total - reserved, 0);
+  return { total, reserved, available };
+};
+
+/* ─── Sort options ──────────────────────────────────────────────────────────── */
 const SORT_OPTIONS = [
   { label:'Newest first',   f:'entry_date',   d:'desc', Icon:CalendarArrowDown  },
   { label:'Oldest first',   f:'entry_date',   d:'asc',  Icon:CalendarArrowUp    },
@@ -250,7 +282,7 @@ const RiskIcon = ({ k, size = 10 }) => {
   return <Minus size={size} />;
 };
 
-/* ─── AddInventoryModal ─────────────────────────────────────────────────────── */
+/* ─── AddInventoryModal — COMPLETELY UNCHANGED ──────────────────────────────── */
 const AddInventoryModal = ({ onClose, onSuccess }) => {
   const [step,  setStep]  = useState(1);
   const [fruit, setFruit] = useState(null);
@@ -314,7 +346,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
   return (
     <div className="pr-backdrop pr-root">
       <div className="pr-modal">
-        {/* Header */}
         <div className="pr-modal-hd">
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)', display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -328,7 +359,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
             </div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-            {/* Step indicator */}
             <div style={{ display:'flex', gap:4 }}>
               {[1,2].map(s => <div key={s} style={{ width: s===step ? 20:7, height:7, borderRadius:99, background: s===step?'#1a3d2b': s<step?'#52b788':'#e5e7eb', transition:'all .28s' }} />)}
             </div>
@@ -339,7 +369,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
         </div>
 
         <div className="pr-modal-body">
-          {/* Step 1 — Catalog */}
           {step === 1 && (<>
             {catL && <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'32px 0', gap:9, color:'#9ca3af' }}><div className="pr-spin" style={{ width:22, height:22 }} /> Loading catalog…</div>}
             {catE && <div className="pr-err"><AlertTriangle size={13} />{catE}</div>}
@@ -380,13 +409,11 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
             )}
           </>)}
 
-          {/* Step 2 — Details */}
           {step === 2 && fruit && (<>
             <button onClick={() => { setStep(1); setFruit(null); setComp(null); }}
               style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12, color:'#6b7280', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'Poppins,sans-serif' }}>
               <ChevronDown size={13} style={{ transform:'rotate(90deg)' }} /> Back
             </button>
-
             {compL && (
               <div style={{ background:'#f8fdf9', border:'1px solid rgba(82,183,136,.18)', borderRadius:11, padding:'10px 13px', display:'flex', alignItems:'center', gap:7, fontSize:12.5, color:'#6b7280' }}>
                 <div className="pr-spin" style={{ width:15, height:15 }} /> Checking storage compatibility…
@@ -403,8 +430,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 </p>
               </div>
             )}
-
-            {/* Catalog reference */}
             <div className="pr-info-strip">
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
                 <Leaf size={12} style={{ color:'#166534' }} />
@@ -423,8 +448,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 ))}
               </div>
             </div>
-
-            {/* Quantity + Unit */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div>
                 <label className="pr-lbl">Quantity *</label>
@@ -437,8 +460,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 </select>
               </div>
             </div>
-
-            {/* Ripeness */}
             <div>
               <label className="pr-lbl">Ripeness Stage *</label>
               <div style={{ display:'grid', gridTemplateColumns:`repeat(${RIPENESS.length},1fr)`, gap:7 }}>
@@ -447,8 +468,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 ))}
               </div>
             </div>
-
-            {/* Condition */}
             <div>
               <label className="pr-lbl">Condition</label>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:7 }}>
@@ -457,8 +476,6 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 ))}
               </div>
             </div>
-
-            {/* Shelf Life stepper */}
             <div>
               <label className="pr-lbl">
                 Shelf Life (days)
@@ -473,13 +490,10 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 <span>Min {sMin}d</span><span>Max {sMax}d</span>
               </div>
             </div>
-
-            {/* Batch number */}
             <div>
               <label className="pr-lbl">Batch Number</label>
               <input type="text" value={form.batch_number} onChange={e => setForm(p => ({ ...p, batch_number:e.target.value }))} className="pr-inp" style={{ fontFamily:'monospace', letterSpacing:'.03em' }} />
             </div>
-
             {err && <div className="pr-err"><AlertTriangle size={12} />{err}</div>}
           </>)}
         </div>
@@ -497,13 +511,23 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
   );
 };
 
-/* ─── DetailModal ───────────────────────────────────────────────────────────── */
+/* ─── DetailModal — Fix #3 (storage conditions) + Fix #4 (reservation bar) ─── */
 const DetailModal = ({ item, onClose }) => {
   const d = calcDaysLeft(item);
   const { label, k } = getRisk(d);
+  const { total, reserved, available } = getQtyBreakdown(item);
+  const reservedPct  = total > 0 ? Math.round((reserved  / total) * 100) : 0;
+  const availablePct = total > 0 ? Math.round((available / total) * 100) : 100;
+
+  const val = (v, suffix = '') =>
+    (v !== null && v !== undefined && v !== '')
+      ? <span className="pr-cond-val">{v}{suffix}</span>
+      : <span className="pr-cond-val-missing">not recorded</span>;
+
   return (
     <div className="pr-backdrop pr-root">
       <div className="pr-modal pr-modal-sm">
+        {/* Header */}
         <div className="pr-modal-hd">
           <div style={{ display:'flex', alignItems:'center', gap:11 }}>
             <div className={`${AV_CLS[k]||'pr-av pr-av-lo'}`} style={{ width:42, height:42, borderRadius:13, fontSize:17 }}>
@@ -518,7 +542,9 @@ const DetailModal = ({ item, onClose }) => {
             <X size={14} style={{ color:'#6b7280' }} />
           </button>
         </div>
+
         <div className="pr-modal-body">
+          {/* Risk + days */}
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <span className={`pr-risk pr-risk-${k}`}>
               <RiskIcon k={k} size={10} /> {label}
@@ -530,22 +556,84 @@ const DetailModal = ({ item, onClose }) => {
               </span>
             )}
           </div>
+
+          {/* Fix #4: Quantity / Reservation breakdown ──────────────────────── */}
+          <div className="pr-avail-strip">
+            <p style={{ fontSize:10, fontWeight:800, color:'#166534', textTransform:'uppercase', letterSpacing:'.08em', margin:'0 0 8px', display:'flex', alignItems:'center', gap:5 }}>
+              <Boxes size={11} style={{ color:'#166534' }} /> Quantity Breakdown
+            </p>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+              {/* Total */}
+              <div style={{ background:'#fff', borderRadius:9, padding:'8px 10px', border:'1px solid rgba(82,183,136,.13)' }}>
+                <p style={{ fontSize:9.5, color:'#9ca3af', margin:'0 0 2px', fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em' }}>Total Stock</p>
+                <p style={{ fontSize:15, color:'#1a3d2b', margin:0, fontWeight:900 }}>{total}</p>
+                <p style={{ fontSize:10, color:'#9ca3af', margin:0 }}>{item.unit_of_measure||'kg'}</p>
+              </div>
+              {/* Reserved */}
+              <div style={{ background: reserved > 0 ? '#fff7ed' : '#fff', borderRadius:9, padding:'8px 10px', border:`1px solid ${reserved > 0 ? '#fed7aa' : 'rgba(82,183,136,.13)'}` }}>
+                <p style={{ fontSize:9.5, color: reserved > 0 ? '#c2410c' : '#9ca3af', margin:'0 0 2px', fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', display:'flex', alignItems:'center', gap:3 }}>
+                  {reserved > 0 && <Lock size={8} />} Reserved
+                </p>
+                <p style={{ fontSize:15, color: reserved > 0 ? '#c2410c' : '#6b7280', margin:0, fontWeight:900 }}>{reserved}</p>
+                <p style={{ fontSize:10, color: reserved > 0 ? '#fb923c' : '#9ca3af', margin:0 }}>{reservedPct}% locked</p>
+              </div>
+              {/* Available */}
+              <div style={{ background:'linear-gradient(135deg,#f0fdf4,#e6f7ee)', borderRadius:9, padding:'8px 10px', border:'1px solid #86efac' }}>
+                <p style={{ fontSize:9.5, color:'#166534', margin:'0 0 2px', fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em' }}>Available</p>
+                <p style={{ fontSize:15, color:'#1a3d2b', margin:0, fontWeight:900 }}>{available}</p>
+                <p style={{ fontSize:10, color:'#52b788', margin:0 }}>{availablePct}% free</p>
+              </div>
+            </div>
+            {/* Visual bar */}
+            {reserved > 0 && (
+              <>
+                <div className="pr-avail-bar-wrap">
+                  <span className="pr-avail-bar-avail" style={{ width:`${availablePct}%` }} />
+                  <span className="pr-avail-bar-reserv" style={{ width:`${reservedPct}%` }} />
+                </div>
+                <p style={{ fontSize:10.5, color:'#9a3412', margin:0, display:'flex', alignItems:'center', gap:4 }}>
+                  <Lock size={10} /> {reserved} {item.unit_of_measure||'kg'} reserved for a pending delivery
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Fix #3: Storage conditions strip */}
+          <div>
+            <p style={{ fontSize:10, fontWeight:800, color:'#166534', textTransform:'uppercase', letterSpacing:'.08em', margin:'0 0 7px', display:'flex', alignItems:'center', gap:5 }}>
+              <Leaf size={11} style={{ color:'#166534' }} /> Storage Conditions
+            </p>
+            <div className="pr-cond-strip">
+              <div className="pr-cond-cell">
+                <span className="pr-cond-lbl"><Leaf size={9} style={{ color:'#2d6a4f' }} /> Ripeness</span>
+                {val(item.ripeness_stage)}
+              </div>
+              <div className="pr-cond-cell">
+                <span className="pr-cond-lbl"><Thermometer size={9} style={{ color:'#3b82f6' }} /> Temp</span>
+                {val(item.simulated_storage_temp, '°C')}
+              </div>
+              <div className="pr-cond-cell">
+                <span className="pr-cond-lbl"><Droplets size={9} style={{ color:'#0891b2' }} /> Humidity</span>
+                {val(item.simulated_storage_humidity, '%')}
+              </div>
+            </div>
+          </div>
+
           <div className="pr-rule" />
+
+          {/* All other fields */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
             {[
-              ['Quantity',   `${item.quantity||0} ${item.unit_of_measure||'kg'}`],
-              ['Storage',    item.storage_category||'—'],
-              ['Shelf Life', item.shelf_life_days ? `${item.shelf_life_days}d` : '—'],
-              ['Condition',  item.current_condition||'—'],
-              ['Ripeness',   item.ripeness_stage||'—'],
-              ['Temp',       item.simulated_storage_temp ? `${item.simulated_storage_temp}°C` : '—'],
-              ['Humidity',   item.simulated_storage_humidity ? `${item.simulated_storage_humidity}%` : '—'],
-              ['Entry Date', item.entry_date ? new Date(item.entry_date).toLocaleDateString('en-PH') : '—'],
-              ['Expiry Date',item.expected_expiry_date ? new Date(item.expected_expiry_date).toLocaleDateString('en-PH') : '—'],
-            ].map(([l,v]) => (
+              ['Storage',     item.storage_category||'—'],
+              ['Condition',   item.current_condition||'—'],
+              ['Shelf Life',  item.shelf_life_days ? `${item.shelf_life_days}d` : '—'],
+              ['Entry Date',  item.entry_date  ? new Date(item.entry_date).toLocaleDateString('en-PH')                 : '—'],
+              ['Expiry Date', item.expected_expiry_date ? new Date(item.expected_expiry_date).toLocaleDateString('en-PH') : '—'],
+              ['Batch',       item.batch_number||'—'],
+            ].map(([l, v]) => (
               <div key={l} className="pr-det-cell">
                 <p style={{ fontSize:9.5, color:'#9ca3af', margin:'0 0 3px', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>{l}</p>
-                <p style={{ fontSize:13, fontWeight:700, color:'#1a3d2b', margin:0, textTransform:'capitalize' }}>{v}</p>
+                <p style={{ fontSize:13, fontWeight:700, color:'#1a3d2b', margin:0, textTransform:'capitalize', fontFamily: l==='Batch'?'monospace':'inherit' }}>{v}</p>
               </div>
             ))}
           </div>
@@ -659,6 +747,18 @@ const ProductsPage = () => {
                   </div>
                 </>
               )}
+              {/* Fix #4: banner notice for any reserved stock */}
+              {inventory.some(i => Number(i.reserved_quantity) > 0) && (
+                <>
+                  <span style={{ fontSize:10, color:'rgba(255,255,255,0.25)' }}>|</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                    <Lock size={11} style={{ color:'#fbbf24' }} />
+                    <span style={{ fontSize:11, color:'#fbbf24', fontWeight:600 }}>
+                      {inventory.filter(i => Number(i.reserved_quantity) > 0).length} batch{inventory.filter(i=>Number(i.reserved_quantity)>0).length>1?'es':''} partially reserved
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <div style={{ display:'flex', gap:8, zIndex:1, flexWrap:'wrap', alignItems:'center' }}>
@@ -694,7 +794,6 @@ const ProductsPage = () => {
 
         {/* ── Toolbar ── */}
         <div className="pr-bar">
-          {/* Search */}
           <div className="pr-srch-wrap">
             <Search size={13} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', color:'#9ca3af', pointerEvents:'none' }} />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search fruit or batch…" className="pr-srch" />
@@ -704,19 +803,14 @@ const ProductsPage = () => {
               </button>
             )}
           </div>
-
           <div className="pr-divider" />
-
           {riskF !== 'all' && (
             <button onClick={() => setRiskF('all')}
               style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', borderRadius:99, fontSize:11.5, fontWeight:600, background:'#f3f4f6', color:'#6b7280', border:'1.5px solid #e5e7eb', cursor:'pointer', whiteSpace:'nowrap' }}>
               <X size={11} /> Clear: {riskF}
             </button>
           )}
-
           <div style={{ flex:1 }} />
-
-          {/* Sort dropdown */}
           <div style={{ position:'relative' }}>
             <button className="pr-sort-btn" onClick={() => setShowSort(v => !v)}>
               <SlidersHorizontal size={13} />
@@ -735,9 +829,7 @@ const ProductsPage = () => {
               </div>
             )}
           </div>
-
           <div className="pr-divider" />
-
           <button onClick={load} className="pr-ibtn" title="Refresh">
             <RefreshCw size={14} style={loading ? { animation:'pr-spin .65s linear infinite' } : {}} />
           </button>
@@ -746,7 +838,6 @@ const ProductsPage = () => {
           </button>
         </div>
 
-        {/* Error */}
         {error && (
           <div className="pr-err">
             <AlertTriangle size={13} style={{ flexShrink:0 }} /> {error}
@@ -758,9 +849,9 @@ const ProductsPage = () => {
 
         {/* ── Table ── */}
         <div className="pr-table">
-          {/* Head */}
+          {/* Fix #4: Added "Available" column header */}
           <div className="pr-thead">
-            {[['Product','product_name'],['Batch / Qty',null],['Shelf Life','shelf_life_days'],['Storage',null],['Risk','days_left']].map(([l,f]) => (
+            {[['Product','product_name'],['Batch / Qty',null],['Available',null],['Shelf Life','shelf_life_days'],['Storage',null],['Risk','days_left']].map(([l,f]) => (
               <div key={l}>
                 {f
                   ? <button className="pr-th" onClick={() => handleSort(f)}>{l}<SortArrow field={f}/></button>
@@ -770,7 +861,6 @@ const ProductsPage = () => {
             <span className="pr-th pr-th-r" style={{ justifyContent:'flex-end' }}>Actions</span>
           </div>
 
-          {/* Rows */}
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'56px 0', gap:12, color:'#9ca3af' }}>
               <div className="pr-spin" style={{ width:26, height:26 }} />
@@ -794,8 +884,14 @@ const ProductsPage = () => {
           ) : processed.map((item, idx) => {
             const d = calcDaysLeft(item);
             const { label, k } = getRisk(d);
+            const { total, reserved, available } = getQtyBreakdown(item);
+            const reservedPct  = total > 0 ? Math.round((reserved  / total) * 100) : 0;
+            const availablePct = 100 - reservedPct;
+            const hasReserved  = reserved > 0;
+
             return (
               <div key={item.inventory_id || idx} className="pr-row">
+
                 {/* Product */}
                 <div style={{ display:'flex', alignItems:'center', gap:11, minWidth:0 }}>
                   <div className={AV_CLS[k]||'pr-av pr-av-lo'}>{(item.product_name||'?')[0].toUpperCase()}</div>
@@ -805,15 +901,40 @@ const ProductsPage = () => {
                   </div>
                 </div>
 
-                {/* Batch / Qty */}
+                {/* Batch / Total Qty */}
                 <div>
                   <p style={{ fontSize:11, color:'#6b7280', margin:'0 0 2px', fontFamily:'monospace', letterSpacing:'.02em' }}>{item.batch_number||'—'}</p>
-                  <p style={{ fontSize:12.5, fontWeight:600, color:'#374151', margin:'0 0 3px' }}>{item.quantity||0} {item.unit_of_measure||'kg'}</p>
+                  <p style={{ fontSize:12.5, fontWeight:600, color:'#374151', margin:'0 0 3px' }}>
+                    {total} {item.unit_of_measure||'kg'} <span style={{ fontSize:10, color:'#9ca3af', fontWeight:400 }}>total</span>
+                  </p>
                   {d !== null && (
                     <span className={`pr-days pr-days-${k}`}>
                       <div className={`pr-dot pr-dot-${k}`} />
                       {d <= 0 ? `${Math.abs(d)}d overdue` : `${d}d left`}
                     </span>
+                  )}
+                </div>
+
+                {/* Fix #4: Available column — the key new column ─────────────── */}
+                <div>
+                  <p style={{ fontSize:13, fontWeight:800, color: hasReserved ? '#166534' : '#374151', margin:'0 0 2px' }}>
+                    {available} <span style={{ fontSize:10, color:'#9ca3af', fontWeight:400 }}>{item.unit_of_measure||'kg'}</span>
+                  </p>
+                  {hasReserved ? (
+                    <>
+                      <span className="pr-reserved-pill">
+                        <Lock size={8} /> {reserved} reserved
+                      </span>
+                      {/* Mini progress bar: green = available, orange = reserved */}
+                      <div className="pr-qty-bar-wrap" style={{ marginTop:5 }}>
+                        <div style={{ display:'flex', height:'100%' }}>
+                          <div className="pr-qty-bar-fill" style={{ width:`${availablePct}%`, background:'#4ade80' }} />
+                          <div className="pr-qty-bar-fill" style={{ width:`${reservedPct}%`,  background:'#fb923c' }} />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ fontSize:10, color:'#9ca3af', margin:0 }}>fully available</p>
                   )}
                 </div>
 
@@ -853,7 +974,6 @@ const ProductsPage = () => {
             );
           })}
 
-          {/* Footer */}
           {processed.length > 0 && (
             <div className="pr-foot">
               <p style={{ fontSize:12, color:'#9ca3af', margin:0 }}>
@@ -871,7 +991,6 @@ const ProductsPage = () => {
         </div>
       </div>
 
-      {/* ── Modals ── */}
       {showAdd   && <AddInventoryModal onClose={() => setShowAdd(false)} onSuccess={load} />}
       {viewItem  && <DetailModal item={viewItem} onClose={() => setViewItem(null)} />}
 

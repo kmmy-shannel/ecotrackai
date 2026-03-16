@@ -1,62 +1,115 @@
-// ============================================================
-// FILE: ecotrackai-frontend/src/hooks/useEcoTrust.js
-// ============================================================
-import { useState, useEffect, useCallback } from 'react';
-import ecoTrustService from '../services/ecotrust.service';
+import { useCallback, useEffect, useState } from 'react';
+import api from '../services/api';
 
-export default function useEcoTrust(businessId) {
-  const [score,       setScore]       = useState(0);
-  const [level,       setLevel]       = useState('Newcomer');
-  const [levelNumber, setLevelNumber] = useState(1);
-  const [nextLevel,   setNextLevel]   = useState(null);
-  const [pointsToNext,setPointsToNext]= useState(0);
-  const [progressPct, setProgressPct] = useState(0);
-  const [transactions,setTransactions]= useState([]);
-  const [breakdown,   setBreakdown]   = useState([]);
-  const [actions,     setActions]     = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState('');
+// ─── Level config (must match EcoScorePage's TRUST_LEVELS) ───────────────────
+const TRUST_LEVELS = [
+  { level: 1, name: 'Newcomer',     min: 0,    max: 499  },
+  { level: 2, name: 'Eco Warrior',  min: 500,  max: 999  },
+  { level: 3, name: 'Eco Champion', min: 1000, max: 1999 },
+  { level: 4, name: 'Eco Leader',   min: 2000, max: 3999 },
+  { level: 5, name: 'Eco Legend',   min: 4000, max: null },
+];
 
-  const load = useCallback(async () => {
+const getLevelInfo = (score) => {
+  const current = TRUST_LEVELS.findLast(l => score >= l.min) || TRUST_LEVELS[0];
+  const next    = TRUST_LEVELS.find(l => l.level === current.level + 1) || null;
+
+  const pointsToNext  = next ? next.min - score : 0;
+  const rangeSize     = next ? next.min - current.min : 1;
+  const progressPct   = next
+    ? Math.min(100, Math.round(((score - current.min) / rangeSize) * 100))
+    : 100;
+
+  return {
+    levelNumber: current.level,
+    level:       current.name,
+    nextLevel:   next ? next.name : null,
+    pointsToNext,
+    progressPct,
+  };
+};
+
+// ─── Build breakdown by category from transactions ────────────────────────────
+const buildBreakdown = (transactions = []) => {
+  const map = {};
+  transactions.forEach(tx => {
+    const cat = tx.category || tx.action_type || 'other';
+    if (!map[cat]) map[cat] = { category: cat, total_points: 0 };
+    map[cat].total_points += Number(tx.points_earned) || 0;
+  });
+  return Object.values(map);
+};
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+const useEcoTrust = (businessId) => {
+  const [score,        setScore]        = useState(0);
+  const [transactions, setTransactions] = useState([]);
+  const [breakdown,    setBreakdown]    = useState([]);
+  const [actions,      setActions]      = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState('');
+
+  const loadEcoTrust = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     setError('');
     try {
-      // Fetch score + actions in parallel
-      const [scoreRes, actionsRes] = await Promise.all([
-        ecoTrustService.getScore(),
-        ecoTrustService.getSustainableActions(),
-      ]);
+      const response = await api.get('/ecotrust/score', {
+        params: { business_id: businessId },
+      });
 
-      // Score data — backend wraps in sendSuccess → { success, message, data }
-      const s = scoreRes?.data ?? scoreRes;
-      setScore(s.current_score       ?? 0);
-      setLevel(s.level               ?? 'Newcomer');
-      setLevelNumber(s.level_number  ?? 1);
-      setNextLevel(s.next_level      ?? null);
-      setPointsToNext(s.points_to_next ?? 0);
-      setProgressPct(s.progress_pct  ?? 0);
-      setTransactions(s.transactions ?? []);
-      setBreakdown(s.breakdown       ?? []);
+      const payload = response?.data?.data || response?.data || {};
 
-      // Actions data
-      const a = actionsRes?.data ?? actionsRes;
-      setActions(Array.isArray(a) ? a : []);
+      const currentScore = Number(
+        payload.current_score ?? payload.total_points ?? payload.score ?? 0
+      );
+
+      const txList = Array.isArray(payload.transactions)
+        ? payload.transactions
+        : [];
+
+      const actionList = Array.isArray(payload.actions)
+        ? payload.actions
+        : [];
+
+      setScore(currentScore);
+      setTransactions(txList);
+      setBreakdown(buildBreakdown(txList));
+      setActions(actionList);
     } catch (err) {
-      console.error('[useEcoTrust] load error:', err);
-      setError(err.response?.data?.message || 'Failed to load EcoTrust data');
+      setError(err?.response?.data?.message || 'Failed to load EcoTrust data');
+      // keep existing state on error — don't reset to undefined
     } finally {
       setLoading(false);
     }
   }, [businessId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadEcoTrust();
+  }, [loadEcoTrust]);
+
+  // Derive level info from score every render (cheap calculation)
+  const { levelNumber, level, nextLevel, pointsToNext, progressPct } =
+    getLevelInfo(score);
 
   return {
-    score, level, levelNumber,
-    nextLevel, pointsToNext, progressPct,
-    transactions, breakdown, actions,
-    loading, error,
-    refresh: load,
+    // ── what EcoScorePage needs ──────────────────────────────────────────────
+    score,
+    level,
+    levelNumber,
+    nextLevel,
+    pointsToNext,
+    progressPct,
+    transactions,   // array — never undefined
+    breakdown,      // array — never undefined
+    actions,        // array — never undefined
+    // ── legacy fields (kept so nothing else breaks) ──────────────────────────
+    nextLevelPoints: pointsToNext,
+    // ── utils ────────────────────────────────────────────────────────────────
+    loading,
+    error,
+    refresh: loadEcoTrust,
   };
-}
+};
+
+export default useEcoTrust;

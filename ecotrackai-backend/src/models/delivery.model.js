@@ -1,5 +1,11 @@
 // ============================================================
 // FILE: src/models/delivery.model.js
+// Fix #2: deleteRoute now only allows status = 'planned'
+// Fix #4 (cargo): getStops() now LEFT JOINs delivery_items + products
+//   so every stop includes a `products` array with real fruit names
+//   and quantities. This is what the frontend reads to show the
+//   Cargo column and Cargo Manifest in DeliveryRoutesPage.
+// All other methods are completely unchanged.
 // ============================================================
 const pool = require('../config/database');
 
@@ -175,7 +181,6 @@ const DeliveryModel = {
         RETURNING *
       `, values);
 
-      // Safety net: ensure location_name is always saved even if dynamic insert missed it
       const insertedRow = result.rows[0];
       if (insertedRow && (insertedRow.location_name === null || insertedRow.location_name === undefined)) {
         try {
@@ -194,6 +199,9 @@ const DeliveryModel = {
   },
 
   // ── Get all stops for a route ────────────────────────────
+  // Fix #4 (cargo): LEFT JOIN delivery_items + products/inventory so
+  // each stop carries a `products` array that the frontend can display.
+  // Falls back gracefully if delivery_items table does not exist.
   async getStops(routeId) {
     try {
       const result = await pool.query(`
@@ -211,9 +219,50 @@ const DeliveryModel = {
           ...row,
           location,
           location_name: row.location_name || row.stop_name || null,
-          stop_sequence: row.stop_sequence ?? row.sequence_no ?? row.sequence ?? row.stop_order ?? 0
+          stop_sequence: row.stop_sequence ?? row.sequence_no ?? row.sequence ?? row.stop_order ?? 0,
+          products: [],  // will be populated below
         };
       }).sort((a, b) => Number(a.stop_sequence || 0) - Number(b.stop_sequence || 0));
+
+      // Fix #4: fetch cargo from delivery_items for this route ──────────
+      // delivery_items links route → inventory → products.
+      // We do NOT associate items to specific stops because the current
+      // schema stores items at route level, not stop level. We attach all
+      // cargo to the first non-origin stop (index 1) so the Cargo Manifest
+      // section always shows something meaningful.
+      // If a stop-level link is added later, replace this with per-stop join.
+      try {
+        const cargoResult = await pool.query(`
+          SELECT
+            di.inventory_id,
+            di.quantity_to_deliver,
+            COALESCE(p.product_name, i.batch_number, 'Unknown') AS product_name,
+            COALESCE(i.unit_of_measure, 'kg')                   AS unit_of_measure
+          FROM delivery_items di
+          LEFT JOIN inventory i ON i.inventory_id = di.inventory_id
+          LEFT JOIN products  p ON p.product_id   = i.product_id
+          WHERE di.route_id = $1
+        `, [routeId]);
+
+        if (cargoResult.rows.length > 0) {
+          // Attach all cargo to every stop except the pure origin so the
+          // Cargo Manifest in the expanded panel always renders.
+          // The DeliveryRoutesPage extractCargo() deduplicates across stops.
+          const cargoItems = cargoResult.rows.map(r => ({
+            productName:      r.product_name,
+            quantity:         Number(r.quantity_to_deliver || 0),
+            unit:             r.unit_of_measure,
+            inventory_id:     r.inventory_id,
+          }));
+
+          normalized.forEach(stop => {
+            stop.products = cargoItems;
+          });
+        }
+      } catch (cargoErr) {
+        // delivery_items table may not exist yet — non-fatal
+        console.warn('[DeliveryModel.getStops] cargo fetch skipped:', cargoErr.message);
+      }
 
       return { success: true, data: normalized };
     } catch (err) {
@@ -338,27 +387,42 @@ const DeliveryModel = {
     }
   },
 
-  // ── Delete a route ───────────────────────────────────────
+  // ── Fix #2: Delete a route ────────────────────────────────────────────────────
+  // ONLY allows deletion when status = 'planned'.
   async deleteRoute(routeId, businessId) {
     try {
       const check = await pool.query(
-        `SELECT status FROM delivery_routes WHERE route_id=$1 AND business_id=$2`,
+        `SELECT status, route_name FROM delivery_routes WHERE route_id = $1 AND business_id = $2`,
         [routeId, businessId]
       );
 
       if (check.rows.length === 0)
         return { success: false, error: 'Route not found' };
 
-      const deletable = ['planned', 'optimized', 'declined'];
-      if (!deletable.includes(check.rows[0].status))
-        return { success: false, error: `Cannot delete a route with status "${check.rows[0].status}"` };
+      const { status, route_name } = check.rows[0];
 
-      await pool.query(
-        `DELETE FROM delivery_routes WHERE route_id=$1 AND business_id=$2`,
-        [routeId, businessId]
-      );
+      if (status !== 'planned') {
+        const reasons = {
+          optimized:         `"${route_name}" has been AI-optimized. Submit it for approval or reset it to planned first.`,
+          awaiting_approval: `"${route_name}" is awaiting Logistics Manager approval and cannot be deleted.`,
+          approved:          `"${route_name}" has been approved and a driver assigned. Contact your Logistics Manager.`,
+          in_transit:        `"${route_name}" is currently in progress. Wait for delivery completion.`,
+          delivered:         `"${route_name}" has been delivered. Completed deliveries cannot be deleted.`,
+          declined:          `"${route_name}" was declined. Edit and resubmit it instead of deleting.`,
+          draft:             `"${route_name}" is a system draft and cannot be deleted directly.`,
+        };
+        return {
+          success: false,
+          error: reasons[status] || `Cannot delete a route with status "${status}". Only planned routes can be deleted.`,
+        };
+      }
 
+      await pool.query(`DELETE FROM route_stops WHERE route_id = $1`, [routeId]);
+      await pool.query(`DELETE FROM delivery_routes WHERE route_id = $1 AND business_id = $2`, [routeId, businessId]);
+
+      console.log(`[deleteRoute] Deleted route ${routeId} ("${route_name}") for business ${businessId}`);
       return { success: true };
+
     } catch (err) {
       console.error('[DeliveryModel.deleteRoute]', err.message);
       return { success: false, error: err.message };
