@@ -1,6 +1,6 @@
 // ============================================================
 // FILE LOCATION: backend/src/controllers/manager.controller.js
-// LAYER: Controller (View) — HTTP handling ONLY
+// LAYER: Controller — HTTP handling ONLY
 // No DB queries. No business logic. Only req/res.
 // ============================================================
 
@@ -57,6 +57,13 @@ const updateManager = async (req, res) => {
   }
 };
 
+// ── Fix #1: deleteManager — deactivates the account (soft delete) ─────────────
+// Calls ManagerService.deleteManager which:
+//   1. Verifies the manager belongs to this business
+//   2. Calls ManagerModel.deleteSessions(managerId)  → logs them out immediately
+//   3. Calls ManagerModel.deactivate(managerId)       → sets is_active = FALSE
+// Hard deletion is intentionally avoided to preserve FK references in
+// manager_approvals, ecotrust_transactions, and approval_history.
 const deleteManager = async (req, res) => {
   try {
     if (!req.user) return sendError(res, 401, 'Not authenticated');
@@ -89,9 +96,7 @@ const resetManagerPassword = async (req, res) => {
   }
 };
 
-// ── LOGISTICS APPROVALS ───────────────────────────────────────
-// Uses resolveBusinessId() to safely handle both businessId and business_id
-// from JWT payload — no other functions above are touched.
+// ── LOGISTICS APPROVALS ────────────────────────────────────────────────────────
 
 const getLogisticsPending = async (req, res) => {
   try {

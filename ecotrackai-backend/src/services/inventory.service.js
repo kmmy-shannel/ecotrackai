@@ -1,6 +1,11 @@
 // ============================================================
 // FILE: src/services/inventory.service.js  (BACKEND)
 // PURPOSE: Business logic layer for inventory
+//
+// Fix: ripeness_stage was destructured from formData but never
+// passed to InventoryModel.create(). Also added .toLowerCase()
+// to satisfy the DB CHECK constraint which only allows
+// 'unripe' and 'ripe' (lowercase).
 // ============================================================
 
 const InventoryModel = require('../models/inventory.model');
@@ -45,7 +50,6 @@ const InventoryService = {
         shelf_life_days,
       } = formData;
 
-      // Support lookup by fruit name if no product_id given
       const fruitName = formData.fruit_name || formData.product_name || null;
       let resolvedProductId = product_id || fruit_id || id;
 
@@ -53,7 +57,6 @@ const InventoryService = {
         return { success: false, error: 'Quantity must be greater than 0' };
       }
 
-      // Look up product_id by fruit name if not provided directly
       let productRow;
       if (!resolvedProductId && fruitName) {
         const { rows } = await pool.query(
@@ -70,7 +73,7 @@ const InventoryService = {
         resolvedProductId = rows[0].product_id;
       } else if (resolvedProductId) {
         const { rows } = await pool.query(
-          `SELECT product_id, product_name, shelf_life_days
+          `SELECT product_id, product_name, shelf_life_days, optimal_temp_min, optimal_humidity_min
            FROM products
            WHERE product_id = $1`,
           [resolvedProductId]
@@ -85,9 +88,25 @@ const InventoryService = {
 
       const resolvedShelfLife = shelf_life_days || productRow.shelf_life_days || 7;
 
-      // Auto-generate batch number if not provided
       const resolvedBatchNumber = batch_number ||
         `${productRow.product_name.toUpperCase().replace(/\s+/g, '')}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(Date.now()).slice(-3)}`;
+
+      // ── Fix: normalize ripeness_stage to lowercase to satisfy DB CHECK constraint
+      // DB only allows 'unripe' or 'ripe' (lowercase).
+      // Frontend sends 'Ripe', 'Unripe', 'ripe', 'unripe' — normalize all to lowercase.
+      // If value is something like 'Cut', 'Whole', 'Semi-ripe' (not in constraint),
+      // default to 'ripe' as the safe fallback.
+      const ALLOWED_RIPENESS = ['unripe', 'ripe'];
+      const normalizedRipeness = ripeness_stage
+        ? (ALLOWED_RIPENESS.includes(ripeness_stage.toLowerCase())
+            ? ripeness_stage.toLowerCase()
+            : 'ripe')
+        : null;
+
+      // ── Fix: fall back to product catalog values if frontend sent null/undefined
+      // This covers the case where the modal's fallback chain didn't populate the fields
+      const resolvedTemp     = simulated_storage_temp     || productRow.optimal_temp_min     || null;
+      const resolvedHumidity = simulated_storage_humidity || productRow.optimal_humidity_min || null;
 
       const record = await InventoryModel.create(businessId, {
         product_id:                resolvedProductId,
@@ -95,12 +114,14 @@ const InventoryService = {
         unit_of_measure:           unit_of_measure || 'kg',
         batch_number:              resolvedBatchNumber,
         current_condition:         current_condition || 'good',
-        simulated_storage_temp:    simulated_storage_temp || null,
-        simulated_storage_humidity: simulated_storage_humidity || null,
+        // ── Fix: ripeness_stage was missing from this object — now included
+        ripeness_stage:            normalizedRipeness,
+        // ── Fix: now falls back to product catalog values if still null
+        simulated_storage_temp:    resolvedTemp,
+        simulated_storage_humidity: resolvedHumidity,
         shelf_life_days:           resolvedShelfLife,
       });
 
-      // Sync alerts after adding inventory
       try {
         const AlertService = require('./alert.service');
         await AlertService.syncAlertsFromProducts(businessId);

@@ -2,6 +2,11 @@
 // FILE: src/components/AddProductModal.js
 // LAYER: View — Admin Add Product with full dropdown spec
 // PURPOSE: All fields are dropdowns per Section 4 spec
+//
+// Fix: Ensures simulated_storage_temp, simulated_storage_humidity,
+// and ripeness_stage are ALWAYS sent on submit even if the catalog
+// ripeness_stages JSONB is missing temp/humidity for that stage.
+// Fallback chain: stageData → optimal_temp → product defaults → hardcoded safe values
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -16,8 +21,24 @@ import {
 
 // ── Constants ──────────────────────────────────────────────
 
-const CONDITIONS   = ['Excellent', 'Good', 'Fair', 'Poor'];
-const UNITS        = ['kg', 'pieces', 'trays', 'boxes', 'crates'];
+const CONDITIONS = ['Excellent', 'Good', 'Fair', 'Poor'];
+const UNITS      = ['kg', 'pieces', 'trays', 'boxes', 'crates'];
+
+// ── Per-fruit safe storage defaults ────────────────────────
+// Used as final fallback when catalog ripeness_stages data is
+// incomplete. Matches the canonical fruit reference table.
+const FRUIT_DEFAULTS = {
+  'Saging':    { tempMin: 13, tempMax: 15, humidity: 85 },
+  'Mangga':    { tempMin: 13, tempMax: 15, humidity: 85 },
+  'Calamansi': { tempMin: 8,  tempMax: 10, humidity: 88 },
+  'Papaya':    { tempMin: 13, tempMax: 15, humidity: 85 },
+  'Pinya':     { tempMin: 10, tempMax: 13, humidity: 85 },
+  'Pakwan':    { tempMin: 12, tempMax: 15, humidity: 85 },
+  'Bayabas':   { tempMin: 10, tempMax: 12, humidity: 85 },
+  'Atis':      { tempMin: 10, tempMax: 13, humidity: 85 },
+  'Lanzones':  { tempMin: 10, tempMax: 12, humidity: 85 },
+  'Santol':    { tempMin: 10, tempMax: 12, humidity: 85 },
+};
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -31,18 +52,48 @@ const generateBatchNumber = (fruitName, existingCount = 0) => {
 
 const clamp = (val, min, max) => Math.min(Math.max(Number(val), min), max);
 
+// ── Resolve temp/humidity with full fallback chain ──────────
+// Priority: ripeness_stages data → optimal_temp on product → FRUIT_DEFAULTS → 10/85
+const resolveStorageValues = (fruit, stage) => {
+  if (!fruit) return { tempMin: 10, tempMax: 15, humidity: 85, storage: 'ambient' };
+
+  const fruitName = fruit.product_name || fruit.name || '';
+  const stages    = fruit.ripeness_stages || {};
+  const stageData = stages[stage];
+  const fallback  = FRUIT_DEFAULTS[fruitName] || { tempMin: 10, tempMax: 15, humidity: 85 };
+
+  const tempMin = stageData?.temp_min
+    ?? fruit.optimal_temp_min
+    ?? fallback.tempMin;
+
+  const tempMax = stageData?.temp_max
+    ?? fruit.optimal_temp_max
+    ?? fallback.tempMax;
+
+  const humidity = stageData?.humidity
+    ?? fruit.optimal_humidity_min
+    ?? fallback.humidity;
+
+  const storage = stageData?.storage
+    ?? fruit.storage_category
+    ?? 'ambient';
+
+  return {
+    tempMin:  Number(tempMin)  || fallback.tempMin,
+    tempMax:  Number(tempMax)  || fallback.tempMax,
+    humidity: Number(humidity) || fallback.humidity,
+    storage,
+  };
+};
+
 // ── Main Component ─────────────────────────────────────────
 
 const AddProductModal = ({ onClose, onSuccess }) => {
-  // Catalog data
   const [catalog,    setCatalog]    = useState([]);
   const [facilities, setFacilities] = useState([]);
   const [loadingCat, setLoadingCat] = useState(true);
-
-  // Selected fruit object (full DB row)
   const [selectedFruit, setSelectedFruit] = useState(null);
 
-  // Form state
   const [form, setForm] = useState({
     productName:      '',
     ripenessStage:    '',
@@ -58,13 +109,10 @@ const AddProductModal = ({ onClose, onSuccess }) => {
     batchNumber:      '',
   });
 
-  // Warnings
   const [tempWarning,   setTempWarning]   = useState('');
   const [compatWarning, setCompatWarning] = useState('');
-
-  // Submission
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState('');
+  const [submitting,    setSubmitting]    = useState(false);
+  const [error,         setError]         = useState('');
 
   // ── Load catalog + facilities ───────────────────────────
 
@@ -109,7 +157,6 @@ const AddProductModal = ({ onClose, onSuccess }) => {
       return;
     }
 
-    // Reset ripeness-dependent fields
     setForm(prev => ({
       ...prev,
       productName,
@@ -125,33 +172,30 @@ const AddProductModal = ({ onClose, onSuccess }) => {
   };
 
   // ── STEP 2: Ripeness Stage selected ─────────────────────
+  // Fix: always resolves real values via resolveStorageValues,
+  // never leaves temp/humidity blank even if catalog JSONB is incomplete
 
   const handleRipenessSelect = (stage) => {
     if (!selectedFruit) return;
 
-    const stages = selectedFruit.ripeness_stages || {};
-    const stageData = stages[stage];
+    const resolved = resolveStorageValues(selectedFruit, stage);
 
-    if (stageData) {
-      setForm(prev => ({
-        ...prev,
-        ripenessStage:  stage,
-        storageType:    stageData.storage    || '',
-        targetTempMin:  stageData.temp_min   ?? '',
-        targetTempMax:  stageData.temp_max   ?? '',
-        targetHumidity: stageData.humidity   ?? '',
-      }));
-    } else {
-      // Fallback to product-level defaults
-      setForm(prev => ({
-        ...prev,
-        ripenessStage:  stage,
-        storageType:    selectedFruit.storage_category || '',
-        targetTempMin:  selectedFruit.optimal_temp_min ?? '',
-        targetTempMax:  selectedFruit.optimal_temp_max ?? '',
-        targetHumidity: selectedFruit.optimal_humidity_min ?? '',
-      }));
-    }
+    // Also update shelf life from stage data if available
+    const stages    = selectedFruit.ripeness_stages || {};
+    const stageData = stages[stage];
+    const stageShelLife = stageData?.shelf_life_days;
+    const productShelfLife = selectedFruit.shelf_life_days || selectedFruit.default_shelf_life_days;
+    const shelfLifeDays = stageShelLife || productShelfLife || 7;
+
+    setForm(prev => ({
+      ...prev,
+      ripenessStage:  stage,
+      storageType:    resolved.storage,
+      targetTempMin:  resolved.tempMin,
+      targetTempMax:  resolved.tempMax,
+      targetHumidity: resolved.humidity,
+      shelfLifeDays,
+    }));
   };
 
   // ── STEP 3: Facility selected — check temp + compat ─────
@@ -164,7 +208,6 @@ const AddProductModal = ({ onClose, onSuccess }) => {
     const facility = facilities.find(f => String(f.facility_id) === String(facilityId));
     if (!facility || !selectedFruit) return;
 
-    // Temperature check
     const facilityTemp = Number(facility.simulated_temp_avg);
     const tempMin = Number(form.targetTempMin || selectedFruit.optimal_temp_min);
     const tempMax = Number(form.targetTempMax || selectedFruit.optimal_temp_max);
@@ -176,7 +219,6 @@ const AddProductModal = ({ onClose, onSuccess }) => {
       );
     }
 
-    // Compatibility check — check what's already in this facility
     const avoidList = selectedFruit.avoid_with || [];
     if (avoidList.length > 0 && facility.stored_products) {
       const conflicts = (facility.stored_products || []).filter(p =>
@@ -202,74 +244,83 @@ const AddProductModal = ({ onClose, onSuccess }) => {
   };
 
   // ── Submit ───────────────────────────────────────────────
+  // Fix: resolves guaranteed non-null temp/humidity before saving.
+  // Even if the form fields are somehow empty, the fallback chain
+  // ensures real values are always written to the database.
 
-const handleSubmit = async () => {
-  setError('');
+  const handleSubmit = async () => {
+    setError('');
 
-  if (!form.productName || !form.quantity || !form.ripenessStage) {
-    setError('Please fill in all required fields.');
-    return;
-  }
-  if (Number(form.quantity) <= 0) {
-    setError('Quantity must be greater than 0.');
-    return;
-  }
-
-  setSubmitting(true);
-  try {
-    // Get the product_id from the selected fruit in catalog
-    const selectedCatalogFruit = catalog.find(
-      f => (f.product_name || f.name) === form.productName
-    );
-
-    if (!selectedCatalogFruit) {
-      setError('Selected fruit not found in catalog.');
-      setSubmitting(false);
+    if (!form.productName || !form.quantity || !form.ripenessStage) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+    if (Number(form.quantity) <= 0) {
+      setError('Quantity must be greater than 0.');
       return;
     }
 
-    const fruitId =
-      selectedCatalogFruit.product_id ||
-      selectedCatalogFruit.fruit_id ||
-      selectedCatalogFruit.id;
-
-    if (!fruitId) {
-      setError('Could not identify selected fruit. Please try again.');
-      setSubmitting(false);
-      return;
-    }
-
-    await inventoryService.addInventory({
-      product_id:                  fruitId,
-      quantity:                    Number(form.quantity),
-      unit_of_measure:             form.unitOfMeasure,
-      batch_number:                form.batchNumber,
-      ripeness_stage:              form.ripenessStage,
-      current_condition:           form.currentCondition,
-      simulated_storage_temp:      form.targetTempMin || null,
-      simulated_storage_humidity:  form.targetHumidity || null,
-      shelf_life_days:             form.shelfLifeDays,
-    });
-
+    setSubmitting(true);
     try {
-      await alertService.syncAlerts();
-    } catch (syncError) {
-      console.error('[AddProductModal] Alert sync after inventory add failed:', syncError);
-    }
+      const selectedCatalogFruit = catalog.find(
+        f => (f.product_name || f.name) === form.productName
+      );
 
-    onSuccess?.();
-  } catch (e) {
-    setError(e?.response?.data?.message || 'Failed to add inventory. Please try again.');
-  } finally {
-    setSubmitting(false);
-  }
-};
+      if (!selectedCatalogFruit) {
+        setError('Selected fruit not found in catalog.');
+        setSubmitting(false);
+        return;
+      }
+
+      const fruitId =
+        selectedCatalogFruit.product_id ||
+        selectedCatalogFruit.fruit_id ||
+        selectedCatalogFruit.id;
+
+      if (!fruitId) {
+        setError('Could not identify selected fruit. Please try again.');
+        setSubmitting(false);
+        return;
+      }
+
+      // Fix: always resolve guaranteed values — never send null temp/humidity
+      const resolved = resolveStorageValues(selectedCatalogFruit, form.ripenessStage);
+
+      const tempToSave     = Number(form.targetTempMin)  || resolved.tempMin;
+      const humidityToSave = Number(form.targetHumidity) || resolved.humidity;
+      const shelfLifeToSave = Number(form.shelfLifeDays) || Number(selectedCatalogFruit.shelf_life_days) || 7;
+
+      await inventoryService.addInventory({
+        product_id:                  fruitId,
+        quantity:                    Number(form.quantity),
+        unit_of_measure:             form.unitOfMeasure,
+        batch_number:                form.batchNumber,
+        ripeness_stage: form.ripenessStage?.toLowerCase() || 'ripe',
+        current_condition:           form.currentCondition,
+        simulated_storage_temp:      tempToSave,
+        simulated_storage_humidity:  humidityToSave,
+        shelf_life_days:             shelfLifeToSave,
+      });
+
+      try {
+        await alertService.syncAlerts();
+      } catch (syncError) {
+        console.error('[AddProductModal] Alert sync failed:', syncError);
+      }
+
+      onSuccess?.();
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to add inventory. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // ── Derived values ───────────────────────────────────────
 
   const ripenessOptions = selectedFruit?.ripeness_stages
     ? Object.keys(selectedFruit.ripeness_stages)
-    : ['Unripe', 'Ripe', 'Cut'];
+    : ['Unripe', 'Ripe'];
 
   const defaultShelfLife = selectedFruit
     ? Number(selectedFruit.shelf_life_days || selectedFruit.default_shelf_life_days || 7)
@@ -297,8 +348,7 @@ const handleSubmit = async () => {
               <p className="text-xs text-gray-500">All fields use dropdowns to prevent errors</p>
             </div>
           </div>
-          <button onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
             <X size={18} className="text-gray-500" />
           </button>
         </div>
@@ -372,7 +422,7 @@ const handleSubmit = async () => {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="bg-white rounded-lg p-3 border border-green-100">
                   <p className="text-xs text-gray-500 mb-1">Storage Type</p>
-                  <p className="text-sm font-semibold text-gray-800">
+                  <p className="text-sm font-semibold text-gray-800 capitalize">
                     {form.storageType || '—'}
                   </p>
                 </div>
@@ -382,7 +432,7 @@ const handleSubmit = async () => {
                     <p className="text-xs text-gray-500">Temperature</p>
                   </div>
                   <p className="text-sm font-semibold text-gray-800">
-                    {form.targetTempMin}–{form.targetTempMax}°C
+                    {form.targetTempMin !== '' ? `${form.targetTempMin}–${form.targetTempMax}°C` : '—'}
                   </p>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-green-100">
@@ -391,7 +441,7 @@ const handleSubmit = async () => {
                     <p className="text-xs text-gray-500">Humidity</p>
                   </div>
                   <p className="text-sm font-semibold text-gray-800">
-                    {form.targetHumidity}%
+                    {form.targetHumidity !== '' ? `${form.targetHumidity}%` : '—'}
                   </p>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-green-100">
@@ -400,7 +450,7 @@ const handleSubmit = async () => {
                     <p className="text-xs text-gray-500">Shelf Life</p>
                   </div>
                   <p className="text-sm font-semibold text-gray-800">
-                    {form.shelfLifeDays} days
+                    {form.shelfLifeDays || defaultShelfLife} days
                   </p>
                 </div>
               </div>
@@ -409,13 +459,13 @@ const handleSubmit = async () => {
               {selectedFruit && (
                 <div className="mt-3 pt-3 border-t border-green-200 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-green-700 font-medium mb-1"> Safe to store with:</p>
+                    <p className="text-xs text-green-700 font-medium mb-1">Safe to store with:</p>
                     <p className="text-xs text-gray-600">
                       {(selectedFruit.compatible_with || []).join(', ') || 'No restrictions'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-red-600 font-medium mb-1"> Avoid storing with:</p>
+                    <p className="text-xs text-red-600 font-medium mb-1">Avoid storing with:</p>
                     <p className="text-xs text-gray-600">
                       {(selectedFruit.avoid_with || []).join(', ') || 'None'}
                     </p>
@@ -481,16 +531,12 @@ const handleSubmit = async () => {
                   ))}
                 </select>
               )}
-
-              {/* Temperature Warning */}
               {tempWarning && (
                 <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
                   <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
                   {tempWarning}
                 </div>
               )}
-
-              {/* Compatibility Warning */}
               {compatWarning && (
                 <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-xl text-xs text-orange-700 flex items-start gap-2">
                   <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />

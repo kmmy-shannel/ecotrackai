@@ -36,15 +36,25 @@ const AlertModel = {
   },
 
   async getStatsByBusiness(businessId) {
+    // Count directly from inventory so stats match the spoilage list exactly.
+    // Each unique inventory batch is counted once, risk derived from days to expiry.
     const query = `
       SELECT
         COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE risk_level = 'HIGH') AS high_risk,
-        COUNT(*) FILTER (WHERE risk_level = 'MEDIUM') AS medium_risk,
-        COUNT(*) FILTER (WHERE risk_level = 'LOW') AS low_risk
-      FROM alerts
+        COUNT(*) FILTER (
+          WHERE (expected_expiry_date - CURRENT_DATE)::int <= 4
+        ) AS high_risk,
+        COUNT(*) FILTER (
+          WHERE (expected_expiry_date - CURRENT_DATE)::int BETWEEN 5 AND 7
+        ) AS medium_risk,
+        COUNT(*) FILTER (
+          WHERE (expected_expiry_date - CURRENT_DATE)::int >= 8
+        ) AS low_risk
+      FROM inventory
       WHERE business_id = $1
-        AND status = 'active'
+        AND quantity > 0
+        AND expected_expiry_date IS NOT NULL
+        AND LOWER(COALESCE(current_condition, 'good')) <> 'spoiled'
     `;
     const { rows } = await pool.query(query, [businessId]);
     return rows[0];

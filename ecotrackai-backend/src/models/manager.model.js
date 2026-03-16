@@ -149,17 +149,25 @@ const ManagerModel = {
     return result.rows[0] || null;
   },
 
+  // ── Fix #1: deactivate sets is_active = FALSE and stamps updated_at ─────────
+  // We keep this as a "soft delete" to preserve audit trail integrity.
+  // Hard deletion is intentionally avoided because:
+  //   - manager_approvals.reviewed_by references this user_id
+  //   - ecotrust_transactions.verified_by references this user_id
+  //   - approval_history.user_id references this user_id
+  // Deleting the row would orphan those FK references.
   async deactivate(managerId) {
     const result = await pool.query(`
       UPDATE users
       SET is_active = FALSE, updated_at = NOW()
       WHERE user_id = $1
-      RETURNING user_id
+      RETURNING user_id, full_name, email, role
     `, [managerId]);
 
     return result.rows[0] || null;
   },
 
+  // ── Fix #1: clear active sessions so deactivated user is logged out ──────────
   async deleteSessions(managerId) {
     await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [managerId]);
     return true;

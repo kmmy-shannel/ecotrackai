@@ -2,7 +2,161 @@
 // FILE: src/pages/manager/logistics/LogisticsDashboardView.jsx
 // Props-based — data comes from LogisticsManagerPage
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Rectangle, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// ── Leaflet icon fix ──────────────────────────────────────
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl:       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+const createIcon = (color) => new L.Icon({
+  iconUrl:   `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+});
+const originIcon      = createIcon('green');
+const stopIcon        = createIcon('blue');
+const destinationIcon = createIcon('red');
+
+const DAGUPAN_CENTER = [16.0433, 120.3339];
+const DAGUPAN_BOUNDS = [[15.98, 120.27], [16.11, 120.41]];
+const DAGUPAN_ZOOM   = 14;
+
+// ── Fit map to route bounds ───────────────────────────────
+const FitBounds = ({ positions }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (positions.length >= 2) {
+      try { map.fitBounds(positions, { padding: [32, 32], maxZoom: 17 }); }
+      catch { /* ignore */ }
+    }
+  }, [map, positions]);
+  return null;
+};
+
+// ── Fetch real road route from OSRM ──────────────────────
+const fetchRoadRoute = async (stops) => {
+  // coords = [[lng, lat], ...]
+  const coords = stops.map(s => `${s.lng},${s.lat}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  const res  = await fetch(url);
+  const data = await res.json();
+  if (data.code !== 'Ok' || !data.routes?.[0]) return null;
+  // GeoJSON coords are [lng, lat] — convert to [lat, lng] for Leaflet
+  return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+};
+
+// ── Route Map Component ───────────────────────────────────
+const RouteMapPreview = ({ stops = [] }) => {
+  const validStops = stops.filter(s => s.lat && s.lng);
+  const [roadPath,    setRoadPath]    = useState([]);
+  const [routeLoading, setRouteLoading] = useState(false);
+
+  useEffect(() => {
+    if (validStops.length < 2) { setRoadPath([]); return; }
+    setRouteLoading(true);
+    fetchRoadRoute(validStops)
+      .then(path => setRoadPath(path || []))
+      .catch(() => setRoadPath([]))
+      .finally(() => setRouteLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(validStops)]);
+
+  if (validStops.length === 0) return (
+    <div className="flex items-center justify-center h-full bg-gray-100 rounded-lg text-xs text-gray-400">
+      No coordinates available for map preview
+    </div>
+  );
+
+  const markerPositions = validStops.map(s => [s.lat, s.lng]);
+  const getIcon = (i) => i === 0 ? originIcon : i === validStops.length - 1 ? destinationIcon : stopIcon;
+
+  return (
+    <div className="relative h-full w-full">
+      <MapContainer
+        center={DAGUPAN_CENTER}
+        zoom={DAGUPAN_ZOOM}
+        minZoom={13}
+        maxZoom={19}
+        maxBounds={DAGUPAN_BOUNDS}
+        maxBoundsViscosity={1.0}
+        style={{ height: '100%', width: '100%' }}
+        scrollWheelZoom={false}
+      >
+        <TileLayer
+          url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+          attribution="© Google"
+          maxZoom={20}
+        />
+        <Rectangle
+          bounds={DAGUPAN_BOUNDS}
+          pathOptions={{ color: '#15803d', weight: 2, fillOpacity: 0.02, dashArray: '6 4' }}
+        />
+
+        <FitBounds positions={markerPositions} />
+
+        {validStops.map((stop, i) => (
+          <Marker key={i} position={[stop.lat, stop.lng]} icon={getIcon(i)}>
+            <Popup>
+              <div className="text-xs min-w-[140px]">
+                <p className="font-bold text-gray-700 mb-1">
+                  {i === 0 ? '🟢 Origin' : i === validStops.length - 1 ? '🔴 Destination' : `🔵 Stop ${i}`}
+                </p>
+                <p className="text-gray-600">{stop.name || `${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`}</p>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+
+        {/* Road route path — falls back to straight line if OSRM fails */}
+        {roadPath.length > 1 && (
+          <Polyline positions={roadPath} color="#15803d" weight={4} opacity={0.85} />
+        )}
+        {roadPath.length === 0 && !routeLoading && markerPositions.length > 1 && (
+          <Polyline positions={markerPositions} color="#15803d" weight={3} opacity={0.6} dashArray="6 4" />
+        )}
+      </MapContainer>
+
+      {/* Loading overlay */}
+      {routeLoading && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow text-xs text-gray-600 font-medium border border-gray-200">
+          <div className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+          Calculating road route…
+        </div>
+      )}
+
+      {/* Dagupan label */}
+      <div className="absolute top-2 left-2 z-[1000] px-2.5 py-1 bg-green-800 text-white rounded-lg text-[10px] font-semibold shadow-md pointer-events-none">
+        Dagupan City, Pangasinan
+      </div>
+
+      {/* ── DEBUG PANEL — remove once routing is confirmed working ── */}
+      <div className="absolute top-2 right-2 z-[1000] bg-black/75 text-white rounded-lg px-2.5 py-2 text-[10px] font-mono max-w-[220px] shadow-lg">
+        <p className="font-bold text-yellow-300 mb-1">🔍 Debug · Parsed Stops ({validStops.length})</p>
+        {validStops.length === 0 ? (
+          <p className="text-red-300">⚠ No stops parsed — check extra_data</p>
+        ) : (
+          validStops.map((s, i) => (
+            <div key={i} className={`mb-1 pb-1 ${i < validStops.length - 1 ? 'border-b border-white/20' : ''}`}>
+              <p className={i === 0 ? 'text-green-300' : i === validStops.length - 1 ? 'text-red-300' : 'text-blue-300'}>
+                {i === 0 ? '🟢' : i === validStops.length - 1 ? '🔴' : '🔵'} {s.name?.slice(0, 22) || 'unnamed'}
+              </p>
+              <p className="text-gray-300">{s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}</p>
+            </div>
+          ))
+        )}
+        <p className="mt-1 pt-1 border-t border-white/20 text-gray-400">
+          Road path: {roadPath.length > 0 ? `✅ ${roadPath.length} pts` : routeLoading ? '⏳ loading…' : '❌ none (fallback)'}
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const Badge = ({ status }) => {
   const colors = {
@@ -39,12 +193,54 @@ const MetricRow = ({ label, original, optimized, unit }) => {
   );
 };
 
+// ── Parse stops from extra_data or location fields ───────
+const parseRouteStops = (item) => {
+  try {
+    // extra_data is stored as JSON: { route, optimization }
+    const extra = typeof item.extra_data === 'string'
+      ? JSON.parse(item.extra_data)
+      : (item.extra_data || {});
+
+    const routeData = extra.route || {};
+
+    // Try to get stops from route_stops if available
+    if (Array.isArray(extra.stops) && extra.stops.length > 0) {
+      return extra.stops.map(s => {
+        const loc = typeof s.location === 'string' ? (() => { try { return JSON.parse(s.location); } catch { return {}; } })() : (s.location || {});
+        return { lat: parseFloat(loc.lat || s.lat || 0) || null, lng: parseFloat(loc.lng || s.lng || 0) || null, name: loc.address || s.location_name || s.name || '' };
+      }).filter(s => s.lat && s.lng);
+    }
+
+    // Fall back to origin + destination from route object
+    const stops = [];
+    const origin = typeof routeData.origin_location === 'string'
+      ? (() => { try { return JSON.parse(routeData.origin_location); } catch { return {}; } })()
+      : (routeData.origin_location || {});
+    const dest = typeof routeData.destination_location === 'string'
+      ? (() => { try { return JSON.parse(routeData.destination_location); } catch { return {}; } })()
+      : (routeData.destination_location || {});
+
+    if (origin.lat && origin.lng) stops.push({ lat: parseFloat(origin.lat), lng: parseFloat(origin.lng), name: origin.address || 'Origin' });
+    if (dest.lat && dest.lng)     stops.push({ lat: parseFloat(dest.lat),   lng: parseFloat(dest.lng),   name: dest.address || 'Destination' });
+
+    // Also try item.location as origin if nothing else
+    if (stops.length === 0 && item.location) {
+      const loc = typeof item.location === 'string' ? (() => { try { return JSON.parse(item.location); } catch { return {}; } })() : (item.location || {});
+      if (loc.lat && loc.lng) stops.push({ lat: parseFloat(loc.lat), lng: parseFloat(loc.lng), name: loc.address || 'Origin' });
+    }
+
+    return stops;
+  } catch { return []; }
+};
+
 function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
   const [open,             setOpen]       = useState(false);
   const [comment,          setComment]    = useState('');
   const [declining,        setDeclining]  = useState(false);
   const [busy,             setBusy]       = useState(false);
   const [selectedDriver,   setSelectedDriver] = useState('');
+  const [showMap,          setShowMap]    = useState(false);
+  const routeStops = parseRouteStops(item);
 
   // Only show drivers without an active ongoing delivery
   const availableDrivers = drivers.filter(d => !d.route_status);
@@ -76,12 +272,46 @@ function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Badge status="pending" />
+          {routeStops.length > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); setShowMap(v => !v); if (!open) setOpen(true); }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors border ${
+                showMap ? 'bg-green-700 text-white border-green-700' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'
+              }`}
+            >
+              🗺 {showMap ? 'Hide Map' : 'View Map'}
+            </button>
+          )}
           <span className="text-gray-400 text-sm">{open ? '▲' : '▼'}</span>
         </div>
       </div>
 
       {open && (
         <div className="border-t border-gray-100 p-4 space-y-4">
+
+          {/* Route Map Preview */}
+          {showMap && routeStops.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Route Map Preview · Dagupan City
+              </p>
+              <div className="h-64 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                <RouteMapPreview stops={routeStops} />
+              </div>
+              <div className="flex gap-3 mt-2">
+                {[
+                  { color: 'bg-green-500', label: 'Origin' },
+                  { color: 'bg-blue-500',  label: 'Stop' },
+                  { color: 'bg-red-500',   label: 'Destination' },
+                ].map(l => (
+                  <div key={l.label} className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <div className={`w-2.5 h-2.5 rounded-full ${l.color}`} />
+                    {l.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {(item.optimized_distance || item.optimized_fuel) ? (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
