@@ -1,0 +1,72 @@
+*   [33m85ec475[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mjoshner-update[m[33m)[m Pulled main into joshner-update
+[31m|[m[32m\[m  
+[31m|[m * [33me033f5a[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: manager account delete and delivery cancellation flow
+* [32m|[m [33meb25d8d[m[33m ([m[1;31morigin/joshner-update[m[33m)[m new udpate
+* [32m|[m [33m9a2ffe3[m wag na magupdate
+* [32m|[m [33m8211086[m Updating Ecotrust Now
+* [32m|[m [33m63d5233[m Resolved merge conflict in superadmin.model.js
+* [32m|[m   [33md8d9ba3[m Resolved merge conflict in superadmin.model.js
+[33m|[m[34m\[m [32m\[m  
+[33m|[m * [32m|[m [33m27a6fdc[m Your descriptive commit message
+* [34m|[m [32m|[m [33m69997af[m Describe what you changed
+* [34m|[m [32m|[m   [33m6c68420[m Merge remote-tracking branch 'origin/main' into joshner-update
+[35m|[m[32m\[m [34m\[m [32m\[m  
+[35m|[m [32m|[m [34m|[m[32m/[m  
+[35m|[m [32m|[m[32m/[m[34m|[m   
+[35m|[m * [34m|[m [33m17a3f52[m feat: connect sustainability manager verification to EcoTrust scoring pipeline
+* [36m|[m [34m|[m [33m3228dbd[m Merge main into joshner-update
+[1;31m|[m[36m\[m[36m|[m [34m|[m 
+[1;31m|[m * [34m|[m [33m323022f[m feat: allow drivers to optimize delivery routes with AI
+* [1;32m|[m [34m|[m [33m5a467e9[m Merge branch main into joshner-update and resolve conflicts
+[34m|[m[1;32m\[m[1;32m|[m [34m|[m 
+[34m|[m [1;32m|[m[34m/[m  
+[34m|[m[34m/[m[1;32m|[m   
+[34m|[m * [33m2400fc4[m Fix business creation DB crash and modal error visibility
+[34m|[m * [33m00f4896[m fix(superadmin): resolve critical API 404s and fix blank UI data mappings
+* [1;34m|[m [33m1aedc38[m[33m ([m[1;32mmain[m[33m)[m catalog added
+[1;34m|[m[1;34m/[m  
+* [33mf751616[m fix(logistics): render pending approval cards and fix drivers endpoint
+* [33m6c1dff8[m fixed spoilage alerts, inventory maangement and logistics manager endpoints
+* [33m6994fb4[m feat:fixed process managers pending approvals
+[1;34m|[m * [33m5d327c0[m[33m ([m[1;32mmvvm-refactor[m[33m)[m Latest updated project files
+[1;34m|[m[1;34m/[m  
+* [33mf74412a[m feat: added dropdown for available fruits in plan delivery modal
+* [33m4fa232f[m feat: Added Sustainability Manager feature
+*   [33mb333988[m Merged co-dev latest updates
+[1;36m|[m[31m\[m  
+[1;36m|[m * [33mf6f29c5[m Latest updated project files
+* [31m|[m [33ma3ded9b[m feat:Added route optimization apply feature with logistics manager approval workflow
+* [31m|[m [33m90a0a0b[m product.model.js
+* [31m|[m [33m85cfe70[m feat: add admin escalation workflow and frontend integration
+* [31m|[m [33m74d4f94[m feat: replace Ollama with Groq API
+* [31m|[m   [33mdc197ff[m Merge branch 'main' of https://github.com/kmmy-shannel/ecotrackai
+[32m|[m[33m\[m [31m\[m  
+[32m|[m * [31m\[m   [33m9e123dd[m Merge pull request #4 from kmmy-shannel/feature/ai-approval-flow
+[32m|[m [34m|[m[35m\[m [31m\[m  
+* [34m|[m [35m|[m [31m|[m [33m26fe654[m[33m ([m[1;31morigin/feature/ai-approval-flow[m[33m)[m fix: resolve approval model column errors and alert sync 500 errors
+[35m|[m [34m|[m[35m/[m [31m/[m  
+[35m|[m[35m/[m[34m|[m [31m|[m   
+* [34m|[m [31m|[m [33m0b00b4f[m refactor: clean approval architecture and hooks structure
+[34m|[m[34m/[m [31m/[m  
+* [31m|[m   [33m13b9cd1[m Merge branch 'mvvm-refact
+[36m|[m[1;31m\[m [31m\[m  
+[36m|[m * [31m|[m [33m7d15c4b[m[33m ([m[1;31morigin/mvvm-refactor[m[33m)[m feat: static Inventory Manager Dashboard page and Navigations
+[36m|[m * [31m|[m [33m1c7b926[m fixed bugs in Managers Page, Delivery Routes Page, and Ai insights
+[36m|[m [31m|[m[31m/[m  
+* [31m|[m [33mae85bd8[m Merge pull request #2 from kmmy-shannel/mvvm-refactor
+[1;32m|[m[31m\[m[31m|[m 
+[1;32m|[m * [33m3223029[m MVVM frontend
+* [1;33m|[m [33m372e2e3[m Merge pull request #1 from kmmy-shannel/mvvm-refactor
+[1;34m|[m[1;33m\[m[1;33m|[m 
+[1;34m|[m * [33m6cd5d1e[m fix the folder structure in backend
+[1;34m|[m * [33m0d7297c[m backup: before MVVM refactor
+[1;34m|[m[1;34m/[m  
+* [33md7930aa[m feat: implement carbon footprint and eco score features with related backend and frontend updates
+* [33me7f8c90[m Prepare backend for Render deployment
+* [33m6f41238[m fixed bugs
+* [33m270df7b[m Fixed Alerts page, Route Optimization issues and Delivery Routes Page
+* [33mee0a6bf[m Fix forget password and alerts page bug
+* [33m3240bf5[m registration OTP
+* [33m3c3e4d0[m Email Verification, Spoilage Alerts Page,  and Forgot Password feature
+* [33m4b0e4fe[m Integrate real routing, delivery optimization, and AI features
+* [33me091960[m Initial EcoTrackAI project (frontend + backend)
