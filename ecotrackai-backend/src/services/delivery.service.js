@@ -175,10 +175,23 @@ const DeliveryService = {
       const routeIds = rows.map(r => r.route_id).filter(Boolean);
       const cargoMap = await this._fetchCargoBatch(routeIds);
 
-      const enriched = rows.map(r => ({
-        ...r,
-        cargo: cargoMap.get(String(r.route_id)) || [],
-      }));
+      const enriched = rows.map(r => {
+        // Backfill fuel/carbon if older rows were stored as 0 because of rounding
+        let estFuel = r.estimated_fuel_consumption_liters;
+        let estCarbon = r.estimated_carbon_kg;
+        const fuelRate = FUEL_RATES[r.vehicle_type] ?? FUEL_PER_KM;
+        if (!estFuel || Number(estFuel) === 0) {
+          estFuel = +(Number(r.total_distance_km || 0) * fuelRate).toFixed(2);
+          estCarbon = +(Number(estFuel) * CO2_PER_LITRE).toFixed(2);
+        }
+
+        return {
+          ...r,
+          estimated_fuel_consumption_liters: estFuel,
+          estimated_carbon_kg: estCarbon,
+          cargo: cargoMap.get(String(r.route_id)) || [],
+        };
+      });
 
       return { success: true, data: enriched };
     } catch (err) {
@@ -227,7 +240,14 @@ const DeliveryService = {
     const routeResult = await DeliveryModel.findById(routeId, user.businessId);
     if (!routeResult.success) return routeResult;
 
-    const route = routeResult.data;
+    const route = { ...routeResult.data };
+    // Backfill fuel/carbon for legacy rows that stored 0
+    if (!route.estimated_fuel_consumption_liters || Number(route.estimated_fuel_consumption_liters) === 0) {
+      const fuelRate = FUEL_RATES[route.vehicle_type] ?? FUEL_PER_KM;
+      route.estimated_fuel_consumption_liters = +(Number(route.total_distance_km || 0) * fuelRate).toFixed(2);
+      route.estimated_carbon_kg = +(Number(route.estimated_fuel_consumption_liters) * CO2_PER_LITRE).toFixed(2);
+    }
+
     if (user.role === 'driver' && route.driver_user_id !== user.userId)
       return this._fail('Access denied');
 
@@ -316,8 +336,8 @@ const DeliveryService = {
           estimatedDurationMinutes = Math.max(1, Math.round((haversineKm / 25) * 60));
         }
 
-        estimatedFuelConsumptionLiters = Math.floor(estimatedDistanceKm * fuelPerKm * 100);
-        estimatedCarbonKg              = Math.floor(estimatedFuelConsumptionLiters * CO2_PER_LITRE / 100 * 100);
+        estimatedFuelConsumptionLiters = +(estimatedDistanceKm * fuelPerKm).toFixed(2);
+        estimatedCarbonKg              = +(estimatedFuelConsumptionLiters * CO2_PER_LITRE).toFixed(2);
         estimatedDistanceKm            = Math.floor(estimatedDistanceKm * 100) / 100;
         console.log(`[createDelivery] Final: ${estimatedDistanceKm.toFixed(2)}km, ${estimatedDurationMinutes}min`);
       } catch (orsErr) {
@@ -325,8 +345,8 @@ const DeliveryService = {
         const haversineKm              = this._haversineDistance(coordinates);
         estimatedDistanceKm            = haversineKm;
         estimatedDurationMinutes       = Math.max(1, Math.round((haversineKm / 25) * 60));
-        estimatedFuelConsumptionLiters = Math.floor(estimatedDistanceKm * fuelPerKm * 100);
-        estimatedCarbonKg              = Math.floor(estimatedFuelConsumptionLiters * CO2_PER_LITRE / 100 * 100);
+        estimatedFuelConsumptionLiters = +(estimatedDistanceKm * fuelPerKm).toFixed(2);
+        estimatedCarbonKg              = +(estimatedFuelConsumptionLiters * CO2_PER_LITRE).toFixed(2);
         estimatedDistanceKm            = Math.floor(estimatedDistanceKm * 100) / 100;
       }
     } else {
@@ -471,6 +491,38 @@ const DeliveryService = {
     }
   },
 
+  // ── Restock inventory for a route (undo confirmed deductions) ───────────────
+  // Used when an already-approved route is cancelled and stock should return.
+  async _restockRouteInventory(routeId, businessId) {
+    let items = [];
+    try {
+      const { rows } = await pool.query(
+        `SELECT inventory_id, quantity_to_deliver FROM delivery_items WHERE route_id = $1`,
+        [routeId]
+      );
+      items = rows;
+    } catch (err) {
+      console.warn('[_restockRouteInventory] delivery_items query failed:', err.message);
+      return;
+    }
+
+    for (const item of items) {
+      const qty = parseFloat(item.quantity_to_deliver || 0);
+      if (!item.inventory_id || qty <= 0) continue;
+      try {
+        await pool.query(
+          `UPDATE inventory
+           SET quantity = quantity + $1,
+               updated_at = NOW()
+           WHERE inventory_id = $2 AND business_id = $3`,
+          [qty, item.inventory_id, businessId]
+        );
+      } catch (err) {
+        console.error(`[_restockRouteInventory] failed to restock inventory ${item.inventory_id}:`, err.message);
+      }
+    }
+  },
+
   // ══════════════════════════════════════════════════════════════
   // CANCELLATION FEATURE — answers the panel question exactly
   // ══════════════════════════════════════════════════════════════
@@ -542,8 +594,12 @@ const DeliveryService = {
     // We do NOT delete the route — we change status to 'cancelled' so the history
     // record is preserved and the driver dashboard can show the alert.
 
-    // 4. Release inventory reservations for all statuses (skip if already done)
-    if (!reservationsReleased) {
+    // 4. Inventory handling:
+    //    - For planned/awaiting_approval: release reservations (handled above/else)
+    //    - For approved/in_transit: stock was already deducted; add it back.
+    if (['approved', 'in_transit'].includes(route.status)) {
+      await this._restockRouteInventory(routeId, user.businessId);
+    } else if (!reservationsReleased) {
       await this._releaseRouteReservations(routeId, user.businessId);
     }
 

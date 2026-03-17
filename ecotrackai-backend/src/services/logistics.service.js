@@ -20,16 +20,17 @@ const LogisticsService = {
           dr.estimated_fuel_consumption_liters,
           dr.estimated_carbon_kg,
           dr.estimated_duration_minutes,
-          ro.optimized_distance,
-          ro.optimized_fuel,
+          ro.optimized_distance_km        AS optimized_distance,
+          ro.optimized_fuel_liters        AS optimized_fuel,
           ro.optimized_carbon_kg,
           ro.savings_km,
           ro.savings_fuel,
           ro.savings_co2,
           ro.ai_recommendation,
-          u.full_name AS submitted_by_name
-        FROM manager_approvals ma
-        LEFT JOIN delivery_routes    dr  ON dr.route_id   = ma.delivery_id
+          (ro.optimized_distance_km IS NOT NULL OR ro.optimized_fuel_liters IS NOT NULL) AS is_optimized,
+        u.full_name AS submitted_by_name
+      FROM manager_approvals ma
+      LEFT JOIN delivery_routes    dr  ON dr.route_id   = ma.delivery_id
         LEFT JOIN route_optimizations ro  ON ro.route_id   = ma.delivery_id
         LEFT JOIN users               u   ON u.user_id     = ma.submitted_by
         LEFT JOIN users               drv ON drv.user_id   = dr.driver_user_id
@@ -56,13 +57,20 @@ const LogisticsService = {
           dl.actual_distance_km,
           dl.actual_fuel_used_liters,
           dl.actual_carbon_kg,
-          u.full_name AS reviewed_by_name
-        FROM manager_approvals ma
-       LEFT JOIN delivery_routes dr  ON dr.route_id  = ma.delivery_id
-        LEFT JOIN delivery_logs   dl  ON dl.route_id  = ma.delivery_id
-        LEFT JOIN users           u   ON u.user_id    = ma.reviewed_by
-        LEFT JOIN users           drv ON drv.user_id  = dr.driver_user_id
-        WHERE ma.business_id   = $1
+          ro.optimized_distance_km      AS optimized_distance,
+          ro.optimized_fuel_liters      AS optimized_fuel,
+          ro.optimized_carbon_kg,
+          ro.savings_km,
+          ro.savings_fuel,
+          ro.savings_co2,
+        u.full_name AS reviewed_by_name
+      FROM manager_approvals ma
+     LEFT JOIN delivery_routes dr  ON dr.route_id  = ma.delivery_id
+      LEFT JOIN delivery_logs   dl  ON dl.route_id  = ma.delivery_id
+      LEFT JOIN route_optimizations ro ON ro.route_id = ma.delivery_id
+      LEFT JOIN users           u   ON u.user_id    = ma.reviewed_by
+      LEFT JOIN users           drv ON drv.user_id  = dr.driver_user_id
+      WHERE ma.business_id   = $1
           AND ma.approval_type = 'route_optimization'
           AND ma.status       <> 'pending'
         ORDER BY ma.created_at DESC

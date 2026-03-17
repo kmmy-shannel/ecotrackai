@@ -717,38 +717,49 @@ const AlertService = {
     // so superadmin config changes take effect immediately.
     if (targetStatus === 'approved') {
       try {
-        const { rows: riskRows } = await pool.query(`
-          SELECT
-            CASE
-              WHEN (expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
-              WHEN (expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
-              ELSE 'LOW'
-            END AS risk_level
-          FROM inventory
-          WHERE inventory_id = $1 AND business_id = $2
-        `, [id, businessId]);
-
-        const riskLevel = riskRows[0]?.risk_level;
+        const riskLevel = String(alert.risk_level || '').toUpperCase();
 
         if (riskLevel === 'HIGH') {
-          await pool.query(`
-            INSERT INTO ecotrust_transactions
-              (business_id, action_type, points_earned,
-               related_record_type, related_record_id,
-               verification_status, transaction_date, created_at)
-            SELECT
-              $1,
-              'Spoilage Alert Approved',
-              sa.points_value,
-              'alert',
-              $2,
-              'verified',
-              CURRENT_DATE,
-              NOW()
-            FROM sustainable_actions sa
-            WHERE sa.action_name = 'Spoilage Alert Approved'
+          // Reuse/verify an existing transaction for this alert if present
+          const { rows: existingTx } = await pool.query(`
+            SELECT transaction_id, verification_status
+            FROM ecotrust_transactions
+            WHERE business_id = $1
+              AND related_record_type = 'alert'
+              AND related_record_id = $2
+              AND action_type = 'Spoilage Alert Approved'
             LIMIT 1
           `, [businessId, id]);
+
+          if (existingTx.length === 0) {
+            await pool.query(`
+              INSERT INTO ecotrust_transactions
+                (business_id, action_type, points_earned,
+                 related_record_type, related_record_id,
+                 verification_status, transaction_date, created_at)
+              SELECT
+                $1,
+                'Spoilage Alert Approved',
+                sa.points_value,
+                'alert',
+                $2,
+                'verified',
+                CURRENT_DATE,
+                NOW()
+              FROM sustainable_actions sa
+              WHERE sa.action_name = 'Spoilage Alert Approved'
+              LIMIT 1
+            `, [businessId, id]);
+          } else {
+            await pool.query(
+              `UPDATE ecotrust_transactions
+               SET verification_status = 'verified',
+                   status = 'verified',
+                   updated_at = NOW()
+               WHERE transaction_id = $1`,
+              [existingTx[0].transaction_id]
+            );
+          }
         }
       } catch (ecoErr) {
         // Non-fatal — approval still succeeds even if points logging fails

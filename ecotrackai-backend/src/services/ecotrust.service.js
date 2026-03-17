@@ -41,7 +41,7 @@ const EcoTrustService = {
         SELECT COALESCE(SUM(points_earned), 0)::int AS total_points
         FROM ecotrust_transactions
         WHERE business_id = $1
-          AND verification_status IN ('verified', 'pending')
+          AND (verification_status IN ('verified', 'pending') OR verification_status IS NULL)
       `, [businessId]);
 
       const totalPoints = Number(totRow?.total_points) || 0;
@@ -77,7 +77,7 @@ const EcoTrustService = {
         FROM ecotrust_transactions et
         LEFT JOIN sustainable_actions sa ON sa.action_name = et.action_type
         WHERE et.business_id = $1
-          AND et.verification_status IN ('verified', 'pending')
+          AND (et.verification_status IN ('verified', 'pending') OR et.verification_status IS NULL)
         GROUP BY sa.action_category
         ORDER BY total_points DESC
       `, [businessId]);

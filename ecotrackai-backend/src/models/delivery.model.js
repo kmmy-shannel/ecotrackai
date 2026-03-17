@@ -98,6 +98,12 @@ const DeliveryModel = {
         estimatedFuelConsumptionLiters, estimatedCarbonKg
       } = data;
 
+      const roundedDistance = Math.round((totalDistanceKm || 0) * 100) / 100;
+      const roundedDuration = Math.max(0, Math.floor(estimatedDurationMinutes || 0));
+      // keep 2‑dp precision so small routes still show fuel/carbon instead of 0
+      const roundedFuel    = parseFloat(Number(estimatedFuelConsumptionLiters || 0).toFixed(2));
+      const roundedCarbon  = parseFloat(Number(estimatedCarbonKg || 0).toFixed(2));
+
       const result = await pool.query(`
         INSERT INTO delivery_routes (
           business_id, route_name, route_type,
@@ -116,10 +122,10 @@ const DeliveryModel = {
         JSON.stringify(destinationLocation || {}),
         vehicleType,
         driverUserId || null,
-        Math.floor(totalDistanceKm * 100) / 100 || 0,
-        Math.floor(estimatedDurationMinutes) || 0,
-        Math.floor(estimatedFuelConsumptionLiters) || 0,
-        Math.floor(estimatedCarbonKg) || 0,
+        roundedDistance,
+        roundedDuration,
+        roundedFuel,
+        roundedCarbon,
       ]);
 
       return { success: true, data: result.rows[0] };

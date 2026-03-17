@@ -57,6 +57,7 @@ const normalizeDelivery = (raw) => {
     aiOptimized:       Boolean(raw.ai_optimized || raw.optimized_distance || raw.savings_km),
     originName:        buildName(origin),
     destName:          buildName(dest),
+    cargo:             Array.isArray(raw.cargo) ? raw.cargo : [],
     // Keep raw coords for map use
     originLat: parseFloat(origin.lat || origin.latitude  || 0) || null,
     originLng: parseFloat(origin.lng || origin.longitude || 0) || null,

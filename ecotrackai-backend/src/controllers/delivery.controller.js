@@ -32,102 +32,10 @@ const createDelivery = async (req, res) => {
 };
 
 const optimizeRoute = async (req, res) => {
-  try {
-    const routeId    = req.params.id;
-    const businessId = req.user?.businessId || req.user?.business_id;
-
-    if (!businessId) {
-      console.error('[optimizeRoute] No businessId on req.user:', req.user);
-      return sendError(res, 400, 'Business context missing');
-    }
-
-    const routeResult = await pool.query(
-      `SELECT * FROM delivery_routes WHERE route_id = $1 AND business_id = $2`,
-      [routeId, businessId]
-    );
-    if (!routeResult.rows.length) return sendError(res, 404, 'Route not found');
-    const route = routeResult.rows[0];
-
-    const stopsResult = await pool.query(
-      `SELECT stop_id, stop_sequence, location::text AS location
-       FROM route_stops WHERE route_id = $1 ORDER BY stop_sequence ASC`,
-      [routeId]
-    );
-
-    console.log('[optimizeRoute] stops count:', stopsResult.rows.length);
-    console.log('[optimizeRoute] sample stop:', JSON.stringify(stopsResult.rows[0]));
-
-    const totalStops = stopsResult.rows.length;
-    const rawStops = stopsResult.rows.map((s, i) => {
-      const locRaw = (s.location || '').replace(/^"|"$/g, '').trim();
-      let lat = null, lng = null, address = locRaw;
-
-      if (locRaw.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(locRaw);
-          lat     = parseFloat(parsed.lat || parsed.latitude  || 0) || null;
-          lng     = parseFloat(parsed.lng || parsed.longitude || 0) || null;
-          address = parsed.address || parsed.name || locRaw;
-        } catch { /* fall through to comma parse */ }
-      }
-
-      if (!lat || !lng) {
-        const parts = locRaw.split(',').map(p => p.trim());
-        if (parts.length >= 2) {
-          lat = parseFloat(parts[0]) || null;
-          lng = parseFloat(parts[1]) || null;
-        }
-      }
-
-      const type =
-        i === 0              ? 'origin'      :
-        i === totalStops - 1 ? 'destination' : 'stop';
-
-      return { stop_id: s.stop_id, stop_sequence: s.stop_sequence ?? i, stop_type: type,
-               location_name: address, location: locRaw, lat, lng, type };
-    });
-
-    console.log('[optimizeRoute] parsed stops:', JSON.stringify(rawStops));
-
-    const deliveryData = {
-      route_name:                        route.route_name,
-      deliveryCode:                      route.route_name,
-      total_distance_km:                 parseFloat(route.total_distance_km                 || 0),
-      estimated_duration_minutes:        parseFloat(route.estimated_duration_minutes        || 60),
-      estimated_fuel_consumption_liters: parseFloat(route.estimated_fuel_consumption_liters || 2),
-      estimated_carbon_kg:               parseFloat(route.estimated_carbon_kg               || 0),
-    };
-
-    const aiService = require('../services/ai.service');
-    const optimizationResult = await aiService.optimizeDeliveryRoute(deliveryData, rawStops);
-
-    console.log('[optimizeRoute] improvementPct:', optimizationResult.improvementPct);
-
-    await pool.query(
-      `UPDATE delivery_routes
-       SET status                            = 'optimized',
-           total_distance_km                 = $1,
-           estimated_duration_minutes        = $2,
-           estimated_fuel_consumption_liters = $3,
-           estimated_carbon_kg               = $4,
-           updated_at                        = NOW()
-       WHERE route_id = $5`,
-      [
-        optimizationResult.optimizedRoute.totalDistance,
-        optimizationResult.optimizedRoute.estimatedDuration,
-        optimizationResult.optimizedRoute.fuelConsumption,
-        optimizationResult.optimizedRoute.carbonEmissions,
-        routeId,
-      ]
-    );
-
-    return sendSuccess(res, 200, 'Route optimized', optimizationResult);
-
-  } catch (error) {
-    console.error('[optimizeRoute controller] FULL ERROR:', error.message);
-    console.error('[optimizeRoute controller] Stack:', error.stack);
-    return sendError(res, 500, `Failed to optimize route: ${error.message}`);
-  }
+  const result = await DeliveryService.optimizeRoute(req.params.id, req.user);
+  result.success
+    ? sendSuccess(res, 200, 'Route optimized', result.data)
+    : sendError(res, 400, result.error);
 };
 
 const submitForApproval = async (req, res) => {

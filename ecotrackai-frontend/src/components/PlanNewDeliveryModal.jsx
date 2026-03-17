@@ -422,7 +422,10 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
       const found = (stop.products || []).find(p => p.inventoryId === inventoryId);
       return sum + (found ? parseFloat(found.quantityAssigned) || 0 : 0);
     }, 0);
-    const maxAllowed = item.quantity - otherAllocated;
+    const baseAvailable = item.available_quantity != null
+      ? Number(item.available_quantity)
+      : Number(item.quantity) - Number(item.reserved_quantity || 0);
+    const maxAllowed = Math.max(0, baseAvailable - otherAllocated);
 
     let qty = rawValue === '' ? '' : parseFloat(rawValue);
     if (qty !== '' && qty > maxAllowed) qty = maxAllowed;
@@ -457,7 +460,10 @@ const PlanNewDeliveryModal = ({ onClose, onSuccess, prefill = null }) => {
           const found = (s2.products || []).find(x => x.inventoryId === p.inventoryId);
           return sum + (found ? parseFloat(found.quantityAssigned) || 0 : 0);
         }, 0);
-        const maxAllowed = item.quantity - otherAllocated;
+        const baseAvailable = item.available_quantity != null
+          ? Number(item.available_quantity)
+          : Number(item.quantity) - Number(item.reserved_quantity || 0);
+        const maxAllowed = Math.max(0, baseAvailable - otherAllocated);
         if ((parseFloat(p.quantityAssigned) || 0) > maxAllowed) {
           errs[`qty_${si}_${p.inventoryId}`] = `Exceeds available for ${p.productName}`;
         }
