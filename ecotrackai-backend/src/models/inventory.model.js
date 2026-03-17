@@ -329,6 +329,20 @@ const InventoryModel = {
   // ── Delete a batch ──────────────────────────────────────────
   // UNCHANGED
   async deleteById(inventoryId, businessId) {
+    // Block deletion only if the batch still has reserved quantity
+    const { rows: checkRows } = await pool.query(`
+      SELECT COALESCE(reserved_quantity, 0) AS reserved_quantity
+      FROM inventory
+      WHERE inventory_id = $1 AND business_id = $2
+      LIMIT 1
+    `, [inventoryId, businessId]);
+
+    if (checkRows.length === 0) return false;
+    const reserved = Number(checkRows[0].reserved_quantity || 0);
+    if (reserved > 0) {
+      return false;
+    }
+
     const { rowCount } = await pool.query(`
       DELETE FROM inventory
       WHERE inventory_id = $1

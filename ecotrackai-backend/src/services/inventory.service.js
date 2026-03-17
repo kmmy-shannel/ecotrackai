@@ -159,7 +159,7 @@ const InventoryService = {
   async deleteInventory(inventoryId, businessId) {
     try {
       const deleted = await InventoryModel.deleteById(inventoryId, businessId);
-      if (!deleted) return { success: false, error: 'Record not found or unauthorized' };
+      if (!deleted) return { success: false, error: 'Cannot delete: batch not found, or it still has reserved quantity' };
       return { success: true, message: 'Inventory record deleted' };
     } catch (error) {
       console.error('[InventoryService.deleteInventory]', error);

@@ -1,5 +1,6 @@
 const ProductModel = require('../models/product.model');
 const CatalogModel = require('../models/catalog.model');
+const pool         = require('../config/database');
 
 const VALID_SORT_FIELDS = ['product_name', 'product_type', 'shelf_life_days', 'created_at'];
 const ALLOWED_ROLES = new Set(['admin', 'inventory_manager']);
@@ -224,6 +225,18 @@ const batchNumber = `${productName.toUpperCase().replace(/\s+/g, '')}-${datePart
 
       const ownershipResult = await ProductModel.findOwnership(productId, ctx.businessId);
       if (!ownershipResult.success) return ownershipResult;
+
+      // Block deletion if any reserved stock exists (allow deletion even if quantity > 0 but not reserved)
+      const { rows: invStatsRows } = await pool.query(`
+        SELECT
+          COALESCE(SUM(reserved_quantity), 0) AS reserved_qty
+        FROM inventory
+        WHERE product_id = $1 AND business_id = $2
+      `, [productId, ctx.businessId]);
+      const invStats = invStatsRows[0] || { reserved_qty: 0 };
+      if (Number(invStats.reserved_qty) > 0) {
+        return this._fail('Cannot delete this product while any quantity is reserved.');
+      }
 
       const deleteInventoryResult = await ProductModel.deleteInventoryByProduct(productId, ctx.businessId);
       if (!deleteInventoryResult.success && deleteInventoryResult.error !== 'Not found or unauthorized') {

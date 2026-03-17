@@ -673,9 +673,9 @@ const ProductsPage = () => {
 
   const handleDelete = async () => {
     setDeleting(true);
-    try { await inventoryService.deleteInventory(delTgt.inventory_id); setDelTgt(null); load(); }
+    try { await inventoryService.deleteInventory(delTgt.inventory_id); load(); }
     catch { setError('Failed to delete batch.'); }
-    finally { setDeleting(false); }
+    finally { setDeleting(false); setDelTgt(null); }
   };
 
   const handleSort = (f) => {

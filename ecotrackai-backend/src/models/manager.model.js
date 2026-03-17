@@ -4,6 +4,7 @@
 // ============================================================
 const pool = require('../config/database');
 const DeliveryService = require('../services/delivery.service');
+const ApprovalModel   = require('./approval.model');
 
 const MANAGED_ROLES = [
   'inventory_manager',
@@ -461,18 +462,58 @@ const ManagerModel = {
           [alertId]
         );
 
-        await client.query(`
-          INSERT INTO ecotrust_transactions (
-            business_id, action_id, action_type,
-            points_earned, related_record_type, related_record_id,
-            verification_status, transaction_date, created_at
-          )
-          SELECT $1, action_id, 'Spoilage Alert Approved', points_value,
-                 'alert', $2, 'pending', CURRENT_DATE, NOW()
-          FROM sustainable_actions
-          WHERE action_name = 'Spoilage Alert Approved'
-          LIMIT 1
-        `, [businessId, alertId]);
+        // ── Risk check: only HIGH risk alerts earn points ──
+        const { rows: alertRows } = await client.query(
+          `SELECT risk_level, days_left, batch_number
+             FROM alerts WHERE id = $1 AND business_id = $2 LIMIT 1`,
+          [alertId, businessId]
+        );
+        const alertRisk = (alertRows[0]?.risk_level || '').toUpperCase();
+        const alertDays = Number(alertRows[0]?.days_left ?? 99);
+
+        let computedRisk = alertRisk;
+        if (!computedRisk || computedRisk === '') {
+          const batch = alertRows[0]?.batch_number || null;
+          if (batch) {
+            const { rows: invRows } = await client.query(
+              `SELECT
+                 CASE
+                   WHEN (expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
+                   WHEN (expected_expiry_date - CURRENT_DATE)::int <= 7 THEN 'MEDIUM'
+                   ELSE 'LOW'
+                 END AS risk_level
+               FROM inventory
+               WHERE batch_number = $1 AND business_id = $2
+               LIMIT 1`,
+              [batch, businessId]
+            );
+            computedRisk = (invRows[0]?.risk_level || '').toUpperCase();
+          }
+        }
+
+        const isHighRisk =
+          alertRisk === 'HIGH' ||
+          computedRisk === 'HIGH' ||
+          alertDays <= 4;
+
+        if (isHighRisk) {
+          try {
+            const txResult = await ApprovalModel.createEcoTrustTransaction({
+              businessId,
+              actionType: 'spoilage_action',
+              relatedRecordType: 'alert',
+              relatedRecordId: alertId,
+              verificationStatus: 'verified',
+              actorUserId: reviewerId,
+              source: 'inventory_manager_approval'
+            });
+            if (!txResult.success) {
+              console.warn('[ManagerModel.approveInventory][ecotrust] failed:', txResult.error);
+            }
+          } catch (ecoErr) {
+            console.warn('[ManagerModel.approveInventory][ecotrust] exception:', ecoErr.message);
+          }
+        }
       }
 
       await client.query('COMMIT');
