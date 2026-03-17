@@ -87,10 +87,10 @@ const getScore = async (req, res) => {
     }
 
     return ok(res, {
-      current_score: Number(scoreRow.score)  || 0,
-      total_points:  Number(scoreRow.score)  || 0,
-      level:         scoreRow.level          || 'Newcomer',
-      rank:          scoreRow.rank           || null,
+      current_score: Number(scoreRow.current_score ?? scoreRow.score ?? scoreRow.total_points ?? 0),
+      total_points:  Number(scoreRow.current_score ?? scoreRow.score ?? scoreRow.total_points ?? 0),
+      level:         scoreRow.level || 'Newcomer',
+      rank:          scoreRow.rank  || null,
       transactions,
       actions,
     });
@@ -152,5 +152,145 @@ const getLeaderboard = async (req, res) => {
     return err(res, 'Failed to load leaderboard', 500);
   }
 };
+const getTransactionsByBusiness = async (req, res) => {
+  try {
+    const businessId = req.user?.businessId || req.user?.business_id;
+    if (!businessId) return err(res, 'businessId required', 400);
 
-module.exports = { getScore, getSustainableActions, getLeaderboard };
+    const { rows } = await pool.query(
+      `SELECT
+         transaction_id,
+         business_id,
+         action_type,
+         points_earned,
+         verification_status,
+         related_record_type,
+         related_record_id,
+         created_at,
+         COALESCE(flagged, false) AS flagged,
+         flag_reason,
+         flagged_by,
+         flagged_at
+       FROM ecotrust_transactions
+       WHERE business_id = $1
+       ORDER BY created_at DESC`,
+      [businessId]
+    );
+
+    return ok(res, rows, 'Transactions retrieved');
+  } catch (error) {
+    console.error('[ecotrust.controller.getTransactionsByBusiness]', error);
+    return err(res, 'Failed to retrieve transactions', 500);
+  }
+};
+
+const flagTransaction = async (req, res) => {
+  try {
+    const transactionId = req.params?.id;
+    const reason        = req.body?.reason;
+    const userId        = req.user?.userId || req.user?.user_id;
+    const businessId    = req.user?.businessId || req.user?.business_id;
+
+    if (!transactionId) return err(res, 'Transaction ID required', 400);
+    if (!reason || reason.trim().length < 3) {
+      return err(res, 'A reason must be provided', 400);
+    }
+
+    const check = await pool.query(
+      `SELECT transaction_id, COALESCE(flagged, false) AS flagged
+       FROM ecotrust_transactions
+       WHERE transaction_id = $1 AND business_id = $2`,
+      [transactionId, businessId]
+    );
+
+    if (check.rows.length === 0) return err(res, 'Transaction not found or unauthorized', 404);
+    if (check.rows[0].flagged)   return err(res, 'Transaction already flagged', 400);
+
+    const { rows } = await pool.query(
+      `UPDATE ecotrust_transactions
+       SET
+         flagged     = TRUE,
+         flag_reason = $1,
+         flagged_by  = $2,
+         flagged_at  = NOW()
+       WHERE transaction_id = $3 AND business_id = $4
+       RETURNING transaction_id, flagged, flag_reason, flagged_at`,
+      [reason.trim(), userId, transactionId, businessId]
+    );
+
+    return ok(res, rows[0], 'Transaction flagged for Super Admin review');
+  } catch (error) {
+    console.error('[ecotrust.controller.flagTransaction]', error);
+    return err(res, 'Failed to flag transaction', 500);
+  }
+};
+const getPublicLeaderboard = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query?.limit, 10) || 20, 50);
+ 
+    const { rows } = await pool.query(
+      `SELECT
+         bp.business_id,
+         bp.business_name,
+         bp.business_type,
+         COALESCE(es.current_score, 0)   AS score,
+         COALESCE(es.level, 'Newcomer')  AS level,
+         COALESCE(es.rank, 0)            AS rank,
+         -- Points breakdown by action type
+         COALESCE(sp.spoilage_count, 0)  AS spoilage_actions,
+         COALESCE(rt.route_count, 0)     AS route_actions,
+         COALESCE(cb.carbon_count, 0)    AS carbon_actions,
+         COALESCE(dl.delivery_count, 0)  AS delivery_actions
+       FROM business_profiles bp
+       LEFT JOIN ecotrust_scores es
+              ON es.business_id = bp.business_id
+       -- Spoilage prevention count
+       LEFT JOIN (
+         SELECT business_id, COUNT(*)::int AS spoilage_count
+         FROM ecotrust_transactions
+         WHERE action_type = 'spoilage_prevention'
+           AND verification_status = 'verified'
+         GROUP BY business_id
+       ) sp ON sp.business_id = bp.business_id
+       -- Optimized route count
+       LEFT JOIN (
+         SELECT business_id, COUNT(*)::int AS route_count
+         FROM ecotrust_transactions
+         WHERE action_type = 'optimized_route'
+           AND verification_status = 'verified'
+         GROUP BY business_id
+       ) rt ON rt.business_id = bp.business_id
+       -- Carbon verified count
+       LEFT JOIN (
+         SELECT business_id, COUNT(*)::int AS carbon_count
+         FROM ecotrust_transactions
+         WHERE action_type = 'carbon_verified'
+           AND verification_status = 'verified'
+         GROUP BY business_id
+       ) cb ON cb.business_id = bp.business_id
+       -- On-time delivery count
+       LEFT JOIN (
+         SELECT business_id, COUNT(*)::int AS delivery_count
+         FROM ecotrust_transactions
+         WHERE action_type = 'on_time_delivery'
+           AND verification_status = 'verified'
+         GROUP BY business_id
+       ) dl ON dl.business_id = bp.business_id
+       WHERE bp.status = 'active'
+       ORDER BY es.current_score DESC NULLS LAST
+       LIMIT $1`,
+      [limit]
+    );
+ 
+    // Add rank position based on query order
+    const ranked = rows.map((b, i) => ({ ...b, rank: i + 1 }));
+ 
+    return ok(res, ranked, 'Public leaderboard retrieved');
+  } catch (e) {
+    console.error('[ecotrust.controller.getPublicLeaderboard]', e);
+    return err(res, 'Failed to load leaderboard', 500);
+  }
+};
+ 
+
+module.exports = { getScore, getSustainableActions, getLeaderboard, getTransactionsByBusiness, flagTransaction,getPublicLeaderboard, };

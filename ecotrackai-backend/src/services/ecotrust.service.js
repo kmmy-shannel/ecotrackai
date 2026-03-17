@@ -59,10 +59,10 @@ const EcoTrustService = {
           et.transaction_date,
           et.created_at,
           sa.description,
-          sa.action_category
+          sa.action_category AS category
         FROM ecotrust_transactions et
         LEFT JOIN sustainable_actions sa
-          ON sa.action_name = et.action_type
+          ON sa.action_id = et.action_id
         WHERE et.business_id = $1
         ORDER BY et.created_at DESC
         LIMIT 20
@@ -75,7 +75,7 @@ const EcoTrustService = {
           SUM(et.points_earned)::int      AS total_points,
           COUNT(*)::int                   AS count
         FROM ecotrust_transactions et
-        LEFT JOIN sustainable_actions sa ON sa.action_name = et.action_type
+        LEFT JOIN sustainable_actions sa ON sa.action_id = et.action_id
         WHERE et.business_id = $1
           AND (et.verification_status IN ('verified', 'pending') OR et.verification_status IS NULL)
         GROUP BY sa.action_category
@@ -93,6 +93,7 @@ const EcoTrustService = {
         transactions,
         breakdown,
         levels: TRUST_LEVELS,
+        actions: [],
       });
     } catch (err) {
       console.error('[EcoTrustService.getScore]', err);

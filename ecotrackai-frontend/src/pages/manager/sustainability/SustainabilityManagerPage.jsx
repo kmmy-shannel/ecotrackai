@@ -3,25 +3,35 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import useSustainabilityApprovals from '../../../hooks/useSustainabilityApprovals';
 import SustainabilityManagerLayout from '../../../components/manager/sustainability/SustainabilityManagerLayout';
-import SustainabilityDashboardView from './SustainabilityDashboardView';
-import SustainabilityHistoryView   from './SustainabilityHistoryView';
+import SustainabilityDashboardView  from './SustainabilityDashboardView';
+import SustainabilityHistoryView    from './SustainabilityHistoryView';
 
 const SustainabilityManagerPage = () => {
   const { user }       = useAuth();
   const [searchParams] = useSearchParams();
 
-  const activeTab   = searchParams.get('tab') || 'pending';
-  const currentPage =
-    activeTab === 'history' ? 'VERIFICATION HISTORY'  :
-    activeTab === 'audit'   ? 'ECOTRUST AUDIT'         :
-    activeTab === 'trends'  ? 'CARBON TRENDS'          :
-                              'SUSTAINABILITY DASHBOARD';
+  const activeTab = searchParams.get('tab') || 'pending';
 
-  // ── New hook API ──────────────────────────────────────────
+  const PAGE_TITLES = {
+    pending: 'SUSTAINABILITY DASHBOARD',
+    history: 'VERIFICATION HISTORY',
+    trends:  'CARBON TRENDS',
+    audit:   'ECOTRUST AUDIT',
+  };
+  const currentPage = PAGE_TITLES[activeTab] || 'SUSTAINABILITY DASHBOARD';
+
+  // ── Single hook supplies everything ─────────────────────────────────────────
   const {
     historyRecords,
     loading,
     error,
+    trendData,
+    trendLoading,
+    auditRecords,
+    auditLoading,
+    loadTrendData,
+    loadAuditRecords,
+    flagTransaction,
   } = useSustainabilityApprovals();
 
   return (
@@ -33,33 +43,41 @@ const SustainabilityManagerPage = () => {
         </div>
       )}
 
-      {activeTab === 'pending' || activeTab === '' ? (
-        // Dashboard view uses the hook internally — no props needed
+      {/* ── Pending verifications ─────────────────────────────────────────── */}
+      {(activeTab === 'pending' || activeTab === '') && (
+        // SustainabilityDashboardView uses its own internal hook call — no props needed
         <SustainabilityDashboardView />
+      )}
 
-      ) : activeTab === 'history' ? (
+      {/* ── Verification history ──────────────────────────────────────────── */}
+      {activeTab === 'history' && (
         <SustainabilityHistoryView
+          activeTab="history"
           history={historyRecords}
           loading={loading}
         />
+      )}
 
-      ) : activeTab === 'audit' ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800">EcoTrust Audit</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            View all EcoTrust transactions and flag suspicious entries for Super Admin review.
-          </p>
-        </div>
+      {/* ── Carbon trends chart ───────────────────────────────────────────── */}
+      {activeTab === 'trends' && (
+        <SustainabilityHistoryView
+          activeTab="trends"
+          trendData={trendData}
+          trendLoading={trendLoading}
+          onLoadTrend={loadTrendData}
+        />
+      )}
 
-      ) : activeTab === 'trends' ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800">Carbon Trends</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Compare estimated vs actual carbon metrics across completed deliveries.
-          </p>
-        </div>
-
-      ) : null}
+      {/* ── EcoTrust audit ────────────────────────────────────────────────── */}
+      {activeTab === 'audit' && (
+        <SustainabilityHistoryView
+          activeTab="audit"
+          auditRecords={auditRecords}
+          auditLoading={auditLoading}
+          onLoadAudit={loadAuditRecords}
+          onFlagTransaction={flagTransaction}
+        />
+      )}
 
     </SustainabilityManagerLayout>
   );

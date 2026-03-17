@@ -1,26 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Eye, EyeOff, Search, X, TrendingUp, Leaf, Users, Award,
-  ChevronRight, Shield, BarChart2, Truck, ArrowRight,
+  ChevronRight, Shield, BarChart2, Truck, RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getDashboardRoute } from '../utils/rolePermissions';
+import api from '../services/api';
 
-/* ─────────────────────── data ─────────────────────── */
-const MOCK_BUSINESSES = [
-  { id: 1,  name: 'Dela Cruz Fruits Trading', type: 'Distributor', score: 310,  actions: { spoilage: 7,  routes: 5,  carbon: 3,  delivery: 14  } },
-  { id: 2,  name: 'Santos Fresh Produce',     type: 'Retailer',    score: 890,  actions: { spoilage: 22, routes: 18, carbon: 12, delivery: 40  } },
-  { id: 3,  name: 'Reyes Agri Ventures',      type: 'Distributor', score: 1240, actions: { spoilage: 30, routes: 25, carbon: 18, delivery: 60  } },
-  { id: 4,  name: 'Lim Family Farms',         type: 'Farmer',      score: 1580, actions: { spoilage: 38, routes: 31, carbon: 24, delivery: 80  } },
-  { id: 5,  name: 'Dagupan Fresh Co.',        type: 'Retailer',    score: 75,   actions: { spoilage: 1,  routes: 1,  carbon: 0,  delivery: 3   } },
-  { id: 6,  name: 'Pangasinan Organics',      type: 'Distributor', score: 2100, actions: { spoilage: 50, routes: 42, carbon: 30, delivery: 110 } },
-  { id: 7,  name: 'Cruz & Sons Trading',      type: 'Distributor', score: 450,  actions: { spoilage: 11, routes: 9,  carbon: 6,  delivery: 22  } },
-  { id: 8,  name: 'BenAgri Solutions',        type: 'Farmer',      score: 640,  actions: { spoilage: 16, routes: 12, carbon: 8,  delivery: 30  } },
-  { id: 9,  name: 'GreenRoute PH',            type: 'Distributor', score: 1780, actions: { spoilage: 44, routes: 36, carbon: 26, delivery: 92  } },
-  { id: 10, name: 'EcoHarvest Fruits',        type: 'Retailer',    score: 980,  actions: { spoilage: 24, routes: 20, carbon: 14, delivery: 45  } },
-];
-
+// ─── EcoTrust level helpers ───────────────────────────────────────────────────
 const LEVELS     = ['Newcomer', 'Eco Warrior', 'Eco Champion', 'Eco Leader'];
 const THRESHOLDS = [0, 130, 500, 1000];
 const NEXT_AT    = [130, 500, 1000, null];
@@ -47,29 +35,30 @@ function levelOf(s) {
   return 'Newcomer';
 }
 function progressTo(s) {
-  const i = LEVELS.indexOf(levelOf(s));
+  const i    = LEVELS.indexOf(levelOf(s));
   const next = NEXT_AT[i];
   if (!next) return 100;
   return Math.round(((s - THRESHOLDS[i]) / (next - THRESHOLDS[i])) * 100);
 }
-function ini(n) { return n.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase(); }
+function ini(n) {
+  return (n || '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
 
-const SORTED = [...MOCK_BUSINESSES].sort((a, b) => b.score - a.score).map((b, i) => ({ ...b, rank: i + 1 }));
-
-/* ═══════════════ Detail Modal ═══════════════ */
+// ─── Detail Modal (unchanged from original) ───────────────────────────────────
 const DetailModal = ({ biz, onClose }) => {
   if (!biz) return null;
   const lv   = levelOf(biz.score);
   const meta = LEVEL_META[lv];
-  const av   = AVATARS[biz.id % 5];
+  const av   = AVATARS[(biz.business_id || biz.id || 0) % 5];
   const prog = progressTo(biz.score);
   const next = NEXT_AT[LEVELS.indexOf(lv)];
 
+  // Map API field names → display rows
   const rows = [
-    { label: 'Spoilage prevention', n: biz.actions.spoilage,  pts: biz.actions.spoilage  * 25, Icon: Shield     },
-    { label: 'Optimised routes',    n: biz.actions.routes,    pts: biz.actions.routes    * 30, Icon: TrendingUp },
-    { label: 'Carbon verified',     n: biz.actions.carbon,    pts: biz.actions.carbon    * 20, Icon: BarChart2  },
-    { label: 'On-time deliveries',  n: biz.actions.delivery,  pts: biz.actions.delivery  * 10, Icon: Truck      },
+    { label: 'Spoilage prevention', n: biz.spoilage_actions  || biz.actions?.spoilage  || 0, pts: (biz.spoilage_actions  || biz.actions?.spoilage  || 0) * 25, Icon: Shield     },
+    { label: 'Optimised routes',    n: biz.route_actions     || biz.actions?.routes    || 0, pts: (biz.route_actions     || biz.actions?.routes    || 0) * 30, Icon: TrendingUp },
+    { label: 'Carbon verified',     n: biz.carbon_actions    || biz.actions?.carbon    || 0, pts: (biz.carbon_actions    || biz.actions?.carbon    || 0) * 20, Icon: BarChart2  },
+    { label: 'On-time deliveries',  n: biz.delivery_actions  || biz.actions?.delivery  || 0, pts: (biz.delivery_actions  || biz.actions?.delivery  || 0) * 10, Icon: Truck      },
   ];
 
   return (
@@ -80,16 +69,17 @@ const DetailModal = ({ biz, onClose }) => {
     >
       <div style={{ background:'#fff', borderRadius:20, padding:'28px', width:400, maxWidth:'95vw',
                     maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.12)' }}>
-        {/* header */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
           <div style={{ display:'flex', gap:12, alignItems:'center' }}>
             <div style={{ width:46, height:46, borderRadius:12, background:av.bg, color:av.fg,
                           display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700 }}>
-              {ini(biz.name)}
+              {ini(biz.business_name || biz.name)}
             </div>
             <div>
-              <div style={{ fontSize:16, fontWeight:700, color:'#111827' }}>{biz.name}</div>
-              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{biz.type} · Rank #{biz.rank}</div>
+              <div style={{ fontSize:16, fontWeight:700, color:'#111827' }}>{biz.business_name || biz.name}</div>
+              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>
+                {biz.business_type || biz.type} · Rank #{biz.rank}
+              </div>
             </div>
           </div>
           <button onClick={onClose} style={{ width:32, height:32, borderRadius:8, border:'1px solid #E5E7EB',
@@ -98,19 +88,17 @@ const DetailModal = ({ biz, onClose }) => {
           </button>
         </div>
 
-        {/* level badge */}
         <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 12px',
           borderRadius:100, background:meta.pill, color:meta.pillText, fontSize:12, fontWeight:600, marginBottom:18 }}>
           <Leaf size={12} />{lv}
         </span>
 
-        {/* stats */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:16 }}>
           {[
-            { k:'EcoScore',         v: biz.score.toLocaleString() },
+            { k:'EcoScore',         v: Number(biz.score).toLocaleString() },
             { k:'Platform rank',    v: `#${biz.rank}` },
-            { k:'Spoilage actions', v: biz.actions.spoilage },
-            { k:'Deliveries',       v: biz.actions.delivery },
+            { k:'Spoilage actions', v: biz.spoilage_actions || biz.actions?.spoilage || 0 },
+            { k:'Deliveries',       v: biz.delivery_actions || biz.actions?.delivery || 0 },
           ].map(s => (
             <div key={s.k} style={{ background:'#F9FAFB', border:'1px solid #F3F4F6', borderRadius:12, padding:'12px 14px' }}>
               <div style={{ fontSize:22, fontWeight:800, color:'#111827' }}>{s.v}</div>
@@ -119,7 +107,6 @@ const DetailModal = ({ biz, onClose }) => {
           ))}
         </div>
 
-        {/* progress */}
         <div style={{ marginBottom:18 }}>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#6B7280', marginBottom:8 }}>
             <span>Progress to {next ? LEVELS[LEVELS.indexOf(lv)+1] : 'Max level'}</span>
@@ -133,7 +120,6 @@ const DetailModal = ({ biz, onClose }) => {
           </div>
         </div>
 
-        {/* breakdown */}
         <div style={{ borderTop:'1px solid #F3F4F6', paddingTop:16 }}>
           <div style={{ fontSize:11, fontWeight:700, color:'#9CA3AF', letterSpacing:'0.7px', textTransform:'uppercase', marginBottom:10 }}>
             Points breakdown
@@ -154,21 +140,69 @@ const DetailModal = ({ biz, onClose }) => {
   );
 };
 
-/* ═══════════════ Main Page ═══════════════ */
+// ─── Main LoginPage ───────────────────────────────────────────────────────────
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [showPass, setShowPass] = useState(false);
-  const [logoErr,  setLogoErr]  = useState(false);
-  const [search,   setSearch]   = useState('');
-  const [filter,   setFilter]   = useState('all');
-  const [selected, setSelected] = useState(null);
+  const [formData,   setFormData]   = useState({ email: '', password: '' });
+  const [error,      setError]      = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [showPass,   setShowPass]   = useState(false);
+  const [logoErr,    setLogoErr]    = useState(false);
+  const [search,     setSearch]     = useState('');
+  const [filter,     setFilter]     = useState('all');
+  const [selected,   setSelected]   = useState(null);
 
-  /* original login logic — untouched */
+  // ── Real leaderboard data ─────────────────────────────────
+  const [businesses,   setBusinesses]   = useState([]);
+  const [bizLoading,   setBizLoading]   = useState(true);
+  const [bizError,     setBizError]     = useState('');
+
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      setBizLoading(true);
+      setBizError('');
+      try {
+        // Public endpoint — no auth token needed
+        const res = await api.get('/ecotrust/public-leaderboard?limit=20');
+        const data = res.data?.data || res.data || [];
+        // Normalise: API returns business_name, score — map to what the UI expects
+        const normalised = (Array.isArray(data) ? data : []).map((b, i) => ({
+          ...b,
+          id:    b.business_id || i,
+          name:  b.business_name,
+          type:  b.business_type || 'Business',
+          score: parseInt(b.score) || 0,
+          rank:  b.rank || i + 1,
+        }));
+        setBusinesses(normalised);
+      } catch (e) {
+        console.error('Failed to load public leaderboard:', e);
+        setBizError('Could not load leaderboard data.');
+        setBusinesses([]);
+      } finally {
+        setBizLoading(false);
+      }
+    };
+    fetchLeaderboard();
+  }, []);
+
+  // Sort by score descending (API already does this, but ensure it)
+  const SORTED = [...businesses].sort((a, b) => b.score - a.score).map((b, i) => ({ ...b, rank: i + 1 }));
+  const maxScore = SORTED[0]?.score || 1;
+
+  const visible = SORTED.filter(b => {
+    const q = search.toLowerCase();
+    return (!q || (b.name || '').toLowerCase().includes(q) || (b.type || '').toLowerCase().includes(q))
+        && (filter === 'all' || levelOf(b.score) === filter);
+  });
+
+  const totalPts   = businesses.reduce((s, b) => s + (parseInt(b.score) || 0), 0);
+  const ecoLeaders = businesses.filter(b => levelOf(b.score) === 'Eco Leader').length;
+  const FILTERS    = ['all', 'Eco Leader', 'Eco Champion', 'Eco Warrior', 'Newcomer'];
+
+  // ── Login form ────────────────────────────────────────────
   const handleChange = e => {
     const { name, value } = e.target;
     setFormData(p => ({ ...p, [name]: value }));
@@ -188,17 +222,6 @@ const LoginPage = () => {
       setLoading(false);
     }
   };
-
-  const visible = SORTED.filter(b => {
-    const q = search.toLowerCase();
-    return (!q || b.name.toLowerCase().includes(q) || b.type.toLowerCase().includes(q))
-        && (filter === 'all' || levelOf(b.score) === filter);
-  });
-
-  const totalPts   = MOCK_BUSINESSES.reduce((s, b) => s + b.score, 0);
-  const ecoLeaders = MOCK_BUSINESSES.filter(b => levelOf(b.score) === 'Eco Leader').length;
-  const maxScore   = SORTED[0]?.score || 1;
-  const FILTERS    = ['all', 'Eco Leader', 'Eco Champion', 'Eco Warrior', 'Newcomer'];
 
   return (
     <div style={{ minHeight:'100vh', background:'#F8FAF9', fontFamily:"'Inter','Helvetica Neue',sans-serif" }}>
@@ -229,7 +252,6 @@ const LoginPage = () => {
           }
           <span style={{ fontSize:15, fontWeight:700, color:'#111827', letterSpacing:'-0.2px' }}>EcoTrackAI</span>
         </div>
-
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ width:7, height:7, borderRadius:'50%', background:'#10B981',
                          boxShadow:'0 0 0 3px rgba(16,185,129,0.2)', display:'inline-block' }} />
@@ -261,12 +283,12 @@ const LoginPage = () => {
             EcoTrackAI tracks spoilage prevention, optimised deliveries, and verified carbon records — turning real operational decisions into an environmental trust score.
           </p>
 
-          {/* summary stats */}
+          {/* summary stats — now from real data */}
           <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
             {[
-              { Icon:Users, val: MOCK_BUSINESSES.length,                                                    lbl:'Businesses on platform' },
-              { Icon:Award, val: totalPts >= 1000 ? `${(totalPts/1000).toFixed(1)}k` : totalPts,            lbl:'Total EcoTrust pts'     },
-              { Icon:Leaf,  val: ecoLeaders,                                                                lbl:'Eco Leader businesses'  },
+              { Icon:Users, val: bizLoading ? '…' : businesses.length,                                         lbl:'Businesses on platform' },
+              { Icon:Award, val: bizLoading ? '…' : totalPts >= 1000 ? `${(totalPts/1000).toFixed(1)}k` : totalPts, lbl:'Total EcoTrust pts' },
+              { Icon:Leaf,  val: bizLoading ? '…' : ecoLeaders,                                                lbl:'Eco Leader businesses'  },
             ].map(c => (
               <div key={c.lbl} style={{ display:'flex', alignItems:'center', gap:10, background:'#fff',
                 border:'1px solid #E5E7EB', borderRadius:12, padding:'12px 16px', minWidth:160 }}>
@@ -283,7 +305,7 @@ const LoginPage = () => {
           </div>
         </div>
 
-        {/* right — login card */}
+        {/* right — login card (unchanged) */}
         <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:20,
                       padding:'32px', boxShadow:'0 2px 20px rgba(0,0,0,0.06)' }}>
           <div style={{ marginBottom:24 }}>
@@ -360,7 +382,6 @@ const LoginPage = () => {
       {/* ══ Leaderboard section ══ */}
       <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 24px 80px' }}>
 
-        {/* section header */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
                       borderTop:'1px solid #E5E7EB', paddingTop:40, marginBottom:28 }}>
           <div>
@@ -395,11 +416,11 @@ const LoginPage = () => {
               <button key={f} className={filter===f ? '' : 'filter-chip'}
                 onClick={() => setFilter(f)}
                 style={{
-                  height: 36, padding:'0 14px', borderRadius:100,
+                  height:36, padding:'0 14px', borderRadius:100,
                   border: filter===f ? '1.5px solid #059669' : '1.5px solid #E5E7EB',
                   background: filter===f ? '#059669' : '#fff',
                   color: filter===f ? '#fff' : '#6B7280',
-                  fontSize: 12, fontWeight: 600, cursor:'pointer',
+                  fontSize:12, fontWeight:600, cursor:'pointer',
                   fontFamily:'inherit', transition:'all 0.12s',
                 }}>
                 {f === 'all' ? 'All levels' : f}
@@ -408,96 +429,107 @@ const LoginPage = () => {
           </div>
         </div>
 
+        {/* Loading / Error states */}
+        {bizLoading && (
+          <div style={{ textAlign:'center', padding:'3rem', color:'#9CA3AF' }}>
+            <RefreshCw size={20} style={{ animation:'spin 0.8s linear infinite', margin:'0 auto 8px', display:'block' }} />
+            <p style={{ fontSize:13 }}>Loading leaderboard…</p>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+        {!bizLoading && bizError && (
+          <div style={{ textAlign:'center', padding:'2rem', color:'#DC2626', fontSize:13 }}>
+            {bizError}
+          </div>
+        )}
+
         {/* table header */}
-        <div style={{ display:'grid', gridTemplateColumns:'44px 1fr 140px 120px 130px 32px',
-                      gap:12, padding:'0 16px', marginBottom:8 }}>
-          {['#', 'Business', 'Type', 'Score', 'Level', ''].map((h, i) => (
-            <div key={i} style={{ fontSize:11, fontWeight:700, color:'#9CA3AF',
-                                  letterSpacing:'0.5px', textTransform:'uppercase',
-                                  textAlign: i >= 3 ? 'right' : 'left' }}>
-              {h}
+        {!bizLoading && !bizError && (
+          <>
+            <div style={{ display:'grid', gridTemplateColumns:'44px 1fr 140px 120px 130px 32px',
+                          gap:12, padding:'0 16px', marginBottom:8 }}>
+              {['#', 'Business', 'Type', 'Score', 'Level', ''].map((h, i) => (
+                <div key={i} style={{ fontSize:11, fontWeight:700, color:'#9CA3AF',
+                                      letterSpacing:'0.5px', textTransform:'uppercase',
+                                      textAlign: i >= 3 ? 'right' : 'left' }}>
+                  {h}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* rows */}
-        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-          {visible.length === 0 && (
-            <div style={{ textAlign:'center', padding:'3rem', color:'#D1D5DB', fontSize:14 }}>
-              No businesses match your search.
+            {/* rows */}
+            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              {visible.length === 0 && (
+                <div style={{ textAlign:'center', padding:'3rem', color:'#D1D5DB', fontSize:14 }}>
+                  {businesses.length === 0 ? 'No businesses registered yet.' : 'No businesses match your search.'}
+                </div>
+              )}
+              {visible.map(b => {
+                const lv   = levelOf(b.score);
+                const meta = LEVEL_META[lv];
+                const av   = AVATARS[(b.id || 0) % 5];
+                const bar  = Math.round((b.score / maxScore) * 100);
+                const rs   = b.rank === 1
+                  ? { bg:'#FFFBEB', numBg:'#FEF3C7', numFg:'#92400E', numBorder:'#FDE68A' }
+                  : b.rank === 2
+                  ? { bg:'#FAFAFA', numBg:'#F3F4F6', numFg:'#374151', numBorder:'#E5E7EB' }
+                  : b.rank === 3
+                  ? { bg:'#FFFAF5', numBg:'#FEF3C7', numFg:'#9A3412', numBorder:'#FED7AA' }
+                  : { bg:'#fff',    numBg:'transparent', numFg:'#9CA3AF', numBorder:'transparent' };
+
+                return (
+                  <div key={b.id} className="biz-row" onClick={() => setSelected(b)}
+                    style={{ display:'grid', gridTemplateColumns:'44px 1fr 140px 120px 130px 32px',
+                      gap:12, alignItems:'center', background:rs.bg, border:'1px solid #F3F4F6',
+                      borderRadius:12, padding:'12px 16px', cursor:'pointer',
+                      transition:'background 0.12s, border-color 0.12s' }}>
+
+                    <div style={{ width:26, height:26, borderRadius:'50%', background:rs.numBg,
+                                  border:`1px solid ${rs.numBorder}`, display:'flex', alignItems:'center',
+                                  justifyContent:'center', fontSize:12, fontWeight:700, color:rs.numFg }}>
+                      {b.rank}
+                    </div>
+
+                    <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+                      <div style={{ width:36, height:36, borderRadius:10, background:av.bg, color:av.fg,
+                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                    fontSize:12, fontWeight:700, flexShrink:0 }}>
+                        {ini(b.name)}
+                      </div>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:14, fontWeight:600, color:'#111827',
+                                      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {b.name}
+                        </div>
+                        <div style={{ height:3, background:'#F3F4F6', borderRadius:2, overflow:'hidden', marginTop:5, maxWidth:200 }}>
+                          <div style={{ height:'100%', width:`${bar}%`, background:meta.bar, borderRadius:2 }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize:13, color:'#6B7280' }}>{b.type}</div>
+
+                    <div style={{ fontSize:15, fontWeight:800, color:'#111827', textAlign:'right' }}>
+                      {Number(b.score).toLocaleString()}
+                    </div>
+
+                    <div style={{ textAlign:'right' }}>
+                      <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px',
+                        borderRadius:100, background:meta.pill, color:meta.pillText, fontSize:11, fontWeight:600,
+                        border:`1px solid ${meta.border}` }}>
+                        {lv}
+                      </span>
+                    </div>
+
+                    <div style={{ display:'flex', justifyContent:'center' }}>
+                      <ChevronRight size={14} color="#D1D5DB" />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-          {visible.map(b => {
-            const lv   = levelOf(b.score);
-            const meta = LEVEL_META[lv];
-            const av   = AVATARS[b.id % 5];
-            const bar  = Math.round((b.score / maxScore) * 100);
-            const rs   = b.rank === 1
-              ? { bg:'#FFFBEB', numBg:'#FEF3C7', numFg:'#92400E', numBorder:'#FDE68A' }
-              : b.rank === 2
-              ? { bg:'#FAFAFA', numBg:'#F3F4F6', numFg:'#374151', numBorder:'#E5E7EB' }
-              : b.rank === 3
-              ? { bg:'#FFFAF5', numBg:'#FEF3C7', numFg:'#9A3412', numBorder:'#FED7AA' }
-              : { bg:'#fff',    numBg:'transparent', numFg:'#9CA3AF', numBorder:'transparent' };
-
-            return (
-              <div key={b.id} className="biz-row" onClick={() => setSelected(b)}
-                style={{ display:'grid', gridTemplateColumns:'44px 1fr 140px 120px 130px 32px',
-                  gap:12, alignItems:'center', background:rs.bg, border:'1px solid #F3F4F6',
-                  borderRadius:12, padding:'12px 16px', cursor:'pointer',
-                  transition:'background 0.12s, border-color 0.12s' }}>
-
-                {/* rank */}
-                <div style={{ width:26, height:26, borderRadius:'50%', background:rs.numBg,
-                              border:`1px solid ${rs.numBorder}`, display:'flex', alignItems:'center',
-                              justifyContent:'center', fontSize:12, fontWeight:700, color:rs.numFg }}>
-                  {b.rank}
-                </div>
-
-                {/* name */}
-                <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:av.bg, color:av.fg,
-                                display:'flex', alignItems:'center', justifyContent:'center',
-                                fontSize:12, fontWeight:700, flexShrink:0 }}>
-                    {ini(b.name)}
-                  </div>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:14, fontWeight:600, color:'#111827',
-                                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                      {b.name}
-                    </div>
-                    {/* score bar under name */}
-                    <div style={{ height:3, background:'#F3F4F6', borderRadius:2, overflow:'hidden', marginTop:5, maxWidth:200 }}>
-                      <div style={{ height:'100%', width:`${bar}%`, background:meta.bar, borderRadius:2 }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* type */}
-                <div style={{ fontSize:13, color:'#6B7280' }}>{b.type}</div>
-
-                {/* score */}
-                <div style={{ fontSize:15, fontWeight:800, color:'#111827', textAlign:'right' }}>
-                  {b.score.toLocaleString()}
-                </div>
-
-                {/* level */}
-                <div style={{ textAlign:'right' }}>
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px',
-                    borderRadius:100, background:meta.pill, color:meta.pillText, fontSize:11, fontWeight:600,
-                    border:`1px solid ${meta.border}` }}>
-                    {lv}
-                  </span>
-                </div>
-
-                {/* arrow */}
-                <div style={{ display:'flex', justifyContent:'center' }}>
-                  <ChevronRight size={14} color="#D1D5DB" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          </>
+        )}
 
         {/* footer note */}
         <div style={{ marginTop:32, padding:'16px 20px', background:'#ECFDF5',

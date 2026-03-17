@@ -1,16 +1,15 @@
 // ============================================================
 // FILE: src/components/superadmin/BusinessRegistry.jsx
 //
-// FIXES:
-//   1. Modal shows real backend error messages via `createError`
-//      prop passed from SuperAdminDashboard (from useSuperAdmin)
-//   2. Client-side validation shows specific missing field message
-//   3. Error clears when modal opens or any field changes
+// CHANGE: Removed "Create Business" button and modal entirely.
+//   Reason: Businesses register via the Register page on the login screen.
+//   The Super Admin approves pending registrations from the banner above.
+//   All other functionality unchanged.
 // ============================================================
 
 import React, { useState } from 'react';
 import {
-  Plus, Pause, Play, CheckCircle, XCircle,
+  Pause, Play, CheckCircle, XCircle,
   AlertCircle, Building2, Users
 } from 'lucide-react';
 
@@ -19,29 +18,13 @@ const BusinessRegistry = ({
   pendingRegs   = [],
   onSuspend,
   onReactivate,
-  onCreate,
   onApprove,
   onReject,
-  createError   = '',   // error string from useSuperAdmin passed by parent
 }) => {
-  const [filterStatus,    setFilterStatus]    = useState('all');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [submitting,      setSubmitting]      = useState(false);
-  const [modalError,      setModalError]      = useState('');
-  const [rejectingId,     setRejectingId]     = useState(null);
-  const [rejectReason,    setRejectReason]    = useState('');
-
-  const [formData, setFormData] = useState({
-    businessName:       '',
-    businessType:       '',
-    registrationNumber: '',
-    contactEmail:       '',
-    contactPhone:       '',
-    address:            '',
-  });
-
-  // Show local validation error first, fall back to backend error
-  const displayError = modalError || createError;
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [submitting,   setSubmitting]   = useState(false);
+  const [rejectingId,  setRejectingId]  = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const allBusinesses = [
     ...pendingRegs.map(b => ({ ...b, status: 'pending' })),
@@ -51,55 +34,6 @@ const BusinessRegistry = ({
   const filtered = filterStatus === 'all'
     ? allBusinesses
     : allBusinesses.filter(b => b.status === filterStatus);
-
-  const resetForm = () => {
-    setFormData({
-      businessName: '', businessType: '', registrationNumber: '',
-      contactEmail: '', contactPhone: '', address: '',
-    });
-    setModalError('');
-  };
-
-  const openModal  = () => { resetForm(); setShowCreateModal(true); };
-  const closeModal = () => { setShowCreateModal(false); resetForm(); };
-
-  const handleFieldChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setModalError(''); // clear on any input change
-  };
-
-  const handleCreate = async () => {
-    setModalError('');
-
-    if (!formData.businessName.trim()) {
-      setModalError('Business name is required.');
-      return;
-    }
-    if (!formData.businessType) {
-      setModalError('Please select a business type.');
-      return;
-    }
-    if (!formData.registrationNumber.trim()) {
-      setModalError('Registration number is required.');
-      return;
-    }
-
-    setSubmitting(true);
-    const ok = await onCreate?.({
-      businessName:       formData.businessName.trim(),
-      businessType:       formData.businessType,
-      registrationNumber: formData.registrationNumber.trim(),
-      contactEmail:       formData.contactEmail.trim()  || undefined,
-      contactPhone:       formData.contactPhone.trim()  || undefined,
-      address:            formData.address.trim()       || undefined,
-    });
-    setSubmitting(false);
-
-    if (ok) {
-      closeModal();
-    }
-    // if !ok → createError from useSuperAdmin will appear via displayError
-  };
 
   const handleReject = async (id) => {
     if (!rejectReason || rejectReason.length < 10) return;
@@ -208,10 +142,9 @@ const BusinessRegistry = ({
             </select>
             <span className="text-xs text-gray-400 font-medium">{filtered.length} shown</span>
           </div>
-          <button onClick={openModal}
-            className="flex items-center gap-2 px-4 py-2 bg-green-800 text-white rounded-xl text-sm font-semibold hover:bg-green-900 transition-colors shadow-sm">
-            <Plus size={15} /> Create Business
-          </button>
+          {/* NOTE: Create Business button removed.
+              Businesses register via the Register page on the login screen.
+              Super Admin approves them from the Pending Registrations banner above. */}
         </div>
 
         <div className="overflow-x-auto">
@@ -300,125 +233,6 @@ const BusinessRegistry = ({
           </table>
         </div>
       </div>
-
-      {/* ── Create Business Modal ─────────────────────────── */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">Create New Business</h2>
-                <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
-                  <AlertCircle size={11} />
-                  Business is active immediately. Admin registers separately via onboarding.
-                </p>
-              </div>
-              <button onClick={closeModal}
-                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-xl leading-none">
-                ×
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-
-              {/* Error banner — shows both client validation and backend errors */}
-              {displayError && (
-                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  <XCircle size={16} className="mt-0.5 flex-shrink-0 text-red-500" />
-                  <span>{displayError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                  Business Name <span className="text-red-500">*</span>
-                </label>
-                <input type="text" placeholder="e.g. Dela Cruz Fruits Trading"
-                  value={formData.businessName}
-                  onChange={e => handleFieldChange('businessName', e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                    Business Type <span className="text-red-500">*</span>
-                  </label>
-                  <select value={formData.businessType}
-                    onChange={e => handleFieldChange('businessType', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
-                    <option value="">Select type...</option>
-                    <option value="distributor">Distributor</option>
-                    <option value="production">Production</option>
-                    <option value="retail">Retail</option>
-                    <option value="transport">Transport</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                    Registration No. <span className="text-red-500">*</span>
-                  </label>
-                  <input type="text" placeholder="e.g. DTI-2024-00123"
-                    value={formData.registrationNumber}
-                    onChange={e => handleFieldChange('registrationNumber', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Contact Email</label>
-                  <input type="email" placeholder="owner@business.com"
-                    value={formData.contactEmail}
-                    onChange={e => handleFieldChange('contactEmail', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Contact Phone</label>
-                  <input type="tel" placeholder="+63 9XX XXX XXXX"
-                    value={formData.contactPhone}
-                    onChange={e => handleFieldChange('contactPhone', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Address</label>
-                <input type="text" placeholder="e.g. 123 Divisoria, Manila"
-                  value={formData.address}
-                  onChange={e => handleFieldChange('address', e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <p className="text-xs text-blue-700 font-semibold mb-1">What happens after creation:</p>
-                <ol className="text-xs text-blue-600 space-y-1 list-decimal pl-4">
-                  <li>Business profile is created with EcoTrust score at 0 (Newcomer)</li>
-                  <li>The business owner registers their admin account via the Register page using this business's registration number</li>
-                  <li>Once registered, approve their account from the Pending Registrations section above</li>
-                </ol>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button onClick={closeModal}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleCreate}
-                  disabled={submitting || !formData.businessName || !formData.businessType || !formData.registrationNumber}
-                  className="flex-1 px-4 py-2.5 bg-green-800 text-white rounded-xl font-semibold hover:bg-green-900 transition-colors disabled:opacity-50 text-sm shadow-sm">
-                  {submitting ? 'Creating...' : 'Create Business'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

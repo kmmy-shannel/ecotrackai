@@ -106,7 +106,10 @@ router.get('/health', SuperAdminController.getSystemHealth);
  * ===== AUDIT LOG ROUTES =====
  */
 router.get('/audit-logs', SuperAdminController.getAuditLogs);
-
+// GET  /api/superadmin/flagged-transactions
+router.get('/flagged-transactions', SuperAdminController.getFlaggedTransactions);
+// PATCH /api/superadmin/flagged-transactions/:transactionId/dismiss
+router.patch('/flagged-transactions/:transactionId/dismiss', SuperAdminController.dismissFlaggedTransaction);
 /**
  * ===== ANALYTICS ROUTES =====
  */

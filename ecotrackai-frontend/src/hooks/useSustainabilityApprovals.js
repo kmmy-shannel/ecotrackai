@@ -2,10 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '../services/api';
 
 const useSustainabilityApprovals = () => {
-  const [pendingRecords, setPendingRecords] = useState([]);
-  const [historyRecords, setHistoryRecords] = useState([]);
-  const [loading, setLoading]               = useState(false);
-  const [error, setError]                   = useState('');
+  const [pendingRecords,  setPendingRecords]  = useState([]);
+  const [historyRecords,  setHistoryRecords]  = useState([]);
+  const [trendData,       setTrendData]       = useState([]);
+  const [auditRecords,    setAuditRecords]    = useState([]);
+  const [loading,         setLoading]         = useState(false);
+  const [trendLoading,    setTrendLoading]    = useState(false);
+  const [auditLoading,    setAuditLoading]    = useState(false);
+  const [error,           setError]           = useState('');
 
   const loadPending = useCallback(async () => {
     setLoading(true);
@@ -29,6 +33,68 @@ const useSustainabilityApprovals = () => {
     }
   }, []);
 
+  const loadTrendData = useCallback(async () => {
+    setTrendLoading(true);
+    try {
+      const res = await api.get('/carbon/all');
+      const allRecords = res.data?.data?.records || [];
+      const trend = allRecords
+        .filter(r => r.estimated_fuel_liters != null || r.total_carbon_kg != null)
+        .map(r => {
+          const estFuel   = parseFloat(r.estimated_fuel_liters) || 0;
+          const actFuel   = parseFloat(r.actual_fuel_liters)    || 0;
+          const estCarbon = parseFloat((estFuel * 2.68).toFixed(2));
+          const actCarbon = parseFloat(r.total_carbon_kg)       || parseFloat((actFuel * 2.68).toFixed(2));
+          return {
+            record_id:        r.record_id,
+            route_name:       r.route_name || `Delivery #${r.route_id}`,
+            vehicle_type:     r.vehicle_type,
+            date:             r.created_at,
+            estimated_carbon: estCarbon,
+            actual_carbon:    actCarbon,
+            estimated_fuel:   estFuel,
+            actual_fuel:      actFuel,
+            actual_distance:  parseFloat(r.actual_distance_km) || 0,
+            status:           r.verification_status,
+            variance:         parseFloat((actCarbon - estCarbon).toFixed(2)),
+          };
+        })
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      setTrendData(trend);
+    } catch (err) {
+      console.error('Failed to load carbon trend', err);
+    } finally {
+      setTrendLoading(false);
+    }
+  }, []);
+
+  // ── EcoTrust audit ───────────────────────────────────────────────────────────
+  const loadAuditRecords = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      console.log('[useSustainabilityApprovals] calling GET /ecotrust/transactions');
+      const res = await api.get('/ecotrust/transactions');
+      console.log('[useSustainabilityApprovals] audit raw response:', res.data);
+
+      // Handle both response shapes:
+      // { data: [...] }  or  { data: { data: [...] } }  or  { transactions: [...] }
+      const records =
+        Array.isArray(res.data?.data)         ? res.data.data         :
+        Array.isArray(res.data?.data?.data)   ? res.data.data.data    :
+        Array.isArray(res.data?.transactions) ? res.data.transactions :
+        Array.isArray(res.data)               ? res.data              :
+        [];
+
+      console.log('[useSustainabilityApprovals] audit records parsed:', records.length, 'rows');
+      setAuditRecords(records);
+    } catch (err) {
+      console.error('[useSustainabilityApprovals] audit fetch failed:', err?.response?.status, err?.response?.data);
+      setAuditRecords([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
+
   const verifyRecord = useCallback(async (recordId, decision, notes = '') => {
     try {
       const res = await api.patch(`/carbon/${recordId}/verify`, { decision, notes });
@@ -36,9 +102,25 @@ const useSustainabilityApprovals = () => {
       await loadHistory();
       return { success: true, data: res.data?.data };
     } catch (err) {
-      return { success: false, error: err?.response?.data?.message || 'Verification failed' };
+      return {
+        success: false,
+        error: err?.response?.data?.message || 'Verification failed',
+      };
     }
   }, [loadPending, loadHistory]);
+
+  const flagTransaction = useCallback(async (transactionId, reason) => {
+    try {
+      await api.post(`/ecotrust/transactions/${transactionId}/flag`, { reason });
+      await loadAuditRecords();
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err?.response?.data?.message || 'Failed to flag transaction',
+      };
+    }
+  }, [loadAuditRecords]);
 
   useEffect(() => {
     loadPending();
@@ -51,7 +133,14 @@ const useSustainabilityApprovals = () => {
     loading,
     error,
     verifyRecord,
-    refresh: () => { loadPending(); loadHistory(); }
+    refresh: () => { loadPending(); loadHistory(); },
+    trendData,
+    trendLoading,
+    auditRecords,
+    auditLoading,
+    loadTrendData,
+    loadAuditRecords,
+    flagTransaction,
   };
 };
 

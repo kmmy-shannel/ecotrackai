@@ -497,11 +497,11 @@ const ApprovalModel = {
         return { success: false, error: 'ecotrust_scores required columns not found' };
       }
 
-      let verifiedCondition = 'AND 1 = 0';
+      let verifiedCondition = '';
       if (txColumns.includes('verification_status')) {
-        verifiedCondition = "AND verification_status = 'verified'";
+        verifiedCondition = "AND (verification_status IN ('verified', 'pending') OR verification_status IS NULL)";
       } else if (txColumns.includes('is_verified')) {
-        verifiedCondition = 'AND is_verified = TRUE';
+        verifiedCondition = 'AND (is_verified = TRUE OR is_verified IS NULL)';
       }
 
       const sumQuery = `
@@ -519,6 +519,12 @@ const ApprovalModel = {
       }
 
       const updateSegments = [`${scoreField} = $1`];
+      if (scoreColumns.includes('total_points_earned')) {
+        updateSegments.push('total_points_earned = $1');
+      }
+      if (scoreColumns.includes('last_updated')) {
+        updateSegments.push('last_updated = NOW()');
+      }
       if (scoreColumns.includes('updated_at')) {
         updateSegments.push('updated_at = NOW()');
       }
@@ -605,7 +611,8 @@ const ApprovalModel = {
       }
 
       let resolvedActionId = payload.actionId || null;
-let resolvedPoints = payload.pointsEarned;
+      let resolvedPoints = payload.pointsEarned;
+      const actionTypeValue = payload.actionType || payload.action_type || null;
 
 if (this._isNil(resolvedActionId)) {
   const actionRef = payload.actionType || payload.action_id || null;
@@ -628,23 +635,32 @@ if (this._isNil(resolvedActionId)) {
   const mappedCategory = categoryMap[actionRef] || null;
 
   if (mappedCategory) {
-    // Look up action_id AND points_value from sustainable_actions by category
+    let pointColumn = null;
+    const actionColumnsResult = await this._getTableColumns(client, 'sustainable_actions');
+    if (actionColumnsResult.success) {
+      const actionColumns = actionColumnsResult.data || [];
+      pointColumn = ['points_value', 'point_value', 'points']
+        .find((col) => actionColumns.includes(col)) || null;
+    }
+    // Try exact match + normalized match (space vs underscore)
     const categoryLookup = await client.query(
-      `SELECT action_id, points_value
-       FROM sustainable_actions
-       WHERE action_category = $1
-       ORDER BY action_id DESC
-       LIMIT 1`,
+      `
+      SELECT action_id${pointColumn ? `, ${pointColumn} AS points_value` : ''}
+      FROM sustainable_actions
+      WHERE LOWER(REPLACE(action_category, ' ', '_')) = LOWER(REPLACE($1, ' ', '_'))
+      ORDER BY action_id ASC
+      LIMIT 1
+      `,
       [mappedCategory]
     );
-
     if (categoryLookup.rows.length > 0) {
       resolvedActionId = categoryLookup.rows[0].action_id;
       if (this._isNil(resolvedPoints)) {
-        resolvedPoints = categoryLookup.rows[0].points_value;
+        resolvedPoints = pointColumn ? categoryLookup.rows[0].points_value : null;
       }
     }
   }
+  
 
   // ── Fallback: original resolver if category map didn't find anything ──
   if (this._isNil(resolvedActionId)) {
@@ -684,6 +700,7 @@ if (this._isNil(resolvedActionId)) {
       const valueByColumn = {
         business_id: payload.businessId,
         action_id: resolvedActionId,
+        action_type: actionTypeValue,
         related_record_type: relatedRecordType,
         related_record_id: relatedRecordId,
         points_earned: this._isNil(resolvedPoints) ? 0 : resolvedPoints,

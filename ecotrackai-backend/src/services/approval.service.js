@@ -268,48 +268,51 @@ class ApprovalService {
 
   async _createEcoTrustTransactionIfAvailable(approval, businessId, actorUserId, actionType) {
     try {
-      if (typeof ApprovalModel.createEcoTrustTransaction === 'function') {
-        // CRITICAL FIX-2: Add duplicate prevention check before creating EcoTrust transaction
-        const checkPayload = {
-          businessId,
-          actionId: approval?.action_id || approval?.approval_id || null,
-          relatedRecordType: 'manager_approval',
-          relatedRecordId: approval.approval_id
-        };
-
-        // Check for existing transaction with same action_id and related_record_id
-        if (typeof ApprovalModel.findEcoTrustTransaction === 'function') {
-          const existingCheck = await ApprovalModel.findEcoTrustTransaction(checkPayload);
-          if (existingCheck.success && existingCheck.data && existingCheck.data.length > 0) {
-            console.log('[ApprovalService._createEcoTrustTransactionIfAvailable] Duplicate EcoTrust transaction prevented for approval:', approval.approval_id);
-            return this._ok({ duplicate: true, message: 'EcoTrust transaction already exists for this approval' });
-          }
-        }
-
-        const payload = {
-          businessId,
-          actionId: approval?.action_id || approval?.approval_id || null,
-          actionType: actionType || approval?.approval_type || null,
-          approvalId: approval.approval_id,
-          relatedRecordType: 'manager_approval',
-          relatedRecordId: approval.approval_id,
-          verificationStatus: 'pending',
-          actorUserId,
-          source: 'approval_service'
-        };
-
-        const created = await ApprovalModel.createEcoTrustTransaction(payload);
-        if (!created.success) return created;
-        return this._ok(created.data);
+      if (typeof ApprovalModel.createEcoTrustTransaction !== 'function') {
+        return this._ok(true);
       }
 
+      // Only create EcoTrust transactions for spoilage_action approvals here.
+      // Route optimization points are handled separately in the logistics flow.
+      // Carbon verification points are handled separately in carbon.service.js.
+      const isSpoilageApproval =
+      approval?.approval_type === 'spoilage_action' ||
+      approval?.approval_type === 'spoilage_alert' ||
+      !this._isNil(approval?.alert_id);
+    
+    if (!isSpoilageApproval) {
       return this._ok(true);
+    }
+    console.log('[EcoTrust][debug] approval_type:', approval?.approval_type, 'alert_id:', approval?.alert_id);
+      const payload = {
+        businessId,
+        actionId:           null,
+        actionType:         'spoilage_action',
+        approvalId:         approval.approval_id,
+        relatedRecordType:  'manager_approval',
+        relatedRecordId:    approval.approval_id,
+        verificationStatus: 'verified',
+        actorUserId,
+        source:             'approval_service'
+      };
+
+      console.log('[EcoTrust] Creating spoilage transaction:', JSON.stringify(payload));
+
+      const created = await ApprovalModel.createEcoTrustTransaction(payload);
+
+      console.log('[EcoTrust] Result:', JSON.stringify(created));
+
+      if (!created.success) {
+        console.error('[EcoTrust] Failed:', created.error);
+        return created;
+      }
+
+      return this._ok(created.data);
     } catch (error) {
       console.error('[ApprovalService._createEcoTrustTransactionIfAvailable]', error);
       return this._fail('Failed to create EcoTrust transaction');
     }
   }
-
   async _notifyAdminsOnCarbonRevision(ctx, carbonRecordId, notes = '') {
     try {
       if (typeof ApprovalModel.findBusinessAdmins !== 'function') {

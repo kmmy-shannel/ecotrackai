@@ -563,7 +563,71 @@ const SuperAdminService = {
       console.error('[SuperAdminService.getCrossBusinessAnalytics]', error);
       return this._fail('Failed to fetch analytics');
     }
+  },
+   
+async getFlaggedTransactions(user) {
+  try {
+    const ctxResult = this._extractSuperAdminContext(user);
+    if (!ctxResult.success) return ctxResult;
+ 
+    const { rows } = await pool.query(
+      `SELECT
+         et.transaction_id,
+         et.business_id,
+         bp.business_name,
+         et.action_type,
+         et.points_earned,
+         et.verification_status,
+         et.related_record_type,
+         et.related_record_id,
+         et.flagged,
+         et.flag_reason,
+         et.flagged_by,
+         et.flagged_at,
+         et.created_at,
+         u.full_name AS flagged_by_name
+       FROM ecotrust_transactions et
+       LEFT JOIN business_profiles bp ON bp.business_id = et.business_id
+       LEFT JOIN users             u  ON u.user_id      = et.flagged_by
+       WHERE et.flagged = TRUE
+       ORDER BY et.flagged_at DESC`
+    );
+ 
+    return this._ok({ flagged_transactions: rows });
+  } catch (error) {
+    console.error('[SuperAdminService.getFlaggedTransactions]', error);
+    return this._fail('Failed to fetch flagged transactions');
   }
+},
+ 
+async dismissFlaggedTransaction(user, transactionId) {
+  try {
+    const ctxResult = this._extractSuperAdminContext(user);
+    if (!ctxResult.success) return ctxResult;
+ 
+    if (!transactionId) return this._fail('transactionId is required');
+ 
+    const { rows } = await pool.query(
+      `UPDATE ecotrust_transactions
+       SET
+         flagged     = FALSE,
+         flag_reason = NULL,
+         flagged_by  = NULL,
+         flagged_at  = NULL
+       WHERE transaction_id = $1
+       RETURNING transaction_id, business_id, action_type, flagged`,
+      [transactionId]
+    );
+ 
+    if (rows.length === 0) return this._fail('Transaction not found', 404);
+ 
+    return this._ok({ transaction: rows[0], message: 'Flag dismissed by Super Admin' });
+  } catch (error) {
+    console.error('[SuperAdminService.dismissFlaggedTransaction]', error);
+    return this._fail('Failed to dismiss flag');
+  }
+},
 };
+
 
 module.exports = SuperAdminService;

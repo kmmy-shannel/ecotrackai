@@ -217,7 +217,28 @@ const SuperAdminController = {
       console.error('[SuperAdminController.getCrossBusinessAnalytics]', error);
       sendError(res, 500, 'Failed to fetch analytics');
     }
-  }
+  },
+  async getFlaggedTransactions(req, res) {
+    try {
+      const result = await SuperAdminService.getFlaggedTransactions(req.user);
+      if (!result.success) return sendError(res, result.statusCode || 400, result.error);
+      sendSuccess(res, 200, 'Flagged transactions retrieved', result.data);
+    } catch (error) {
+      console.error('[SuperAdminController.getFlaggedTransactions]', error);
+      sendError(res, 500, 'Failed to fetch flagged transactions');
+    }
+  },
+  async dismissFlaggedTransaction(req, res) {
+    try {
+      const { transactionId } = req.params;
+      const result = await SuperAdminService.dismissFlaggedTransaction(req.user, transactionId);
+      if (!result.success) return sendError(res, result.statusCode || 400, result.error);
+      sendSuccess(res, 200, 'Transaction flag dismissed', result.data);
+    } catch (error) {
+      console.error('[SuperAdminController.dismissFlaggedTransaction]', error);
+      sendError(res, 500, 'Failed to dismiss flag');
+    }
+  },  
 };
 
 module.exports = SuperAdminController;

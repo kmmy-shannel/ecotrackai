@@ -7,15 +7,17 @@ import { useCallback, useEffect, useState } from 'react';
 import superadminService from '../services/superadmin.service';
 
 export const useSuperAdmin = () => {
-  const [businesses,  setBusinesses]  = useState([]);
-  const [systemHealth,setSystemHealth]= useState(null);
-  const [auditLogs,   setAuditLogs]   = useState([]);
-  const [analytics,   setAnalytics]   = useState(null);
-  const [ecoConfig,   setEcoConfig]   = useState([]);
-  const [pendingRegs, setPendingRegs] = useState([]);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState('');
-  const [success,     setSuccess]     = useState('');
+  const [businesses,           setBusinesses]           = useState([]);
+  const [systemHealth,         setSystemHealth]         = useState(null);
+  const [auditLogs,            setAuditLogs]            = useState([]);
+  const [analytics,            setAnalytics]            = useState(null);
+  const [ecoConfig,            setEcoConfig]            = useState([]);
+  const [pendingRegs,          setPendingRegs]          = useState([]);
+  const [loading,              setLoading]              = useState(false);
+  const [error,                setError]                = useState('');
+  const [success,              setSuccess]              = useState('');
+  const [flaggedTransactions,  setFlaggedTransactions]  = useState([]);
+  const [flaggedLoading,       setFlaggedLoading]       = useState(false);
 
   const clearMessages = () => { setError(''); setSuccess(''); };
 
@@ -67,6 +69,37 @@ export const useSuperAdmin = () => {
     } catch { setError('Failed to load pending registrations'); }
   }, []);
 
+  // ── Flagged EcoTrust Transactions ─────────────────────────
+  // Uses superadminService (consistent with the rest of this hook)
+  const loadFlaggedTransactions = useCallback(async () => {
+    setFlaggedLoading(true);
+    try {
+      const res = await superadminService.getFlaggedTransactions();
+      const d = res?.data?.data || res?.data || {};
+      setFlaggedTransactions(d.flagged_transactions || []);
+    } catch (err) {
+      console.error('Failed to load flagged transactions', err);
+    } finally {
+      setFlaggedLoading(false);
+    }
+  }, []);
+
+  const dismissFlag = useCallback(async (transactionId) => {
+    try {
+      await superadminService.dismissFlaggedTransaction(transactionId);
+      setFlaggedTransactions(prev =>
+        prev.filter(t => t.transaction_id !== transactionId)
+      );
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err?.response?.data?.message || 'Failed to dismiss',
+      };
+    }
+  }, []);
+
+  // ── Business actions ──────────────────────────────────────
   const suspendBusiness = async (id) => {
     clearMessages();
     try {
@@ -147,5 +180,10 @@ export const useSuperAdmin = () => {
     updateEcoAction,
     reload: () => Promise.all([loadBusinesses(), loadSystemHealth()]),
     clearMessages,
+    // Flagged transactions
+    flaggedTransactions,
+    flaggedLoading,
+    loadFlaggedTransactions,
+    dismissFlag,
   };
 };

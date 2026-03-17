@@ -20,13 +20,12 @@ const approvalService = {
   // ─── Logistics Manager: approve or decline a route ────────────────────────
   // PATCH /api/approvals/:id/decision
   submitDecision: async (approvalId, decision, comments = '') => {
-    const response = await api.patch(`/approvals/${approvalId}/decision`, {
-      decision,
-      review_notes: comments,
-    });
+    const endpoint = decision === 'approved'
+      ? `/approvals/${approvalId}/approve`
+      : `/approvals/${approvalId}/reject`;
+    const response = await api.put(endpoint, { notes: comments });
     return response.data;
   },
-
   // ─── Shared: approval history ─────────────────────────────────────────────
   // GET /api/approvals/history
   getApprovalHistory: async (limit = 50, roleOverride = null) => {
@@ -78,20 +77,18 @@ const approvalService = {
   },
 
   approveApproval: async (approvalId, note = '') => {
-    const response = await api.patch(`/approvals/${approvalId}/decision`, {
-      decision: 'approved',
-      review_notes: note,
+    const response = await api.put(`/approvals/${approvalId}/approve`, {
+      notes: note,
     });
     return response.data;
   },
-
+  
   declineApproval: async (approvalId, reason) => {
     if (!reason || !String(reason).trim()) {
       throw new Error('Decline reason is required');
     }
-    const response = await api.patch(`/approvals/${approvalId}/decision`, {
-      decision: 'declined',
-      review_notes: reason,
+    const response = await api.put(`/approvals/${approvalId}/reject`, {
+      notes: reason,
     });
     return response.data;
   },

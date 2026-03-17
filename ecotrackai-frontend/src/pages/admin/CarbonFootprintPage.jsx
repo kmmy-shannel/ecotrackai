@@ -82,17 +82,27 @@ const StatCard = ({ label, value, sub, icon: Icon, dark, delay = 0 }) => (
 const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, resubmitResult, resubmitSuccess, refreshFlagged }) => {
   const [expandedId,     setExpandedId]     = useState(null);
   const [correctionNote, setCorrectionNote] = useState('');
+  const [correctedFuel,  setCorrectedFuel]  = useState('');   // ← NEW
   const [submittingId,   setSubmittingId]   = useState(null);
-
+ 
+  const EMISSION_FACTOR = 2.68; // kg CO2 per litre diesel (IPCC)
+ 
+  // Live CO2 preview as admin types the corrected fuel figure
+  const previewCarbon = correctedFuel && !isNaN(parseFloat(correctedFuel)) && parseFloat(correctedFuel) > 0
+    ? (parseFloat(correctedFuel) * EMISSION_FACTOR).toFixed(3)
+    : null;
+ 
   const handleResubmit = async (recordId) => {
     if (!correctionNote.trim()) return alert('Please enter a correction note explaining what was fixed.');
     setSubmittingId(recordId);
-    await resubmitRecord(recordId, correctionNote);
+    // Pass correctedFuel as third argument — useCarbon.resubmitRecord will send it to backend
+    await resubmitRecord(recordId, correctionNote, correctedFuel || null);
     setCorrectionNote('');
+    setCorrectedFuel('');   // ← NEW: reset fuel field after submit
     setExpandedId(null);
     setSubmittingId(null);
   };
-
+ 
   return (
     <div className="db-panel" style={{ borderColor:'rgba(239,68,68,0.2)' }}>
       {/* Header */}
@@ -124,9 +134,9 @@ const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, r
           </button>
         </div>
       </div>
-
+ 
       <div className="db-rule" />
-
+ 
       {/* Result message */}
       {resubmitResult && (
         <div style={{
@@ -138,7 +148,7 @@ const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, r
           {resubmitResult}
         </div>
       )}
-
+ 
       {/* Loading */}
       {flaggedLoading && (
         <div className="db-empty">
@@ -146,41 +156,32 @@ const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, r
           <p style={{ fontSize:13, margin:0 }}>Loading…</p>
         </div>
       )}
-
+ 
       {/* Empty state */}
       {!flaggedLoading && flaggedRecords.length === 0 && (
         <div className="db-empty">
           <CheckCircle2 size={32} style={{ color:'#86efac' }} />
-          <p style={{ fontWeight:700, fontSize:13, color:'#374151', margin:0 }}>
-            No flagged records
-          </p>
-          <p style={{ fontSize:12, color:'#9ca3af', margin:0 }}>
-            All carbon records are either pending or verified
-          </p>
+          <p style={{ fontWeight:700, fontSize:13, color:'#374151', margin:0 }}>No flagged records</p>
+          <p style={{ fontSize:12, color:'#9ca3af', margin:0 }}>All carbon records are either pending or verified</p>
         </div>
       )}
-
+ 
       {/* Flagged record cards */}
       {!flaggedLoading && flaggedRecords.map(record => {
         const isExpanded = expandedId === record.record_id;
         return (
           <div
             key={record.record_id}
-            style={{
-              border:'1px solid #fecaca',
-              borderRadius:13,
-              overflow:'hidden',
-              marginBottom:10,
-              background:'#fff',
-            }}
+            style={{ border:'1px solid #fecaca', borderRadius:13, overflow:'hidden', marginBottom:10, background:'#fff' }}
           >
-            {/* Card header */}
+            {/* Card header — click to expand */}
             <div
-              style={{
-                display:'flex', alignItems:'center', justifyContent:'space-between',
-                padding:'12px 14px', background:'#fef2f2', cursor:'pointer',
+              style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', background:'#fef2f2', cursor:'pointer' }}
+              onClick={() => {
+                setExpandedId(isExpanded ? null : record.record_id);
+                setCorrectionNote('');
+                setCorrectedFuel('');
               }}
-              onClick={() => setExpandedId(isExpanded ? null : record.record_id)}
             >
               <div>
                 <p style={{ fontSize:13, fontWeight:700, color:'#111827', margin:0 }}>
@@ -195,40 +196,32 @@ const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, r
                 </p>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{
-                  padding:'2px 10px', borderRadius:99, fontSize:11, fontWeight:700,
-                  background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca',
-                }}>
+                <span style={{ padding:'2px 10px', borderRadius:99, fontSize:11, fontWeight:700, background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca' }}>
                   Flagged for Correction
                 </span>
                 <span style={{ fontSize:12, color:'#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
               </div>
             </div>
-
+ 
             {isExpanded && (
               <div style={{ padding:'14px', borderTop:'1px solid #fecaca' }}>
-
+ 
                 {/* Carlo's reason */}
                 {record.revision_notes && (
-                  <div style={{
-                    background:'#fff7ed', border:'1px solid #fed7aa',
-                    borderRadius:10, padding:'10px 13px', marginBottom:12,
-                  }}>
+                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'10px 13px', marginBottom:12 }}>
                     <p style={{ fontSize:10, fontWeight:800, color:'#c2410c', textTransform:'uppercase', letterSpacing:'.07em', margin:'0 0 4px' }}>
                       Carlo's Reason for Flagging
                     </p>
-                    <p style={{ fontSize:13, color:'#374151', margin:0 }}>
-                      {record.revision_notes}
-                    </p>
+                    <p style={{ fontSize:13, color:'#374151', margin:0 }}>{record.revision_notes}</p>
                   </div>
                 )}
-
-                {/* Carbon details */}
+ 
+                {/* Current (wrong) carbon figures */}
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:12 }}>
                   {[
-                    ['Total CO₂', `${record.total_carbon_kg ?? '—'} kg`],
-                    ['Transport CO₂', `${record.transportation_carbon_kg ?? '—'} kg`],
-                    ['Storage CO₂', `${record.storage_carbon_kg ?? '—'} kg`],
+                    ['Total CO₂',      `${record.total_carbon_kg ?? '—'} kg`],
+                    ['Transport CO₂',  `${record.transportation_carbon_kg ?? '—'} kg`],
+                    ['Storage CO₂',    `${record.storage_carbon_kg ?? '—'} kg`],
                   ].map(([label, value]) => (
                     <div key={label} style={{ background:'#f9fafb', borderRadius:10, padding:'10px 12px' }}>
                       <p style={{ fontSize:10, color:'#9ca3af', margin:'0 0 3px' }}>{label}</p>
@@ -236,34 +229,76 @@ const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, r
                     </div>
                   ))}
                 </div>
-
+ 
                 {/* What to do */}
-                <div style={{
-                  background:'#eff6ff', border:'1px solid #bfdbfe',
-                  borderRadius:10, padding:'10px 13px', marginBottom:12,
-                  fontSize:12, color:'#1d4ed8',
-                }}>
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 13px', marginBottom:12, fontSize:12, color:'#1d4ed8' }}>
                   <strong>What to do:</strong> Contact the driver to verify the correct fuel figure,
-                  enter a correction note below explaining what was fixed, then click Resubmit.
-                  Carlo will see it again in his pending queue.
+                  enter it below so the CO₂ recalculates automatically, add a correction note, then click Resubmit.
+                  Carlo will see the corrected figures in his pending queue.
                 </div>
-
+ 
+                {/* ── NEW: Corrected fuel input with live CO2 preview ── */}
+                <div style={{ marginBottom:12 }}>
+                  <p style={{ fontSize:12, fontWeight:700, color:'#374151', margin:'0 0 6px' }}>
+                    Corrected Fuel Used (liters)
+                    <span style={{ fontSize:11, fontWeight:400, color:'#9ca3af', marginLeft:6 }}>
+                      — enter the actual correct figure from the driver
+                    </span>
+                  </p>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={correctedFuel}
+                      onChange={e => setCorrectedFuel(e.target.value)}
+                      placeholder="e.g. 8.1"
+                      style={{
+                        width:120, border:'1px solid #d1d5db', borderRadius:10,
+                        padding:'8px 12px', fontSize:13, fontFamily:'Poppins,sans-serif',
+                        outline:'none',
+                      }}
+                      onFocus={e => e.target.style.borderColor = '#52b788'}
+                      onBlur={e => e.target.style.borderColor = '#d1d5db'}
+                    />
+                    {/* Live CO2 preview */}
+                    {previewCarbon && (
+                      <div style={{
+                        display:'flex', alignItems:'center', gap:8,
+                        background:'#f0fdf4', border:'1px solid #86efac',
+                        borderRadius:10, padding:'8px 14px',
+                      }}>
+                        <Leaf size={13} style={{ color:'#16a34a' }} />
+                        <span style={{ fontSize:12, color:'#6b7280' }}>Corrected CO₂:</span>
+                        <span style={{ fontSize:14, fontWeight:800, color:'#15803d' }}>{previewCarbon} kg</span>
+                        <span style={{ fontSize:11, color:'#9ca3af' }}>
+                          ({correctedFuel}L × {EMISSION_FACTOR})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {correctedFuel && parseFloat(correctedFuel) < 1 && (
+                    <p style={{ fontSize:11, color:'#dc2626', margin:'4px 0 0' }}>
+                      ⚠ Fuel below 1 liter is not realistic for a delivery vehicle.
+                    </p>
+                  )}
+                </div>
+ 
                 {/* Correction note */}
                 <textarea
                   value={correctionNote}
                   onChange={e => setCorrectionNote(e.target.value)}
-                  placeholder="Explain the correction (e.g. 'Driver confirmed actual fuel was 8.1L not 0.8L — typo corrected')..."
+                  placeholder="Explain the correction (e.g. 'Driver confirmed actual fuel was 8.1L not 1L — typo corrected')..."
                   rows={3}
                   style={{
                     width:'100%', border:'1px solid #d1d5db', borderRadius:10,
                     padding:'10px 12px', fontSize:13, resize:'none',
-                    fontFamily:'Poppins,sans-serif', outline:'none',
-                    marginBottom:10,
+                    fontFamily:'Poppins,sans-serif', outline:'none', marginBottom:10,
                   }}
                   onFocus={e => e.target.style.borderColor = '#52b788'}
                   onBlur={e => e.target.style.borderColor = '#d1d5db'}
                 />
-
+ 
                 {/* Resubmit button */}
                 <button
                   onClick={() => handleResubmit(record.record_id)}
@@ -278,9 +313,13 @@ const FlaggedRecordsPanel = ({ flaggedRecords, flaggedLoading, resubmitRecord, r
                   }}
                 >
                   <RotateCcw size={14} />
-                  {submittingId === record.record_id ? 'Resubmitting…' : 'Resubmit for Verification'}
+                  {submittingId === record.record_id
+                    ? 'Resubmitting…'
+                    : previewCarbon
+                    ? `Resubmit with corrected CO₂: ${previewCarbon} kg`
+                    : 'Resubmit for Verification'}
                 </button>
-
+ 
               </div>
             )}
           </div>
