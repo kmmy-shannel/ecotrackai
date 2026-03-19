@@ -28,6 +28,69 @@ const useCarbon = () => {
   const [showHowCalculated,     setShowHowCalculated]     = useState(false);
   const [showMonthlyComparison, setShowMonthlyComparison] = useState(false);
 
+  // ── Load flagged (revision_requested) records ────────────────────────────
+  const loadFlaggedRecords = useCallback(async () => {
+    setFlaggedLoading(true);
+    try {
+      // Pull carbon records and flagged EcoTrust transactions in parallel
+      const [carbonRes, txRes] = await Promise.all([
+        api.get('/carbon/all'),
+        api.get('/ecotrust/transactions'),
+      ]);
+
+      const allRecords = carbonRes.data?.data?.records || [];
+      const txRaw =
+        Array.isArray(txRes.data?.data)         ? txRes.data.data         :
+        Array.isArray(txRes.data?.data?.data)   ? txRes.data.data.data    :
+        Array.isArray(txRes.data?.transactions) ? txRes.data.transactions :
+        Array.isArray(txRes.data)               ? txRes.data              :
+        [];
+
+      // Index carbon records by record_id and route_id for quick lookup
+      const byRecordId = new Map();
+      const byRouteId  = new Map();
+      allRecords.forEach(r => {
+        if (r.record_id) byRecordId.set(String(r.record_id), r);
+        if (r.route_id)  byRouteId.set(String(r.route_id), r);
+      });
+
+      // Keep only flagged carbon-related transactions
+      const flagged = txRaw.filter(tx => {
+        const flagged = tx.flagged || tx.is_flagged;
+        const isCarbon = tx.action_type === 'carbon_verified' || tx.related_record_type === 'carbon_record';
+        return flagged && isCarbon;
+      }).map(tx => {
+        const key = tx.related_record_id != null ? String(tx.related_record_id) : null;
+        const match = (key && (byRecordId.get(key) || byRouteId.get(key))) || null;
+        if (match) {
+          return {
+            ...match,
+            flag_reason: tx.flag_reason || match.revision_notes,
+            revision_notes: tx.flag_reason || match.revision_notes,
+            flagged_at: tx.flagged_at || match.flagged_at,
+            verification_status: match.verification_status || 'revision_requested',
+          };
+        }
+        // Fallback if no carbon record match found — still show something
+        return {
+          record_id: key,
+          route_id: key,
+          route_name: tx.related_record_type || 'Carbon record',
+          verification_status: 'revision_requested',
+          flag_reason: tx.flag_reason,
+          flagged_at: tx.flagged_at,
+        };
+      });
+
+      setFlaggedRecords(flagged);
+    } catch (err) {
+      // Keep previous flagged list if the request fails to avoid flicker
+      console.warn('[useCarbon] loadFlaggedRecords failed', err?.response?.status);
+    } finally {
+      setFlaggedLoading(false);
+    }
+  }, []);
+
   // ── Load main carbon footprint data ─────────────────────────────────────
   const loadCarbonData = useCallback(async () => {
     setLoading(true);
@@ -50,31 +113,20 @@ const useCarbon = () => {
       });
     } finally {
       setLoading(false);
+      // Keep flagged list in sync whenever we refresh the carbon dashboard
+      loadFlaggedRecords();
     }
-  }, []);
-
-  // ── Load flagged (revision_requested) records ────────────────────────────
-  const loadFlaggedRecords = useCallback(async () => {
-    setFlaggedLoading(true);
-    try {
-      const res = await api.get('/carbon/all');
-      const all = res.data?.data?.records || [];
-      setFlaggedRecords(
-        all.filter(r => r.verification_status === 'revision_requested')
-      );
-    } catch (_err) {
-      setFlaggedRecords([]);
-    } finally {
-      setFlaggedLoading(false);
-    }
-  }, []);
+  }, [loadFlaggedRecords]);
 
   // ── Resubmit a flagged record back to pending ────────────────────────────
   // Calls PATCH /api/carbon/:id/resubmit — admin-only endpoint
-  const resubmitRecord = useCallback(async (recordId, correctionNote = '') => {
+  const resubmitRecord = useCallback(async (recordId, correctionNote = '', correctedFuelLiters = null) => {
     setResubmitResult('');
     try {
-      await api.patch(`/carbon/${recordId}/resubmit`, { notes: correctionNote });
+      await api.patch(`/carbon/${recordId}/resubmit`, {
+        notes: correctionNote,
+        corrected_fuel_liters: correctedFuelLiters,
+      });
       setResubmitSuccess(true);
       setResubmitResult('✓ Record resubmitted. Carlo will review it again in his pending queue.');
       await loadFlaggedRecords();

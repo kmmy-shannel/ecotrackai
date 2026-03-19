@@ -85,8 +85,20 @@ const useSustainabilityApprovals = () => {
         Array.isArray(res.data)               ? res.data              :
         [];
 
-      console.log('[useSustainabilityApprovals] audit records parsed:', records.length, 'rows');
-      setAuditRecords(records);
+      // De-duplicate by transaction_id (or id fallback) to avoid duplicated rows
+      const seen = new Set();
+      const deduped = records.filter(tx => {
+        const primaryKey = tx.related_record_id
+          ? `${tx.action_type || 'action'}-${tx.related_record_type || 'ref'}-${tx.related_record_id}`
+          : tx.transaction_id || tx.id;
+        const key = String(primaryKey || `${tx.action_type || 'action'}-${tx.created_at || ''}`);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      console.log('[useSustainabilityApprovals] audit records parsed:', deduped.length, 'rows');
+      setAuditRecords(deduped);
     } catch (err) {
       console.error('[useSustainabilityApprovals] audit fetch failed:', err?.response?.status, err?.response?.data);
       setAuditRecords([]);
@@ -112,6 +124,19 @@ const useSustainabilityApprovals = () => {
   const flagTransaction = useCallback(async (transactionId, reason) => {
     try {
       await api.post(`/ecotrust/transactions/${transactionId}/flag`, { reason });
+
+      // Optimistically mark the transaction as flagged so the UI updates instantly
+      const targetId = String(transactionId);
+      setAuditRecords(prev =>
+        prev.map(tx => {
+          const txId = tx.transaction_id || tx.id;
+          return String(txId) === targetId
+            ? { ...tx, flagged: true, is_flagged: true, flag_reason: reason, flagged_at: new Date().toISOString() }
+            : tx;
+        })
+      );
+
+      // Refresh to pick up any backend filters/normalization
       await loadAuditRecords();
       return { success: true };
     } catch (err) {

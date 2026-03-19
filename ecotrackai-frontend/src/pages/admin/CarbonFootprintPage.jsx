@@ -347,6 +347,11 @@ const CarbonFootprintPage = () => {
 
   if (!user) return null;
 
+  const handleRefresh = () => {
+    loadCarbonData();
+    refreshFlagged();
+  };
+
   const { thisMonth, comparison } = carbonData;
   const today = new Date().toLocaleDateString('en-PH', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
 
@@ -418,7 +423,7 @@ const CarbonFootprintPage = () => {
           </div>
 
           <div style={{ display:'flex', gap:8, zIndex:1, flexWrap:'wrap', alignItems:'center' }}>
-            <button className="db-btn-ghost" onClick={loadCarbonData} disabled={loading}>
+            <button className="db-btn-ghost" onClick={handleRefresh} disabled={loading}>
               <RefreshCw size={12} style={loading ? { animation:'db-spin .7s linear infinite' } : {}} />
               {loading ? 'Loading…' : 'Refresh'}
             </button>

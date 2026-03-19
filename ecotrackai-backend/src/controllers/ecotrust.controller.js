@@ -157,6 +157,9 @@ const getTransactionsByBusiness = async (req, res) => {
     const businessId = req.user?.businessId || req.user?.business_id;
     if (!businessId) return err(res, 'businessId required', 400);
 
+    const role = req.user?.role || 'admin';
+    const isSustainabilityManager = role === 'sustainability_manager';
+
     const { rows } = await pool.query(
       `SELECT
          transaction_id,
@@ -173,6 +176,7 @@ const getTransactionsByBusiness = async (req, res) => {
          flagged_at
        FROM ecotrust_transactions
        WHERE business_id = $1
+         ${isSustainabilityManager ? "AND (action_type = 'carbon_verified' OR related_record_type = 'carbon_record')" : ''}
        ORDER BY created_at DESC`,
       [businessId]
     );
@@ -190,6 +194,7 @@ const flagTransaction = async (req, res) => {
     const reason        = req.body?.reason;
     const userId        = req.user?.userId || req.user?.user_id;
     const businessId    = req.user?.businessId || req.user?.business_id;
+    const role          = req.user?.role || 'admin';
 
     if (!transactionId) return err(res, 'Transaction ID required', 400);
     if (!reason || reason.trim().length < 3) {
@@ -197,7 +202,11 @@ const flagTransaction = async (req, res) => {
     }
 
     const check = await pool.query(
-      `SELECT transaction_id, COALESCE(flagged, false) AS flagged
+      `SELECT transaction_id,
+              COALESCE(flagged, false) AS flagged,
+              action_type,
+              related_record_type,
+              related_record_id
        FROM ecotrust_transactions
        WHERE transaction_id = $1 AND business_id = $2`,
       [transactionId, businessId]
@@ -205,6 +214,13 @@ const flagTransaction = async (req, res) => {
 
     if (check.rows.length === 0) return err(res, 'Transaction not found or unauthorized', 404);
     if (check.rows[0].flagged)   return err(res, 'Transaction already flagged', 400);
+
+    // Sustainability Manager can only flag carbon verifications
+    if (role === 'sustainability_manager') {
+      const t = check.rows[0];
+      const isCarbon = t.action_type === 'carbon_verified' || t.related_record_type === 'carbon_record';
+      if (!isCarbon) return err(res, 'Sustainability Manager can only flag carbon verification transactions', 403);
+    }
 
     const { rows } = await pool.query(
       `UPDATE ecotrust_transactions
@@ -217,6 +233,43 @@ const flagTransaction = async (req, res) => {
        RETURNING transaction_id, flagged, flag_reason, flagged_at`,
       [reason.trim(), userId, transactionId, businessId]
     );
+
+    // If this transaction points to a carbon record, mark that record as needing revision
+    try {
+      const txRow = check.rows[0];
+      const reasonText = reason.trim();
+      const carbonId   = txRow.related_record_id;
+      const relatedIsCarbon = txRow.related_record_type === 'carbon_record';
+
+      if (carbonId) {
+        // Primary: match by carbon record id when we have one
+        const result = await pool.query(
+          `UPDATE carbon_footprint_records
+             SET verification_status = 'revision_requested',
+                 revision_notes      = $1,
+                 updated_at          = NOW()
+           WHERE record_id = $2 AND business_id = $3
+           RETURNING record_id`,
+          [reasonText, carbonId, businessId]
+        );
+
+        // Fallback: if no row updated (older records may store route_id instead), match by route_id
+        if (result.rowCount === 0) {
+          await pool.query(
+            `UPDATE carbon_footprint_records
+               SET verification_status = 'revision_requested',
+                   revision_notes      = $1,
+                   updated_at          = NOW()
+             WHERE route_id = $2 AND business_id = $3`,
+            [reasonText, carbonId, businessId]
+          );
+        }
+      } else if (relatedIsCarbon) {
+        console.warn('[ecotrust.controller.flagTransaction] related_record_id missing for carbon_record');
+      }
+    } catch (linkErr) {
+      console.warn('[ecotrust.controller.flagTransaction] linked carbon record not updated:', linkErr.message);
+    }
 
     return ok(res, rows[0], 'Transaction flagged for Super Admin review');
   } catch (error) {

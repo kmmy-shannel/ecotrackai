@@ -216,7 +216,7 @@ await pool.query(
         UPDATE manager_approvals
         SET status='rejected', decision='rejected',
             reviewed_by=$1, reviewed_at=NOW(),
-            manager_comment=$2, decided_by_role=$3, decision_date=NOW()
+            manager_comment=$2, decided_by_role=$3, decisio  date=NOW()
         WHERE approval_id=$4
       `, [user.userId, body.reason, user.role, approvalId]);
 
