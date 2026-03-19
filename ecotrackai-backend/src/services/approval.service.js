@@ -204,42 +204,55 @@ class ApprovalService {
 
       if (approval.approval_type === 'spoilage_action' && approval.alert_id) {
         const alert = await AlertModel.findByIdAndBusiness(approval.alert_id, businessId);
-        if (!alert) return this._fail('Not found or unauthorized');
 
-        await this._assertTransition(
-          ctx,
-          SPOILAGE_TRANSITIONS,
-          'spoilage',
-          alert.status,
-          decisionStatus,
-          'alert',
-          approval.alert_id
-        );
+        // Some alert submissions come from inventory-derived "pseudo alerts" that
+        // are not persisted in the alerts table. Previously we returned a failure
+        // here, which short-circuited EcoTrust point creation even though the
+        // manager approval itself succeeded. To keep the approval flow resilient,
+        // we now treat a missing alert record as non-blocking and simply skip the
+        // status sync while still continuing with downstream actions (e.g. EcoTrust).
+        if (!alert) {
+          console.warn(`[ApprovalService._updateLinkedRecordsAfterDecision] Alert ${approval.alert_id} not found for business ${businessId}; skipping alert status sync.`);
+        } else {
+          await this._assertTransition(
+            ctx,
+            SPOILAGE_TRANSITIONS,
+            'spoilage',
+            alert.status,
+            decisionStatus,
+            'alert',
+            approval.alert_id
+          );
 
-        let targetAlertStatus = decisionStatus;
-        if (targetAlertStatus === 'rejected') {
-          try {
-            const rejectedUpdate = await AlertModel.updateStatusById(
-              approval.alert_id,
-              businessId,
-              'rejected'
-            );
-            if (rejectedUpdate) {
-              targetAlertStatus = 'rejected';
-            } else {
+          let targetAlertStatus = decisionStatus;
+          if (targetAlertStatus === 'rejected') {
+            try {
+              const rejectedUpdate = await AlertModel.updateStatusById(
+                approval.alert_id,
+                businessId,
+                'rejected'
+              );
+              if (rejectedUpdate) {
+                targetAlertStatus = 'rejected';
+              } else {
+                targetAlertStatus = 'declined';
+              }
+            } catch (error) {
               targetAlertStatus = 'declined';
             }
-          } catch (error) {
-            targetAlertStatus = 'declined';
+          }
+
+          const alertUpdated = await AlertModel.updateStatusById(
+            approval.alert_id,
+            businessId,
+            targetAlertStatus
+          );
+
+          // Do not block approval if the alert status row is missing; log for traceability.
+          if (!alertUpdated) {
+            console.warn(`[ApprovalService._updateLinkedRecordsAfterDecision] Failed to update alert ${approval.alert_id}; continuing without blocking approval.`);
           }
         }
-
-        const alertUpdated = await AlertModel.updateStatusById(
-          approval.alert_id,
-          businessId,
-          targetAlertStatus
-        );
-        if (!alertUpdated) return this._fail('Not found or unauthorized');
       }
 
       return this._ok(true);
@@ -272,42 +285,96 @@ class ApprovalService {
         return this._ok(true);
       }
 
-      // Only create EcoTrust transactions for spoilage_action approvals here.
-      // Route optimization points are handled separately in the logistics flow.
-      // Carbon verification points are handled separately in carbon.service.js.
+      // ── Spoilage approvals ──────────────────────────────────────────────
       const isSpoilageApproval =
-      approval?.approval_type === 'spoilage_action' ||
-      approval?.approval_type === 'spoilage_alert' ||
-      !this._isNil(approval?.alert_id);
-    
-    if (!isSpoilageApproval) {
-      return this._ok(true);
-    }
-    console.log('[EcoTrust][debug] approval_type:', approval?.approval_type, 'alert_id:', approval?.alert_id);
-      const payload = {
-        businessId,
-        actionId:           null,
-        actionType:         'spoilage_action',
-        approvalId:         approval.approval_id,
-        relatedRecordType:  'manager_approval',
-        relatedRecordId:    approval.approval_id,
-        verificationStatus: 'verified',
-        actorUserId,
-        source:             'approval_service'
-      };
+        approval?.approval_type === 'spoilage_action' ||
+        approval?.approval_type === 'spoilage_alert' ||
+        !this._isNil(approval?.alert_id);
 
-      console.log('[EcoTrust] Creating spoilage transaction:', JSON.stringify(payload));
+      if (isSpoilageApproval) {
+        console.log('[EcoTrust] Spoilage approval → create transaction');
+        const payload = {
+          businessId,
+          actionId:           null,
+          actionType:         'Spoilage Alert Approved',
+          pointsEarned:       25, // fallback; table value used when present
+          approvalId:         approval.approval_id,
+          relatedRecordType:  'manager_approval',
+          relatedRecordId:    approval.approval_id,
+          verificationStatus: 'verified',
+          actorUserId,
+          source:             'approval_service'
+        };
 
-      const created = await ApprovalModel.createEcoTrustTransaction(payload);
-
-      console.log('[EcoTrust] Result:', JSON.stringify(created));
-
-      if (!created.success) {
-        console.error('[EcoTrust] Failed:', created.error);
-        return created;
+        const created = await ApprovalModel.createEcoTrustTransaction(payload);
+        if (!created.success) {
+          console.error('[EcoTrust] Spoilage transaction failed:', created.error);
+          return created;
+        }
+        return this._ok(created.data);
       }
 
-      return this._ok(created.data);
+      // ── Route optimization approvals ─────────────────────────────────────
+      const isRouteOptimization = approval?.approval_type === 'route_optimization';
+      if (isRouteOptimization) {
+        // Only award if admin ran AI optimization (route_optimizations row exists)
+        try {
+          const { rowCount: hasOpt } = await pool.query(
+            `SELECT 1 FROM route_optimizations WHERE route_id = $1 LIMIT 1`,
+            [approval.delivery_id]
+          );
+          if (hasOpt === 0) {
+            console.log('[EcoTrust] Skipped route points: no AI optimization record for route', approval.delivery_id);
+            return this._ok(true);
+          }
+        } catch (checkErr) {
+          console.error('[EcoTrust] route_optimizations check failed:', checkErr.message);
+          // Non-fatal: if we cannot verify, do not award to avoid false positives
+          return this._ok(true);
+        }
+
+        // Avoid duplicate EcoTrust transaction for this route
+        try {
+          const { rowCount: existing } = await pool.query(
+            `SELECT 1 FROM ecotrust_transactions
+             WHERE business_id = $1
+               AND related_record_type = 'delivery'
+               AND related_record_id   = $2
+               AND action_type         = 'Route Optimization Approved'
+             LIMIT 1`,
+            [businessId, approval.delivery_id]
+          );
+          if (existing > 0) {
+            console.log('[EcoTrust] Skipped duplicate route transaction for', approval.delivery_id);
+            return this._ok(true);
+          }
+        } catch (dupErr) {
+          console.error('[EcoTrust] duplicate route tx check failed:', dupErr.message);
+        }
+
+        const payload = {
+          businessId,
+          actionId:           null,
+          actionType:         'Route Optimization Approved',
+          pointsEarned:       30, // fallback; sustainable_actions value preferred
+          approvalId:         approval.approval_id,
+          relatedRecordType:  'delivery',
+          relatedRecordId:    approval.delivery_id,
+          verificationStatus: 'pending',
+          actorUserId,
+          source:             'approval_service'
+        };
+
+        const created = await ApprovalModel.createEcoTrustTransaction(payload);
+        if (!created.success) {
+          console.error('[EcoTrust] Route transaction failed:', created.error);
+          return created;
+        }
+        return this._ok(created.data);
+      }
+
+      // No EcoTrust side-effect for other approval types
+      return this._ok(true);
     } catch (error) {
       console.error('[ApprovalService._createEcoTrustTransactionIfAvailable]', error);
       return this._fail('Failed to create EcoTrust transaction');

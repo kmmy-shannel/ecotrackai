@@ -624,8 +624,10 @@ if (this._isNil(resolvedActionId)) {
   // ── NEW: Map actionType string to sustainable_actions category ──
   const categoryMap = {
     'spoilage_action':            'spoilage_prevention',
+    'Spoilage Alert Approved':    'spoilage_prevention',
     'approval_approved':          'spoilage_prevention',
     'route_optimization':         'delivery_optimization',
+    'Route Optimization Approved':'delivery_optimization',
     'approval_approved_by_admin': 'spoilage_prevention',
     'carbon_verified':            'carbon_verification',
     'carbon_verification':        'carbon_verification',

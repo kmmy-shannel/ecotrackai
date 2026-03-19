@@ -140,16 +140,53 @@ await pool.query(
         [approval.delivery_id]
       );
 
-      // Award EcoTrust points
+      // Award EcoTrust points ONLY if admin previously ran AI Optimization on this route.
       try {
-        await pool.query(`
-          INSERT INTO ecotrust_transactions
-            (business_id, action_id, action_type, points_earned,
-             related_record_type, related_record_id, verification_status, transaction_date, created_at)
-          SELECT $1, action_id, 'Route Optimization Approved', points_value,
-                 'delivery', $2, 'pending', CURRENT_DATE, NOW()
-          FROM sustainable_actions WHERE action_name='Route Optimization Approved' LIMIT 1
-        `, [businessId, approval.delivery_id]);
+        const { rowCount: optCount } = await pool.query(
+          `SELECT 1 FROM route_optimizations WHERE route_id = $1 LIMIT 1`,
+          [approval.delivery_id]
+        );
+
+        if (optCount > 0) {
+          const { rowCount: existing } = await pool.query(
+            `SELECT 1 FROM ecotrust_transactions
+             WHERE business_id = $1
+               AND related_record_type = 'delivery'
+               AND related_record_id   = $2
+               AND action_type         = 'Route Optimization Approved'
+             LIMIT 1`,
+            [businessId, approval.delivery_id]
+          );
+
+          if (existing === 0) {
+            const insertResult = await pool.query(`
+              INSERT INTO ecotrust_transactions
+                (business_id, action_id, action_type, points_earned,
+                 related_record_type, related_record_id, verification_status, transaction_date, created_at)
+              SELECT $1, action_id, 'Route Optimization Approved', points_value,
+                     'delivery', $2, 'pending', CURRENT_DATE, NOW()
+              FROM sustainable_actions
+              WHERE action_name = 'Route Optimization Approved'
+              LIMIT 1
+              RETURNING transaction_id
+            `, [businessId, approval.delivery_id]);
+
+            // Fallback: if no sustainable_actions row, still award with default 30 pts
+            if (insertResult.rowCount === 0) {
+              await pool.query(`
+                INSERT INTO ecotrust_transactions
+                  (business_id, action_id, action_type, points_earned,
+                   related_record_type, related_record_id, verification_status, transaction_date, created_at)
+                VALUES ($1, NULL, 'Route Optimization Approved', 30,
+                        'delivery', $2, 'pending', CURRENT_DATE, NOW())
+              `, [businessId, approval.delivery_id]);
+            }
+          } else {
+            console.log('[LogisticsService.approveRoute][ecotrust] Skipped duplicate EcoTrust tx for route', approval.delivery_id);
+          }
+        } else {
+          console.log('[LogisticsService.approveRoute][ecotrust] Skipped points: no AI optimization record for route', approval.delivery_id);
+        }
       } catch (ecotrustError) {
         // Keep the core route-approval flow successful even if optional points logging fails.
         console.error('[LogisticsService.approveRoute][ecotrust]', ecotrustError.message);

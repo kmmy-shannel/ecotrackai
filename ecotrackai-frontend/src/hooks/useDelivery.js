@@ -328,7 +328,8 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     const fetchMetrics = async () => {
       try {
         const response = await deliveryService.getMetricsSummary();
-        setMetricsSummary(response.data || {});
+        const payload = response?.data?.data || response?.data || response || {};
+        setMetricsSummary(payload);
       } catch (err) {
         console.warn('[useDelivery] metrics API failed:', err);
         // Fallback to local calc
@@ -348,18 +349,25 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     fetchMetrics();
   }, [deliveries]);
 
+  const derivedTotals = {
+    deliveries: deliveries.length,
+    distance: deliveries.reduce((s, d) => s + parseFloat(d.totalDistance || 0), 0).toFixed(1),
+    inProgress: deliveries.filter(d => d.status === 'in_transit').length,
+  };
+
   const summaryStats = metricsLoading ? {
-    totalDeliveries: 0,
-    totalDistance: '—',
-    fuelSaved: '—',
-    co2Reduced: '—',
-    inProgress: 0
+    totalDeliveries: derivedTotals.deliveries,
+    totalDistance: derivedTotals.distance,
+    fuelSaved: '0.0',
+    co2Reduced: '0.00',
+    inProgress: derivedTotals.inProgress,
   } : {
-    totalDeliveries: parseInt(metricsSummary.totalDeliveries || 0),
-    totalDistance: metricsSummary.totalDistance || '0.0',
-    fuelSaved: metricsSummary.fuelSaved || '0.0',
-    // co2Reduced: metricsSummary.co2Reduced || '0.00', // Removed per feedback
-    inProgress: parseInt(metricsSummary.inProgress || 0),
+    // Prefer derived totals so the stat card always shows the visible list count
+    totalDeliveries: derivedTotals.deliveries,
+    totalDistance: metricsSummary.totalDistance ?? derivedTotals.distance,
+    fuelSaved: metricsSummary.total_fuel_saved || metricsSummary.fuelSaved || '0.0',
+    co2Reduced: metricsSummary.total_co2_saved || metricsSummary.co2Reduced || '0.00',
+    inProgress: metricsSummary.inProgress ?? derivedTotals.inProgress,
   };
 
 
