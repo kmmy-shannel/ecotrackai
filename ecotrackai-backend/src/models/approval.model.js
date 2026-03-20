@@ -677,25 +677,55 @@ if (this._isNil(resolvedActionId)) {
     }
   }
 }
+     // ── Duplicate check: use action_type instead of action_id
+      // so it works even when action_id could not be resolved
       const duplicateQuery = `
         SELECT *
         FROM ecotrust_transactions
         WHERE business_id = $1
-          AND action_id = $2
-          AND related_record_type = $3
-          AND related_record_id = $4
+          AND related_record_type = $2
+          AND related_record_id = $3
+          AND action_type = $4
         LIMIT 1
       `;
       const duplicateResult = await client.query(duplicateQuery, [
         payload.businessId,
-        resolvedActionId,
         relatedRecordType,
-        relatedRecordId
+        relatedRecordId,
+        actionTypeValue || String(payload.actionType || '')
       ]);
 
       if (duplicateResult.rows.length > 0) {
         await client.query('COMMIT');
         return { success: true, data: duplicateResult.rows[0] };
+      }
+
+      if (this._isNil(resolvedActionId)) {
+        try {
+          const lastResort = await client.query(
+            `SELECT action_id, points_value FROM sustainable_actions
+             WHERE LOWER(action_name) = LOWER($1)
+                OR LOWER(action_category) = LOWER($1)
+             ORDER BY action_id ASC LIMIT 1`,
+            [actionTypeValue || '']
+          );
+          if (lastResort.rows.length > 0) {
+            resolvedActionId = lastResort.rows[0].action_id;
+            if (this._isNil(resolvedPoints)) {
+              resolvedPoints = lastResort.rows[0].points_value;
+            }
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+
+      if (this._isNil(resolvedActionId)) {
+        console.warn(
+          '[ApprovalModel.createEcoTrustTransaction] Could not resolve action_id for actionType:',
+          actionTypeValue,
+          '— skipping EcoTrust insert so the approval still succeeds.'
+        );
+        await client.query('COMMIT');
+        return { success: true, data: null };
       }
 
       const verificationStatus = payload.verificationStatus || 'pending';

@@ -201,7 +201,7 @@ const pct = (val, base) => (base > 0 ? `${Math.round((Number(val)/Number(base))*
 
 // ── Delete: only planned ──────────────────────────────────────────────────────
 // Allow hard delete for routes that never started, or have been cancelled.
-const DELETABLE_STATUSES = ['planned', 'cancelled'];
+const DELETABLE_STATUSES = ['planned', 'cancelled', 'declined'];
 const canDelete = (status) => DELETABLE_STATUSES.includes(status);
 const deleteBlockReason = (status) => {
   const map = {
@@ -210,7 +210,7 @@ const deleteBlockReason = (status) => {
     approved:           'Approved routes cannot be deleted — use Cancel instead',
     in_transit:         'Delivery is in progress — use Cancel instead',
     delivered:          'Completed deliveries cannot be deleted',
-    declined:           'Declined routes cannot be deleted — resubmit or contact admin',
+    declined:           'Declined routes can be deleted or resubmitted.',
     cancelled:          'Already cancelled',
     draft:              'Draft routes cannot be deleted directly',
   };
@@ -602,12 +602,12 @@ const DeleteConfirmModal = ({ delivery, onConfirm, onCancel, loading }) => (
           <div>
             <p style={{ fontSize:12.5,fontWeight:700,color:'#111827',margin:0 }}>{delivery?.deliveryCode||delivery?.route_name||'Delivery Route'}</p>
             <p style={{ fontSize:11,color:'#6b7280',margin:'2px 0 0' }}>{delivery?.driver||'No driver assigned'} · {delivery?.stopCount||0} stops</p>
-            <span className="dr-s-planned dr-status" style={{ marginTop:4,display:'inline-flex' }}>planned</span>
+            <span className={`${statusCls(delivery?.status)} dr-status`} style={{ marginTop:4,display:'inline-flex' }}>{delivery?.status?.replace(/_/g,' ')||'planned'}</span>
           </div>
         </div>
         <div style={{ display:'flex',alignItems:'start',gap:8,padding:'8px 12px',background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:10 }}>
           <AlertCircle size={13} style={{ color:'#c2410c',flexShrink:0,marginTop:1 }} />
-          <p style={{ fontSize:11,color:'#9a3412',margin:0,lineHeight:1.5 }}>Only routes in <strong>Planned</strong> status can be deleted. For Approved or In-Transit routes, use <strong>Cancel</strong> instead.</p>
+          <p style={{ fontSize:11,color:'#9a3412',margin:0,lineHeight:1.5 }}>Routes in <strong>Planned</strong> or <strong>Declined</strong> status can be deleted. For Approved or In-Transit routes, use <strong>Cancel</strong> instead.</p>
         </div>
       </div>
       <div className="dr-del-foot">
@@ -1134,8 +1134,8 @@ const DeliveryRoutesPage = () => {
                           {isExpanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
                         </button>
 
-                        {/* AI Optimize */}
-                        {delivery.status !== 'cancelled' && delivery.status !== 'delivered' && (
+                      {/* AI Optimize — hidden for declined (resubmit first, then optimize) */}
+                      {delivery.status !== 'cancelled' && delivery.status !== 'delivered' && delivery.status !== 'declined' && (
                           <button className="dr-act dr-act-ai"
                             onClick={() => optimizeRoute(delivery)}
                             disabled={optimizingRoute===delivery.id||(!canTransitionRoute(delivery.status,'optimized')&&delivery.status!=='optimized')}

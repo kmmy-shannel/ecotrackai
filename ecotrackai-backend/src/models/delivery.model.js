@@ -407,7 +407,7 @@ const DeliveryModel = {
 
       const { status, route_name } = check.rows[0];
 
-      if (!['planned', 'cancelled'].includes(status)) {
+      if (!['planned', 'cancelled', 'declined'].includes(status)) {
         const reasons = {
           optimized:         `"${route_name}" has been AI-optimized. Submit it for approval or reset it to planned first.`,
           awaiting_approval: `"${route_name}" is awaiting Logistics Manager approval and cannot be deleted.`,

@@ -78,7 +78,7 @@ const ALLOWED_TRANSITIONS = {
   in_transit:         ['delivered'],
   delivered:          [],
   cancelled:          [],
-  declined:           ['planned', 'awaiting_approval'],
+  declined:           ['planned', 'awaiting_approval', 'optimized'],
 };
 
 // Statuses that can be cancelled by the Admin
@@ -424,9 +424,17 @@ const DeliveryService = {
             reservations.push({ inventoryId, qty });
             await pool.query(`
               INSERT INTO delivery_items (route_id, inventory_id, quantity_to_deliver, created_at)
-              VALUES ($1, $2, $3, NOW()) ON CONFLICT DO NOTHING
+              VALUES ($1, $2, $3, NOW())
+              ON CONFLICT (route_id, inventory_id)
+              DO UPDATE SET quantity_to_deliver = delivery_items.quantity_to_deliver + EXCLUDED.quantity_to_deliver
             `, [routeId, inventoryId, qty]).catch(err => {
-              console.warn('[_reserveStopProducts] delivery_items insert skipped:', err.message);
+              // Fallback: if no unique constraint exists, do a plain insert
+              return pool.query(`
+                INSERT INTO delivery_items (route_id, inventory_id, quantity_to_deliver, created_at)
+                VALUES ($1, $2, $3, NOW())
+              `, [routeId, inventoryId, qty]).catch(e => {
+                console.warn('[_reserveStopProducts] delivery_items insert skipped:', e.message);
+              });
             });
           } else {
             warnings.push(`Inventory ${inventoryId}: insufficient available stock to reserve ${qty} units`);
@@ -935,15 +943,43 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
     return this._ok({ message: 'Delivery completed', log: logResult.data });
   },
 
-  // ── Delete (planned only) ─────────────────────────────────
-  async deleteDelivery(routeId, user) {
-    if (!['admin', 'logistics_manager'].includes(user.role))
-      return this._fail('Only admin or logistics_manager can delete routes');
-    const routeResult = await DeliveryModel.findById(routeId, user.businessId);
-    if (!routeResult.success) return routeResult;
-    await this._releaseRouteReservations(routeId, user.businessId);
-    return DeliveryModel.deleteRoute(routeId, user.businessId);
-  },
+ // ── Delete (planned, cancelled, or declined) ───────────────
+ async deleteDelivery(routeId, user) {
+  if (!['admin', 'logistics_manager'].includes(user.role))
+    return this._fail('Only admin or logistics_manager can delete routes');
+
+  const routeResult = await DeliveryModel.findById(routeId, user.businessId);
+  if (!routeResult.success) return routeResult;
+
+  const route = routeResult.data;
+  const deletableStatuses = ['planned', 'cancelled', 'declined'];
+
+  if (!deletableStatuses.includes(route.status)) {
+    return this._fail(
+      `Cannot delete a route with status "${route.status}". ` +
+      `Only planned, cancelled, or declined routes can be deleted.`
+    );
+  }
+
+  // Release any reserved inventory before deleting
+  await this._releaseRouteReservations(routeId, user.businessId);
+
+  // Clean up related approval records so the LM queue stays clean
+  try {
+    await pool.query(
+      `UPDATE manager_approvals
+       SET status = 'cancelled', updated_at = NOW()
+       WHERE delivery_id = $1
+         AND approval_type = 'route_optimization'
+         AND status IN ('pending', 'declined', 'rejected')`,
+      [routeId]
+    );
+  } catch (err) {
+    console.warn('[deleteDelivery] approval cleanup skipped:', err.message);
+  }
+
+  return DeliveryModel.deleteRoute(routeId, user.businessId);
+},
 
   // ── Drivers list ─────────────────────────────────────────
   async getDrivers(user) {

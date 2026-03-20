@@ -16,7 +16,6 @@ const SustainabilityManagerPage = () => {
     pending: 'SUSTAINABILITY DASHBOARD',
     history: 'VERIFICATION HISTORY',
     trends:  'CARBON TRENDS',
-    audit:   'ECOTRUST AUDIT',
   };
   const currentPage = PAGE_TITLES[activeTab] || 'SUSTAINABILITY DASHBOARD';
 
@@ -27,11 +26,7 @@ const SustainabilityManagerPage = () => {
     error,
     trendData,
     trendLoading,
-    auditRecords,
-    auditLoading,
     loadTrendData,
-    loadAuditRecords,
-    flagTransaction,
   } = useSustainabilityApprovals();
 
   return (
@@ -68,16 +63,7 @@ const SustainabilityManagerPage = () => {
         />
       )}
 
-      {/* ── EcoTrust audit ────────────────────────────────────────────────── */}
-      {activeTab === 'audit' && (
-        <SustainabilityHistoryView
-          activeTab="audit"
-          auditRecords={auditRecords}
-          auditLoading={auditLoading}
-          onLoadAudit={loadAuditRecords}
-          onFlagTransaction={flagTransaction}
-        />
-      )}
+      
 
     </SustainabilityManagerLayout>
   );

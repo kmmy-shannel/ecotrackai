@@ -50,17 +50,18 @@ const CarbonModel = {
     try {
       const query = `
         SELECT
-          route_id,
-          vehicle_type,
-          COALESCE(total_distance_km, 0) AS total_distance,
-          COALESCE(estimated_fuel_consumption_liters, 0) AS fuel_consumption,
-          COALESCE(estimated_carbon_kg, 0) AS carbon_emissions,
-          created_at,
-          status
-        FROM delivery_routes
-        WHERE business_id = $1
-          AND created_at >= $2
-          AND created_at <= $3
+          dl.route_id,
+          dr.vehicle_type,
+          COALESCE(dl.actual_distance_km, 0)       AS total_distance,
+          COALESCE(dl.actual_fuel_used_liters, 0)  AS fuel_consumption,
+          COALESCE(dl.actual_carbon_kg, 0)         AS carbon_emissions,
+          dl.created_at,
+          'delivered' AS status
+        FROM delivery_logs dl
+        JOIN delivery_routes dr ON dr.route_id = dl.route_id
+        WHERE dr.business_id = $1
+          AND dl.delivery_date >= $2
+          AND dl.delivery_date <= $3
       `;
 
       const { rows } = await pool.query(query, [businessId, startDate, endDate]);
@@ -80,17 +81,17 @@ const CarbonModel = {
 
     try {
       const query = `
-        SELECT
-          COUNT(*) AS trip_count,
-          COALESCE(SUM(total_distance_km), 0) AS total_distance,
-          COALESCE(SUM(estimated_fuel_consumption_liters), 0) AS total_fuel,
-          COALESCE(SUM(estimated_carbon_kg), 0) AS total_emissions
-        FROM delivery_routes
-        WHERE business_id = $1
-          AND created_at >= $2
-          AND created_at <= $3
-      `;
-
+      SELECT
+        COUNT(dl.route_id)                          AS trip_count,
+        COALESCE(SUM(dl.actual_distance_km), 0)    AS total_distance,
+        COALESCE(SUM(dl.actual_fuel_used_liters),0) AS total_fuel,
+        COALESCE(SUM(dl.actual_carbon_kg), 0)      AS total_emissions
+      FROM delivery_logs dl
+      JOIN delivery_routes dr ON dr.route_id = dl.route_id
+      WHERE dr.business_id = $1
+        AND dl.delivery_date >= $2
+        AND dl.delivery_date <= $3
+    `;
       const { rows } = await pool.query(query, [businessId, startDate, endDate]);
       return { success: true, data: rows[0] || null };
     } catch (error) {

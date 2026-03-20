@@ -33,10 +33,32 @@ const EcoTrustService = {
   _ok:   (data) => ({ success: true,  data }),
   _fail: (msg)  => ({ success: false, error: msg }),
 
+  // ── INTERNAL: Sync the ecotrust_scores cache from live transactions ──────────
+  // Called every time getScore() runs so the login leaderboard and
+  // super admin analytics leaderboard always match the admin EcoScore page.
+  async _syncScoreCache(businessId, totalPoints) {
+    try {
+      const levelInfo = resolveLevel(totalPoints);
+      await pool.query(`
+        INSERT INTO ecotrust_scores
+          (business_id, current_score, total_points_earned, level, last_updated, created_at)
+        VALUES ($1, $2, $2, $3, NOW(), NOW())
+        ON CONFLICT (business_id) DO UPDATE
+          SET current_score       = $2,
+              total_points_earned = $2,
+              level               = $3,
+              last_updated        = NOW()
+      `, [businessId, totalPoints, levelInfo.currentLevel.name]);
+    } catch (err) {
+      // Non-fatal — cache sync failure must never break the score endpoint
+      console.warn('[EcoTrustService._syncScoreCache] Failed to sync cache:', err.message);
+    }
+  },
+
   // ── GET /api/ecotrust/score ───────────────────────────────
   async getScore(businessId) {
     try {
-      // Total verified points
+      // Total verified points — always computed live from transactions
       const { rows: [totRow] } = await pool.query(`
         SELECT COALESCE(SUM(points_earned), 0)::int AS total_points
         FROM ecotrust_transactions
@@ -46,6 +68,9 @@ const EcoTrustService = {
 
       const totalPoints = Number(totRow?.total_points) || 0;
       const levelInfo   = resolveLevel(totalPoints);
+
+      // ── FIX: Sync the cache so login page and analytics always match ──────────
+      await this._syncScoreCache(businessId, totalPoints);
 
       // Recent transactions (last 20)
       const { rows: transactions } = await pool.query(`
@@ -102,7 +127,6 @@ const EcoTrustService = {
   },
 
   // ── GET /api/ecotrust/actions ─────────────────────────────
-  // Returns all sustainable actions with their point values
   async getSustainableActions(businessId) {
     try {
       const { rows } = await pool.query(`
@@ -128,8 +152,7 @@ const EcoTrustService = {
     }
   },
 
-  // Compatibility shim: some controllers call recalculateBusinessScore().
-  // We simply delegate to getScore which already recomputes totals on the fly.
+  // Compatibility shim used by some controllers
   async recalculateBusinessScore(context = {}) {
     const businessId = context.businessId || context.business_id;
     if (!businessId) return this._fail('businessId is required');

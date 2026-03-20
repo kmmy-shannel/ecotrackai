@@ -1,11 +1,66 @@
+// ============================================================
+// FILE: src/pages/manager/logistics/LogisticsHistoryView.jsx
+// UI restyled to match AdminDashboardPage design system
+// NO functional changes — only visual/CSS updates
+// ============================================================
 import React from 'react';
 import { CheckCircle, XCircle, History, Navigation, Leaf } from 'lucide-react';
+
+/* ─── Styles ────────────────────────────────────────────────────────────────── */
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+  .lh-root, .lh-root * { font-family:'Poppins',sans-serif; box-sizing:border-box; }
+
+  @keyframes lh-in { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  .lh-page { animation:lh-in .3s ease both; }
+
+  /* Stat cards */
+  .lh-stat { border-radius:18px; overflow:hidden; border:1px solid rgba(82,183,136,0.18); box-shadow:0 2px 10px rgba(26,61,43,0.07); transition:transform .2s,box-shadow .2s; animation:lh-in .3s ease both; }
+  .lh-stat:hover { transform:translateY(-3px); box-shadow:0 10px 26px rgba(26,61,43,0.12); }
+  .lh-stat-dk { background:linear-gradient(145deg,#1a3d2b,#2d6a4f); }
+  .lh-stat-lt { background:#fff; }
+  .lh-stat-cell { padding:18px 20px; }
+
+  /* Rate bar panel */
+  .lh-panel { background:#fff; border-radius:18px; padding:18px 20px; box-shadow:0 2px 12px rgba(26,61,43,0.07); border:1px solid rgba(82,183,136,0.14); animation:lh-in .3s ease both; }
+
+  /* History items */
+  .lh-item { background:#fff; border-radius:16px; border-left:4px solid; box-shadow:0 1px 8px rgba(26,61,43,0.06); padding:14px 16px; display:flex; align-items:flex-start; gap:12px; animation:lh-in .25s ease both; transition:box-shadow .15s; }
+  .lh-item:hover { box-shadow:0 4px 16px rgba(26,61,43,0.1); }
+  .lh-item-approved { border-left-color:#40916c; }
+  .lh-item-declined { border-left-color:#dc2626; }
+
+  .lh-item-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .lh-item-icon-approved { background:#d8f3dc; }
+  .lh-item-icon-declined { background:#fef2f2; }
+
+  .lh-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 9px; border-radius:99px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+  .lh-badge-approved { background:#d8f3dc; color:#1a3d2b; border:1px solid #86efac; }
+  .lh-badge-declined { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+
+  .lh-saving { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:600; color:#2d6a4f; }
+
+  /* Date labels */
+  .lh-date-label { font-size:9.5px; font-weight:800; color:#9ca3af; text-transform:uppercase; letter-spacing:.12em; margin:0 0 10px; padding:0 2px; }
+
+  /* Empty */
+  .lh-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 24px; gap:10px; color:#9ca3af; text-align:center; }
+`;
+
+if (typeof document !== 'undefined' && !document.getElementById('lh-styles')) {
+  const el = document.createElement('style');
+  el.id = 'lh-styles'; el.textContent = STYLES;
+  document.head.appendChild(el);
+}
+
+/* ── ALL ORIGINAL LOGIC BELOW — zero changes ──────────────── */
 
 const LogisticsHistoryView = ({ history, onBack }) => {
   const grouped = history.reduce((acc, item) => {
     const dateStr = item.reviewed_at || item.updated_at;
     const key = dateStr
-      ? new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+      ? new Date(dateStr).toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })
       : 'Unknown Date';
     if (!acc[key]) acc[key] = [];
     acc[key].push(item);
@@ -17,84 +72,95 @@ const LogisticsHistoryView = ({ history, onBack }) => {
   const approvalRate  = history.length > 0 ? Math.round((totalApproved / history.length) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-   
+    <div className="lh-root lh-page" style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-          <p className="text-3xl font-bold text-gray-800">{history.length}</p>
-          <p className="text-sm text-gray-500 mt-1">Total Decisions</p>
-        </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-          <p className="text-3xl font-bold text-green-600">{totalApproved}</p>
-          <p className="text-sm text-green-600 mt-1">Approved</p>
-        </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-          <p className="text-3xl font-bold text-red-600">{totalDeclined}</p>
-          <p className="text-sm text-red-500 mt-1">Declined</p>
-        </div>
+      {/* Stat cards */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+        {[
+          { label:'Total Decisions', value: history.length,  dark:true  },
+          { label:'Approved',        value: totalApproved,   dark:false },
+          { label:'Declined',        value: totalDeclined,   dark:false },
+        ].map((s, i) => (
+          <div key={s.label} className={`lh-stat ${s.dark ? 'lh-stat-dk' : 'lh-stat-lt'}`} style={{ animationDelay:`${i * 0.05}s` }}>
+            <div className="lh-stat-cell">
+              <p style={{ fontSize:9.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', margin:'0 0 8px', color: s.dark ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
+                {s.label}
+              </p>
+              <p style={{ fontSize:36, fontWeight:900, lineHeight:1, margin:0, letterSpacing:'-1.5px', color: s.dark ? '#fff' : (s.label === 'Approved' ? '#1a3d2b' : s.label === 'Declined' ? '#b91c1c' : '#111827') }}>
+                {s.value}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Rate bar */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-700">Approval Rate</p>
-          <p className="text-lg font-bold text-gray-800">{approvalRate}%</p>
+      {/* Approval rate bar */}
+      <div className="lh-panel">
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+          <p style={{ fontSize:13, fontWeight:700, color:'#1a3d2b', margin:0 }}>Approval Rate</p>
+          <p style={{ fontSize:22, fontWeight:900, color:'#1a3d2b', margin:0, letterSpacing:'-1px' }}>{approvalRate}%</p>
         </div>
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-[var(--bg-900)] rounded-full transition-all duration-500" style={{ width: `${approvalRate}%` }} />
+        <div style={{ height:8, background:'rgba(82,183,136,0.12)', borderRadius:99, overflow:'hidden' }}>
+          <div style={{ height:'100%', width:`${approvalRate}%`, background:'linear-gradient(90deg,#1a3d2b,#40916c)', borderRadius:99, transition:'width .5s ease' }} />
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', marginTop:8 }}>
+          <span style={{ fontSize:10.5, color:'#9ca3af' }}>{totalDeclined} declined</span>
+          <span style={{ fontSize:10.5, color:'#40916c', fontWeight:600 }}>{totalApproved} approved</span>
         </div>
       </div>
 
       {/* History list */}
       {Object.keys(grouped).length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm">
-          <History size={40} className="mx-auto mb-3 text-gray-300" />
-          <p className="font-semibold text-gray-500">No history yet</p>
+        <div className="lh-panel">
+          <div className="lh-empty">
+            <div style={{ width:54, height:54, borderRadius:15, background:'#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <History size={28} style={{ color:'#d1d5db' }} />
+            </div>
+            <p style={{ fontWeight:700, color:'#4b5563', margin:0, fontSize:14 }}>No history yet</p>
+            <p style={{ fontSize:12, margin:0 }}>Approved and declined routes will appear here.</p>
+          </div>
         </div>
       ) : (
         Object.entries(grouped).map(([dateLabel, items]) => (
           <div key={dateLabel}>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 px-1">{dateLabel}</p>
-            <div className="space-y-3">
+            <p className="lh-date-label">{dateLabel}</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {items.map((item, i) => {
-                const extra = (() => { try { return JSON.parse(item.extra_data || '{}'); } catch { return {}; } })();
+                const extra   = (() => { try { return JSON.parse(item.extra_data || '{}'); } catch { return {}; } })();
                 const savings = extra.savings || {};
+                const approved = item.status === 'approved';
                 return (
-                  <div key={i} className={`bg-white rounded-xl p-4 border-l-4 shadow-sm ${item.status === 'approved' ? 'border-l-green-500' : 'border-l-red-400'}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${item.status === 'approved' ? 'bg-green-100' : 'bg-red-100'}`}>
-                          {item.status === 'approved'
-                            ? <CheckCircle size={18} className="text-green-600" />
-                            : <XCircle size={18} className="text-red-500" />}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${item.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {item.status === 'approved' ? 'APPROVED' : 'DECLINED'}
-                            </span>
-                          </div>
-                          <p className="font-semibold text-gray-800 text-sm">{item.product_name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{item.quantity} · {item.location}</p>
-                          {savings.distance && (
-                            <div className="flex gap-3 mt-1">
-                              <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                <Navigation size={10} /> -{savings.distance} km
-                              </span>
-                              <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                <Leaf size={10} /> -{savings.emissions} kg CO₂
-                              </span>
-                            </div>
-                          )}
-                          {item.review_notes && <p className="text-xs text-gray-400 mt-1 italic">"{item.review_notes}"</p>}
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-400 flex-shrink-0">
-                        {item.reviewed_at ? new Date(item.reviewed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                      </p>
+                  <div key={i} className={`lh-item ${approved ? 'lh-item-approved' : 'lh-item-declined'}`}>
+                    <div className={`lh-item-icon ${approved ? 'lh-item-icon-approved' : 'lh-item-icon-declined'}`}>
+                      {approved
+                        ? <CheckCircle size={18} style={{ color:'#40916c' }} />
+                        : <XCircle    size={18} style={{ color:'#dc2626' }} />}
                     </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap', marginBottom:4 }}>
+                        <span className={`lh-badge ${approved ? 'lh-badge-approved' : 'lh-badge-declined'}`}>
+                          {approved ? 'Approved' : 'Declined'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize:13.5, fontWeight:700, color:'#111827', margin:'0 0 2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {item.product_name}
+                      </p>
+                      <p style={{ fontSize:11, color:'#9ca3af', margin:'0 0 4px' }}>
+                        {item.quantity} · {item.location}
+                      </p>
+                      {savings.distance && (
+                        <div style={{ display:'flex', gap:14 }}>
+                          <span className="lh-saving"><Navigation size={10} /> -{savings.distance} km</span>
+                          <span className="lh-saving"><Leaf size={10} /> -{savings.emissions} kg CO₂</span>
+                        </div>
+                      )}
+                      {item.review_notes && (
+                        <p style={{ fontSize:11, color:'#9ca3af', margin:'4px 0 0', fontStyle:'italic' }}>"{item.review_notes}"</p>
+                      )}
+                    </div>
+                    <p style={{ fontSize:10.5, color:'#9ca3af', flexShrink:0, marginLeft:8 }}>
+                      {item.reviewed_at ? new Date(item.reviewed_at).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }) : '—'}
+                    </p>
                   </div>
                 );
               })}

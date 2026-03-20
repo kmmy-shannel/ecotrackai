@@ -1,11 +1,128 @@
 // ============================================================
 // FILE: src/pages/manager/logistics/LogisticsDashboardView.jsx
-// Props-based — data comes from LogisticsManagerPage
+// UI restyled to match AdminDashboardPage design system
+// NO functional changes — only visual/CSS updates
 // ============================================================
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Rectangle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import {
+  CheckCircle2, AlertCircle, Truck, Users, Leaf,
+  Navigation, RefreshCw, ChevronRight, Sparkles,
+  Activity, Clock, MapPin, Zap
+} from 'lucide-react';
+
+/* ─── Styles (mirrors admin db-* system) ───────────────────────────────────── */
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+  .ld-root, .ld-root * { font-family:'Poppins',sans-serif; box-sizing:border-box; }
+
+  @keyframes ld-in    { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes ld-slide { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes ld-spin  { to{transform:rotate(360deg)} }
+  @keyframes ld-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+  .ld-page { animation:ld-in .3s ease both; }
+
+  /* Stat cards */
+  .ld-stat { border-radius:18px; border:1px solid rgba(82,183,136,0.18); box-shadow:0 2px 10px rgba(26,61,43,0.07); transition:transform .2s,box-shadow .2s; animation:ld-in .3s ease both; overflow:hidden; }
+  .ld-stat:hover { transform:translateY(-3px); box-shadow:0 10px 26px rgba(26,61,43,0.13); }
+  .ld-stat-dk { background:linear-gradient(145deg,#1a3d2b,#2d6a4f); position:relative; overflow:hidden; }
+  .ld-stat-dk::after { content:''; position:absolute; right:-20px; top:-20px; width:80px; height:80px; border-radius:50%; background:rgba(255,255,255,0.05); pointer-events:none; }
+  .ld-stat-lt { background:#fff; }
+  .ld-stat-cell { padding:16px 18px; position:relative; z-index:1; }
+
+  /* Panels */
+  .ld-panel { background:#fff; border-radius:18px; padding:18px 20px; box-shadow:0 2px 12px rgba(26,61,43,0.07); border:1px solid rgba(82,183,136,0.14); animation:ld-in .32s ease both; }
+
+  /* Section header */
+  .ld-sh { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .ld-sh-left { display:flex; align-items:center; gap:9px; }
+  .ld-sh-ico { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .ld-rule { height:1px; background:rgba(82,183,136,0.1); margin:13px 0; }
+
+  /* Approval card */
+  .ld-card { background:#fff; border-radius:16px; border:1px solid rgba(82,183,136,0.16); box-shadow:0 2px 10px rgba(26,61,43,0.06); overflow:hidden; margin-bottom:10px; animation:ld-slide .22s ease both; transition:border-color .15s,box-shadow .15s; }
+  .ld-card:hover { border-color:#52b788; box-shadow:0 6px 20px rgba(26,61,43,0.1); }
+  .ld-card:nth-child(1){animation-delay:.03s} .ld-card:nth-child(2){animation-delay:.06s} .ld-card:nth-child(3){animation-delay:.09s}
+
+  .ld-card-header { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; transition:background .13s; }
+  .ld-card-header:hover { background:rgba(216,243,220,0.2); }
+
+  .ld-card-body { border-top:1px solid rgba(82,183,136,0.1); padding:16px; background:rgba(240,253,244,0.3); }
+
+  /* Avatar */
+  .ld-av { width:38px; height:38px; border-radius:12px; background:linear-gradient(135deg,#d8f3dc,#b7e4c7); color:#1a3d2b; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; flex-shrink:0; }
+
+  /* Badges */
+  .ld-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; }
+  .ld-badge-pending  { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+  .ld-badge-approved { background:#d8f3dc; color:#1a3d2b; border:1px solid #86efac; }
+  .ld-badge-declined { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+  .ld-badge-transit  { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+  .ld-badge-optimized{ background:#f5f3ff; color:#6d28d9; border:1px solid #ddd6fe; }
+
+  /* Metric comparison rows */
+  .ld-metric-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(82,183,136,0.08); font-size:12.5px; }
+  .ld-metric-row:last-child { border-bottom:none; }
+
+  /* Savings chips */
+  .ld-saving { display:inline-flex; align-items:center; gap:3px; padding:4px 10px; background:#d8f3dc; color:#1a3d2b; border-radius:99px; font-size:11px; font-weight:700; border:1px solid #86efac; }
+
+  /* Buttons */
+  .ld-btn-approve { display:inline-flex; align-items:center; justify-content:center; gap:5px; flex:1; padding:10px; background:linear-gradient(135deg,#1a3d2b,#2d6a4f); color:#fff; border-radius:12px; font-size:12.5px; font-weight:700; border:none; cursor:pointer; transition:opacity .15s,transform .13s; box-shadow:0 2px 8px rgba(26,61,43,0.2); }
+  .ld-btn-approve:hover:not(:disabled) { opacity:.88; transform:translateY(-1px); }
+  .ld-btn-approve:disabled { opacity:.45; cursor:not-allowed; }
+  .ld-btn-decline { display:inline-flex; align-items:center; justify-content:center; gap:5px; flex:1; padding:10px; background:#fff; color:#dc2626; border-radius:12px; font-size:12.5px; font-weight:700; border:1.5px solid #fecaca; cursor:pointer; transition:background .13s; }
+  .ld-btn-decline:hover { background:#fef2f2; }
+  .ld-btn-cancel { padding:10px 18px; background:#f3f4f6; color:#374151; border-radius:12px; font-size:12.5px; font-weight:700; border:none; cursor:pointer; transition:background .13s; }
+  .ld-btn-cancel:hover { background:#e5e7eb; }
+  .ld-btn-confirm-decline { flex:1; padding:10px; background:#dc2626; color:#fff; border-radius:12px; font-size:12.5px; font-weight:700; border:none; cursor:pointer; transition:background .13s; }
+  .ld-btn-confirm-decline:hover:not(:disabled) { background:#b91c1c; }
+  .ld-btn-confirm-decline:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* AI box */
+  .ld-ai-box { background:linear-gradient(to bottom right,#f0fdf4,#fafffe); border:1px solid rgba(82,183,136,0.2); border-radius:12px; padding:12px 14px; }
+
+  /* Textarea */
+  .ld-textarea { width:100%; border:1.5px solid rgba(82,183,136,0.25); border-radius:12px; padding:10px 12px; font-size:12.5px; font-family:'Poppins',sans-serif; resize:none; outline:none; transition:border-color .15s; background:#fff; }
+  .ld-textarea:focus { border-color:#2d6a4f; box-shadow:0 0 0 3px rgba(45,106,79,0.1); }
+
+  /* Select */
+  .ld-select { width:100%; border:1.5px solid rgba(82,183,136,0.25); border-radius:12px; padding:9px 12px; font-size:12.5px; font-family:'Poppins',sans-serif; outline:none; transition:border-color .15s; background:#fff; color:#1a3d2b; }
+  .ld-select:focus { border-color:#2d6a4f; }
+
+  /* Driver row */
+  .ld-driver-row { display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid rgba(82,183,136,0.08); }
+  .ld-driver-row:last-child { border-bottom:none; }
+  .ld-driver-av { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#d8f3dc,#b7e4c7); color:#1a3d2b; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0; }
+
+  /* Empty state */
+  .ld-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 24px; gap:10px; color:#9ca3af; text-align:center; }
+
+  /* Spinner */
+  .ld-spin { border-radius:50%; border:2.5px solid #95d5b2; border-top-color:#2d6a4f; animation:ld-spin .65s linear infinite; }
+
+  /* Alert / toast */
+  .ld-toast-err { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:12px; padding:12px 16px; font-size:13px; font-weight:600; margin-bottom:14px; }
+  .ld-toast-ok  { background:#d8f3dc; border:1px solid #86efac; color:#1a3d2b; border-radius:12px; padding:12px 16px; font-size:13px; font-weight:600; margin-bottom:14px; }
+
+  /* Map toggle btn */
+  .ld-btn-map { display:inline-flex; align-items:center; gap:4px; padding:5px 11px; background:#fff; color:#2d6a4f; border-radius:9px; font-size:11px; font-weight:700; border:1.5px solid rgba(82,183,136,0.35); cursor:pointer; transition:background .13s; }
+  .ld-btn-map:hover, .ld-btn-map.active { background:#d8f3dc; border-color:#52b788; }
+
+  /* Collapse chevron */
+  .ld-chevron { font-size:11px; color:#9ca3af; margin-left:6px; }
+`;
+
+if (typeof document !== 'undefined' && !document.getElementById('ld-styles')) {
+  const el = document.createElement('style');
+  el.id = 'ld-styles'; el.textContent = STYLES;
+  document.head.appendChild(el);
+}
+
+/* ─── ALL ORIGINAL LOGIC BELOW — zero changes ──────────────────────────────── */
 
 // ── Leaflet icon fix ──────────────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -27,7 +144,6 @@ const DAGUPAN_CENTER = [16.0433, 120.3339];
 const DAGUPAN_BOUNDS = [[15.98, 120.27], [16.11, 120.41]];
 const DAGUPAN_ZOOM   = 14;
 
-// ── Fit map to route bounds ───────────────────────────────
 const FitBounds = ({ positions }) => {
   const map = useMap();
   useEffect(() => {
@@ -39,19 +155,15 @@ const FitBounds = ({ positions }) => {
   return null;
 };
 
-// ── Fetch real road route from OSRM ──────────────────────
 const fetchRoadRoute = async (stops) => {
-  // coords = [[lng, lat], ...]
   const coords = stops.map(s => `${s.lng},${s.lat}`).join(';');
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
   const res  = await fetch(url);
   const data = await res.json();
   if (data.code !== 'Ok' || !data.routes?.[0]) return null;
-  // GeoJSON coords are [lng, lat] — convert to [lat, lng] for Leaflet
   return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
 };
 
-// ── Route Map Component ───────────────────────────────────
 const RouteMapPreview = ({ stops = [] }) => {
   const validStops = stops.filter(s => s.lat && s.lng);
   const [roadPath,    setRoadPath]    = useState([]);
@@ -68,7 +180,7 @@ const RouteMapPreview = ({ stops = [] }) => {
   }, [JSON.stringify(validStops)]);
 
   if (validStops.length === 0) return (
-    <div className="flex items-center justify-center h-full bg-gray-100 rounded-lg text-xs text-gray-400">
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', background:'#f9fafb', borderRadius:12, fontSize:12, color:'#9ca3af' }}>
       No coordinates available for map preview
     </div>
   );
@@ -77,80 +189,60 @@ const RouteMapPreview = ({ stops = [] }) => {
   const getIcon = (i) => i === 0 ? originIcon : i === validStops.length - 1 ? destinationIcon : stopIcon;
 
   return (
-    <div className="relative h-full w-full">
+    <div style={{ position:'relative', height:'100%', width:'100%' }}>
       <MapContainer
-        center={DAGUPAN_CENTER}
-        zoom={DAGUPAN_ZOOM}
-        minZoom={13}
-        maxZoom={19}
-        maxBounds={DAGUPAN_BOUNDS}
-        maxBoundsViscosity={1.0}
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={false}
+        center={DAGUPAN_CENTER} zoom={DAGUPAN_ZOOM} minZoom={13} maxZoom={19}
+        maxBounds={DAGUPAN_BOUNDS} maxBoundsViscosity={1.0}
+        style={{ height:'100%', width:'100%' }} scrollWheelZoom={false}
       >
-        <TileLayer
-          url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
-          attribution="© Google"
-          maxZoom={20}
-        />
-        <Rectangle
-          bounds={DAGUPAN_BOUNDS}
-          pathOptions={{ color: '#15803d', weight: 2, fillOpacity: 0.02, dashArray: '6 4' }}
-        />
-
+        <TileLayer url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" attribution="© Google" maxZoom={20} />
+        <Rectangle bounds={DAGUPAN_BOUNDS} pathOptions={{ color:'#15803d', weight:2, fillOpacity:0.02, dashArray:'6 4' }} />
         <FitBounds positions={markerPositions} />
-
         {validStops.map((stop, i) => (
           <Marker key={i} position={[stop.lat, stop.lng]} icon={getIcon(i)}>
             <Popup>
-              <div className="text-xs min-w-[140px]">
-                <p className="font-bold text-gray-700 mb-1">
+              <div style={{ fontSize:11, minWidth:140 }}>
+                <p style={{ fontWeight:700, color:'#1a3d2b', margin:'0 0 3px' }}>
                   {i === 0 ? '🟢 Origin' : i === validStops.length - 1 ? '🔴 Destination' : `🔵 Stop ${i}`}
                 </p>
-                <p className="text-gray-600">{stop.name || `${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`}</p>
+                <p style={{ color:'#6b7280', margin:0 }}>{stop.name || `${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`}</p>
               </div>
             </Popup>
           </Marker>
         ))}
-
-        {/* Road route path — falls back to straight line if OSRM fails */}
-        {roadPath.length > 1 && (
-          <Polyline positions={roadPath} color="#15803d" weight={4} opacity={0.85} />
-        )}
+        {roadPath.length > 1 && <Polyline positions={roadPath} color="#15803d" weight={4} opacity={0.85} />}
         {roadPath.length === 0 && !routeLoading && markerPositions.length > 1 && (
           <Polyline positions={markerPositions} color="#15803d" weight={3} opacity={0.6} dashArray="6 4" />
         )}
       </MapContainer>
 
-      {/* Loading overlay */}
       {routeLoading && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow text-xs text-gray-600 font-medium border border-gray-200">
-          <div className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+        <div style={{ position:'absolute', bottom:10, left:'50%', transform:'translateX(-50%)', zIndex:1000, display:'flex', alignItems:'center', gap:7, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(6px)', padding:'7px 14px', borderRadius:99, boxShadow:'0 2px 10px rgba(0,0,0,0.1)', fontSize:11.5, color:'#1a3d2b', fontWeight:600, border:'1px solid rgba(82,183,136,0.2)' }}>
+          <div className="ld-spin" style={{ width:13, height:13 }} />
           Calculating road route…
         </div>
       )}
 
-      {/* Dagupan label */}
-      <div className="absolute top-2 left-2 z-[1000] px-2.5 py-1 bg-green-800 text-white rounded-lg text-[10px] font-semibold shadow-md pointer-events-none">
+      <div style={{ position:'absolute', top:8, left:8, zIndex:1000, padding:'5px 10px', background:'#1a3d2b', color:'#fff', borderRadius:8, fontSize:10, fontWeight:700, boxShadow:'0 2px 8px rgba(0,0,0,0.2)', pointerEvents:'none' }}>
         Dagupan City, Pangasinan
       </div>
 
       {/* ── DEBUG PANEL — remove once routing is confirmed working ── */}
-      <div className="absolute top-2 right-2 z-[1000] bg-black/75 text-white rounded-lg px-2.5 py-2 text-[10px] font-mono max-w-[220px] shadow-lg">
-        <p className="font-bold text-yellow-300 mb-1">🔍 Debug · Parsed Stops ({validStops.length})</p>
+      <div style={{ position:'absolute', top:8, right:8, zIndex:1000, background:'rgba(0,0,0,0.75)', color:'#fff', borderRadius:10, padding:'8px 10px', fontSize:10, fontFamily:'monospace', maxWidth:220, boxShadow:'0 2px 10px rgba(0,0,0,0.3)' }}>
+        <p style={{ fontWeight:700, color:'#fde68a', margin:'0 0 4px' }}>🔍 Debug · Parsed Stops ({validStops.length})</p>
         {validStops.length === 0 ? (
-          <p className="text-red-300">⚠ No stops parsed — check extra_data</p>
+          <p style={{ color:'#fca5a5', margin:0 }}>⚠ No stops parsed — check extra_data</p>
         ) : (
           validStops.map((s, i) => (
-            <div key={i} className={`mb-1 pb-1 ${i < validStops.length - 1 ? 'border-b border-white/20' : ''}`}>
-              <p className={i === 0 ? 'text-green-300' : i === validStops.length - 1 ? 'text-red-300' : 'text-blue-300'}>
+            <div key={i} style={{ marginBottom:4, paddingBottom:4, borderBottom: i < validStops.length - 1 ? '1px solid rgba(255,255,255,0.15)' : 'none' }}>
+              <p style={{ color: i === 0 ? '#86efac' : i === validStops.length - 1 ? '#fca5a5' : '#93c5fd', margin:0 }}>
                 {i === 0 ? '🟢' : i === validStops.length - 1 ? '🔴' : '🔵'} {s.name?.slice(0, 22) || 'unnamed'}
               </p>
-              <p className="text-gray-300">{s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}</p>
+              <p style={{ color:'#d1d5db', margin:0 }}>{s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}</p>
             </div>
           ))
         )}
-        <p className="mt-1 pt-1 border-t border-white/20 text-gray-400">
+        <p style={{ margin:'4px 0 0', paddingTop:4, borderTop:'1px solid rgba(255,255,255,0.15)', color:'#9ca3af' }}>
           Road path: {roadPath.length > 0 ? `✅ ${roadPath.length} pts` : routeLoading ? '⏳ loading…' : '❌ none (fallback)'}
         </p>
       </div>
@@ -158,88 +250,71 @@ const RouteMapPreview = ({ stops = [] }) => {
   );
 };
 
+/* ── Badge (restyled, same logic) ──────────────────────────── */
 const Badge = ({ status }) => {
-  const colors = {
-    pending:    'bg-yellow-100 text-yellow-800',
-    approved:   'bg-green-100 text-green-800',
-    rejected:   'bg-red-100 text-red-800',
-    declined:   'bg-red-100 text-red-800',
-    in_transit: 'bg-blue-100 text-blue-800',
-    delivered:  'bg-emerald-100 text-emerald-800',
-    planned:    'bg-gray-100 text-gray-600',
-    optimized:  'bg-purple-100 text-purple-800',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${colors[status] || 'bg-gray-100 text-gray-600'}`}>
-      {status?.replace(/_/g, ' ')}
-    </span>
-  );
+  const cls = {
+    pending:    'ld-badge ld-badge-pending',
+    approved:   'ld-badge ld-badge-approved',
+    rejected:   'ld-badge ld-badge-declined',
+    declined:   'ld-badge ld-badge-declined',
+    in_transit: 'ld-badge ld-badge-transit',
+    delivered:  'ld-badge ld-badge-approved',
+    planned:    'ld-badge',
+    optimized:  'ld-badge ld-badge-optimized',
+  }[status] || 'ld-badge';
+  return <span className={cls}>{status?.replace(/_/g, ' ')}</span>;
 };
 
+/* ── MetricRow (restyled, same logic) ──────────────────────── */
 const MetricRow = ({ label, original, optimized, unit }) => {
   const saved    = ((parseFloat(original) || 0) - (parseFloat(optimized) || 0)).toFixed(2);
   const improved = parseFloat(saved) > 0;
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-gray-100 text-sm last:border-0">
-      <span className="text-gray-500 w-20">{label}</span>
-      <div className="flex items-center gap-3">
-        <span className="text-gray-400 line-through text-xs">{(parseFloat(original)||0).toFixed(1)}{unit}</span>
-        <span className="font-semibold text-gray-800">{(parseFloat(optimized)||0).toFixed(1)}{unit}</span>
+    <div className="ld-metric-row">
+      <span style={{ color:'#9ca3af', width:70 }}>{label}</span>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ color:'#d1d5db', textDecoration:'line-through', fontSize:11 }}>{(parseFloat(original)||0).toFixed(1)}{unit}</span>
+        <span style={{ fontWeight:700, color:'#1a3d2b' }}>{(parseFloat(optimized)||0).toFixed(1)}{unit}</span>
         {improved && (
-          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">−{saved}</span>
+          <span className="ld-saving" style={{ fontSize:10, padding:'2px 7px' }}>−{saved}</span>
         )}
       </div>
     </div>
   );
 };
 
-// ── Parse stops from extra_data or location fields ───────
+/* ── parseRouteStops — untouched ───────────────────────────── */
 const parseRouteStops = (item) => {
   try {
-    // extra_data is stored as JSON: { route, optimization }
-    const extra = typeof item.extra_data === 'string'
-      ? JSON.parse(item.extra_data)
-      : (item.extra_data || {});
-
+    const extra = typeof item.extra_data === 'string' ? JSON.parse(item.extra_data) : (item.extra_data || {});
     const routeData = extra.route || {};
-
-    // Try to get stops from route_stops if available
     if (Array.isArray(extra.stops) && extra.stops.length > 0) {
       return extra.stops.map(s => {
         const loc = typeof s.location === 'string' ? (() => { try { return JSON.parse(s.location); } catch { return {}; } })() : (s.location || {});
         return { lat: parseFloat(loc.lat || s.lat || 0) || null, lng: parseFloat(loc.lng || s.lng || 0) || null, name: loc.address || s.location_name || s.name || '' };
       }).filter(s => s.lat && s.lng);
     }
-
-    // Fall back to origin + destination from route object
     const stops = [];
-    const origin = typeof routeData.origin_location === 'string'
-      ? (() => { try { return JSON.parse(routeData.origin_location); } catch { return {}; } })()
-      : (routeData.origin_location || {});
-    const dest = typeof routeData.destination_location === 'string'
-      ? (() => { try { return JSON.parse(routeData.destination_location); } catch { return {}; } })()
-      : (routeData.destination_location || {});
-
+    const origin = typeof routeData.origin_location === 'string' ? (() => { try { return JSON.parse(routeData.origin_location); } catch { return {}; } })() : (routeData.origin_location || {});
+    const dest   = typeof routeData.destination_location === 'string' ? (() => { try { return JSON.parse(routeData.destination_location); } catch { return {}; } })() : (routeData.destination_location || {});
     if (origin.lat && origin.lng) stops.push({ lat: parseFloat(origin.lat), lng: parseFloat(origin.lng), name: origin.address || 'Origin' });
-    if (dest.lat && dest.lng)     stops.push({ lat: parseFloat(dest.lat),   lng: parseFloat(dest.lng),   name: dest.address || 'Destination' });
-
-    // Also try item.location as origin if nothing else
+    if (dest.lat   && dest.lng)   stops.push({ lat: parseFloat(dest.lat),   lng: parseFloat(dest.lng),   name: dest.address   || 'Destination' });
     if (stops.length === 0 && item.location) {
       const loc = typeof item.location === 'string' ? (() => { try { return JSON.parse(item.location); } catch { return {}; } })() : (item.location || {});
       if (loc.lat && loc.lng) stops.push({ lat: parseFloat(loc.lat), lng: parseFloat(loc.lng), name: loc.address || 'Origin' });
     }
-
     return stops;
   } catch { return []; }
 };
 
+/* ── ApprovalCard ─────────────────────────────────────────── */
 function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
-  const [open,             setOpen]       = useState(false);
-  const [comment,          setComment]    = useState('');
-  const [declining,        setDeclining]  = useState(false);
-  const [busy,             setBusy]       = useState(false);
-  const [selectedDriver,   setSelectedDriver] = useState('');
-  const [showMap,          setShowMap]    = useState(false);
+  const [open,           setOpen]         = useState(false);
+  const [comment,        setComment]      = useState('');
+  const [declining,      setDeclining]    = useState(false);
+  const [busy,           setBusy]         = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState('');
+  const [showMap,        setShowMap]      = useState(false);
   const routeStops = parseRouteStops(item);
 
   // Only show drivers without an active ongoing delivery
@@ -253,127 +328,127 @@ function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
   })();
 
   const driverName = item.driver_full_name || item.driver_name || 'No driver assigned';
+  const initials   = (item.product_name || '?')[0].toUpperCase();
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <div className="flex items-start justify-between p-4 cursor-pointer hover:bg-gray-50"
-        onClick={() => setOpen(!open)}>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-xl">🚛</div>
-          <div>
-            <p className="font-semibold text-gray-800">{item.product_name || 'Unnamed Route'}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {driverName} · {item.vehicle_type || '—'} · {origin}
-            </p>
-            <p className="text-xs text-gray-400">
-              Submitted {new Date(item.created_at).toLocaleDateString()} by {item.submitted_by_name || 'admin'}
-            </p>
-          </div>
+    <div className="ld-card">
+      {/* Card Header */}
+      <div className="ld-card-header" onClick={() => setOpen(!open)}>
+        <div className="ld-av">{initials}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <p style={{ fontSize:13.5, fontWeight:700, color:'#111827', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {item.product_name || 'Unnamed Route'}
+          </p>
+          <p style={{ fontSize:11, color:'#6b7280', margin:'2px 0 0' }}>
+            {driverName} · {item.vehicle_type || '—'} · {origin}
+          </p>
+          <p style={{ fontSize:10.5, color:'#9ca3af', margin:'1px 0 0' }}>
+            Submitted {new Date(item.created_at).toLocaleDateString()} by {item.submitted_by_name || 'admin'}
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Badge status="pending" />
+        <div style={{ display:'flex', alignItems:'center', gap:7, flexShrink:0 }}>
+          <span className="ld-badge ld-badge-pending">Pending</span>
           {routeStops.length > 0 && (
             <button
+              className={`ld-btn-map${showMap ? ' active' : ''}`}
               onClick={e => { e.stopPropagation(); setShowMap(v => !v); if (!open) setOpen(true); }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors border ${
-                showMap ? 'bg-green-700 text-white border-green-700' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'
-              }`}
             >
-              🗺 {showMap ? 'Hide Map' : 'View Map'}
+              🗺 {showMap ? 'Hide' : 'Map'}
             </button>
           )}
-          <span className="text-gray-400 text-sm">{open ? '▲' : '▼'}</span>
+          <span className="ld-chevron">{open ? '▲' : '▼'}</span>
         </div>
       </div>
 
+      {/* Expanded body */}
       {open && (
-        <div className="border-t border-gray-100 p-4 space-y-4">
+        <div className="ld-card-body">
 
-          {/* Route Map Preview */}
+          {/* Map preview */}
           {showMap && routeStops.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Route Map Preview · Dagupan City
+            <div style={{ marginBottom:16 }}>
+              <p style={{ fontSize:9.5, fontWeight:800, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.08em', margin:'0 0 8px' }}>
+                Route Map · Dagupan City
               </p>
-              <div className="h-64 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+              <div style={{ height:220, borderRadius:13, overflow:'hidden', border:'1px solid rgba(82,183,136,0.18)', boxShadow:'0 2px 10px rgba(26,61,43,0.08)' }}>
                 <RouteMapPreview stops={routeStops} />
               </div>
-              <div className="flex gap-3 mt-2">
-                {[
-                  { color: 'bg-green-500', label: 'Origin' },
-                  { color: 'bg-blue-500',  label: 'Stop' },
-                  { color: 'bg-red-500',   label: 'Destination' },
-                ].map(l => (
-                  <div key={l.label} className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <div className={`w-2.5 h-2.5 rounded-full ${l.color}`} />
+              <div style={{ display:'flex', gap:14, marginTop:8 }}>
+                {[{ color:'#40916c', label:'Origin' }, { color:'#2563eb', label:'Stop' }, { color:'#dc2626', label:'Destination' }].map(l => (
+                  <div key={l.label} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#6b7280' }}>
+                    <div style={{ width:9, height:9, borderRadius:'50%', background:l.color }} />
                     {l.label}
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Optimization comparison */}
           {(item.optimized_distance || item.optimized_fuel) ? (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Route Optimization Comparison
+            <div style={{ marginBottom:14 }}>
+              <p style={{ fontSize:9.5, fontWeight:800, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.08em', margin:'0 0 8px' }}>
+                Route Optimization
               </p>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <MetricRow label="Distance" original={item.total_distance_km}                  optimized={item.optimized_distance}   unit=" km" />
-                <MetricRow label="Fuel"     original={item.estimated_fuel_consumption_liters}  optimized={item.optimized_fuel}        unit=" L"  />
-                <MetricRow label="CO₂"      original={item.estimated_carbon_kg}                optimized={item.optimized_carbon_kg}   unit=" kg" />
+              <div style={{ background:'rgba(240,253,244,0.6)', borderRadius:12, padding:'6px 12px', border:'1px solid rgba(82,183,136,0.12)' }}>
+                <MetricRow label="Distance" original={item.total_distance_km}                 optimized={item.optimized_distance}  unit=" km" />
+                <MetricRow label="Fuel"     original={item.estimated_fuel_consumption_liters} optimized={item.optimized_fuel}       unit=" L"  />
+                <MetricRow label="CO₂"      original={item.estimated_carbon_kg}               optimized={item.optimized_carbon_kg}  unit=" kg" />
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-2">
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginTop:10 }}>
                 {[
-                  { label: 'Distance saved', value: `${(parseFloat(item.savings_km)   || 0).toFixed(1)} km` },
-                  { label: 'Fuel saved',     value: `${(parseFloat(item.savings_fuel) || 0).toFixed(1)} L`  },
-                  { label: 'CO₂ saved',      value: `${(parseFloat(item.savings_co2)  || 0).toFixed(1)} kg` },
+                  { label:'Distance saved', value:`${(parseFloat(item.savings_km)   || 0).toFixed(1)} km` },
+                  { label:'Fuel saved',     value:`${(parseFloat(item.savings_fuel) || 0).toFixed(1)} L`  },
+                  { label:'CO₂ saved',      value:`${(parseFloat(item.savings_co2)  || 0).toFixed(1)} kg` },
                 ].map(s => (
-                  <div key={s.label} className="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
-                    <p className="text-xs text-green-700 font-bold">{s.value}</p>
-                    <p className="text-xs text-green-600">{s.label}</p>
+                  <div key={s.label} style={{ background:'#d8f3dc', border:'1px solid #86efac', borderRadius:10, padding:'8px', textAlign:'center' }}>
+                    <p style={{ fontSize:12, fontWeight:800, color:'#1a3d2b', margin:'0 0 2px' }}>{s.value}</p>
+                    <p style={{ fontSize:10, color:'#40916c', margin:0 }}>{s.label}</p>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'10px 14px', fontSize:12.5, color:'#b45309', marginBottom:14 }}>
               ⚠ No optimization data. Admin submitted without running AI optimization first.
             </div>
           )}
 
+          {/* AI recommendation */}
           {item.ai_recommendation && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-              <p className="text-xs font-bold text-green-700 mb-1">AI Recommendation</p>
-              <p className="text-sm text-green-800">{item.ai_recommendation}</p>
+            <div className="ld-ai-box" style={{ marginBottom:14 }}>
+              <p style={{ fontSize:9.5, fontWeight:800, color:'#2d6a4f', textTransform:'uppercase', letterSpacing:'.07em', margin:'0 0 5px', display:'flex', alignItems:'center', gap:4 }}>
+                <Sparkles size={10} /> AI Recommendation
+              </p>
+              <p style={{ fontSize:12.5, color:'#1a3d2b', margin:0 }}>{item.ai_recommendation}</p>
             </div>
           )}
 
-          <div>
-            <label className="text-xs font-medium text-gray-600">
+          {/* Comment textarea */}
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontSize:11.5, fontWeight:700, color:'#374151', display:'block', marginBottom:5 }}>
               {declining ? 'Reason for declining (required)' : 'Comment for admin (optional)'}
             </label>
-            <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3}
+            <textarea
+              className="ld-textarea"
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              rows={3}
               placeholder={declining ? 'Explain why this route is being declined…' : 'Any notes for the admin…'}
-              className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-green-500 outline-none" />
+            />
           </div>
 
-         {!declining ? (
-            <div className="space-y-3">
-              {/* Step 4-5: Jose must select a driver before approving */}
+          {/* Action buttons */}
+          {!declining ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                  Assign Driver <span className="text-red-500">*</span>
+                <label style={{ fontSize:11.5, fontWeight:700, color:'#374151', display:'block', marginBottom:5 }}>
+                  Assign Driver <span style={{ color:'#dc2626' }}>*</span>
                 </label>
                 {availableDrivers.length === 0 ? (
-                  <p className="text-xs text-orange-500 py-1">
-                    No available drivers. All drivers have active deliveries.
-                  </p>
+                  <p style={{ fontSize:12, color:'#d97706', margin:0 }}>No available drivers. All drivers have active deliveries.</p>
                 ) : (
-                  <select
-                    value={selectedDriver}
-                    onChange={e => setSelectedDriver(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-green-500"
-                  >
+                  <select className="ld-select" value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)}>
                     <option value="">Select available driver…</option>
                     {availableDrivers.map(d => (
                       <option key={d.user_id} value={d.user_id}>{d.full_name}</option>
@@ -381,8 +456,9 @@ function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
                   </select>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div style={{ display:'flex', gap:8 }}>
                 <button
+                  className="ld-btn-approve"
                   onClick={async () => {
                     if (!selectedDriver) return;
                     setBusy(true);
@@ -390,18 +466,18 @@ function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
                     setBusy(false);
                   }}
                   disabled={busy || !selectedDriver}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                >
                   {busy ? 'Processing…' : '✓ Approve & Assign Driver'}
                 </button>
-                <button onClick={() => setDeclining(true)}
-                  className="flex-1 border border-red-300 hover:bg-red-50 text-red-600 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                <button className="ld-btn-decline" onClick={() => setDeclining(true)}>
                   ✕ Decline
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex gap-2">
+            <div style={{ display:'flex', gap:8 }}>
               <button
+                className="ld-btn-confirm-decline"
                 onClick={async () => {
                   if (!comment.trim()) return;
                   setBusy(true);
@@ -409,11 +485,10 @@ function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
                   setBusy(false);
                 }}
                 disabled={busy || !comment.trim()}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors">
+              >
                 {busy ? 'Processing…' : 'Confirm Decline'}
               </button>
-              <button onClick={() => { setDeclining(false); setComment(''); }}
-                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm transition-colors">
+              <button className="ld-btn-cancel" onClick={() => { setDeclining(false); setComment(''); }}>
                 Cancel
               </button>
             </div>
@@ -424,114 +499,150 @@ function ApprovalCard({ item, onApprove, onDecline, drivers = [] }) {
   );
 }
 
+/* ── DriverRow ─────────────────────────────────────────────── */
 function DriverRow({ driver }) {
   const progress = driver.stops_total > 0
     ? Math.round((Number(driver.stops_completed) / Number(driver.stops_total)) * 100)
     : 0;
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center font-bold text-green-700 text-sm">
-          {driver.full_name?.[0]?.toUpperCase() || '?'}
-        </div>
+    <div className="ld-driver-row">
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <div className="ld-driver-av">{driver.full_name?.[0]?.toUpperCase() || '?'}</div>
         <div>
-          <p className="text-sm font-medium text-gray-800">{driver.full_name}</p>
-          <p className="text-xs text-gray-400">{driver.route_name || 'No active route'}</p>
+          <p style={{ fontSize:13, fontWeight:700, color:'#111827', margin:0 }}>{driver.full_name}</p>
+          <p style={{ fontSize:11, color:'#9ca3af', margin:'1px 0 0' }}>{driver.route_name || 'No active route'}</p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         {driver.route_status ? (
           <>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">{driver.stops_completed}/{driver.stops_total} stops</p>
-              <div className="w-20 h-1.5 bg-gray-200 rounded-full mt-1">
-                <div className="h-1.5 bg-green-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+            <div style={{ textAlign:'right' }}>
+              <p style={{ fontSize:11, color:'#6b7280', margin:'0 0 3px' }}>{driver.stops_completed}/{driver.stops_total} stops</p>
+              <div style={{ width:72, height:5, background:'rgba(82,183,136,0.15)', borderRadius:99, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${progress}%`, background:'linear-gradient(90deg,#1a3d2b,#40916c)', borderRadius:99, transition:'width .3s' }} />
               </div>
             </div>
             <Badge status={driver.route_status} />
           </>
         ) : (
-          <span className="text-xs text-gray-400 italic">Idle</span>
+          <span style={{ fontSize:11, color:'#9ca3af', fontStyle:'italic' }}>Idle</span>
         )}
       </div>
     </div>
   );
 }
 
+/* ── StatCard ─────────────────────────────────────────────── */
+const StatCard = ({ label, value, color, dark, icon: Icon, delay = 0 }) => (
+  <div className={`ld-stat ${dark ? 'ld-stat-dk' : 'ld-stat-lt'}`} style={{ animationDelay:`${delay}s` }}>
+    <div className="ld-stat-cell">
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+        <p style={{ fontSize:9.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', margin:0, color: dark ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>{label}</p>
+        {Icon && (
+          <div style={{ width:28, height:28, borderRadius:8, background: dark ? 'rgba(255,255,255,0.1)' : '#f0faf4', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Icon size={14} style={{ color: dark ? 'rgba(255,255,255,0.8)' : '#2d6a4f' }} />
+          </div>
+        )}
+      </div>
+      <p style={{ fontSize:34, fontWeight:900, lineHeight:1, margin:'0 0 4px', letterSpacing:'-1.5px', color: dark ? '#fff' : '#111827' }}>{value ?? '—'}</p>
+    </div>
+  </div>
+);
+
+/* ── Main export — LogisticsDashboardView ─────────────────── */
 export default function LogisticsDashboardView({
   pending = [], history = [], drivers = [], stats = {},
   loading, error, success,
   approveRoute, declineRoute, refresh,
 }) {
   return (
-    <div className="space-y-6">
-      {error   && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
-      {success && <div className="p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>}
+    <div className="ld-root ld-page" style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Pending Review',  value: stats.pending_count  ?? '—', color: 'text-yellow-600' },
-          { label: 'Approved',        value: stats.approved_count ?? '—', color: 'text-green-600'  },
-          { label: 'Declined',        value: stats.declined_count ?? '—', color: 'text-red-500'    },
-          { label: 'Avg CO₂ Saved',   value: stats.avg_co2_saved ? `${parseFloat(stats.avg_co2_saved).toFixed(1)} kg` : '—', color: 'text-blue-600' },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl p-4 border border-gray-200 text-center shadow-sm">
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-500 mt-1">{s.label}</p>
-          </div>
-        ))}
+      {/* Toasts */}
+      {error   && <div className="ld-toast-err">{error}</div>}
+      {success && <div className="ld-toast-ok">{success}</div>}
+
+      {/* Stat cards */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+        <StatCard dark  label="Pending Review" value={stats.pending_count  ?? '—'} icon={Clock}  delay={0.04} />
+        <StatCard       label="Approved"        value={stats.approved_count ?? '—'} icon={CheckCircle2} delay={0.08} />
+        <StatCard dark  label="Declined"        value={stats.declined_count ?? '—'} icon={AlertCircle}  delay={0.12} />
+        <StatCard       label="Avg CO₂ Saved"   value={stats.avg_co2_saved ? `${parseFloat(stats.avg_co2_saved).toFixed(1)} kg` : '—'} icon={Leaf} delay={0.16} />
       </div>
 
-      {loading && <div className="text-center py-12 text-gray-400">Loading…</div>}
+      {/* Loading */}
+      {loading && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'48px 0', gap:10, color:'#9ca3af' }}>
+          <div className="ld-spin" style={{ width:22, height:22 }} />
+          <span style={{ fontSize:13 }}>Loading…</span>
+        </div>
+      )}
 
-      {/* ── Pending Approvals ─────────────────────────────── */}
+      {/* Pending Approvals panel */}
       {!loading && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-              Pending Route Approvals
-            </h2>
-            <span className="text-xs text-gray-400">{pending.length} item{pending.length !== 1 ? 's' : ''}</span>
+        <div className="ld-panel">
+          <div className="ld-sh">
+            <div className="ld-sh-left">
+              <div className="ld-sh-ico" style={{ background:'#fffbeb' }}>
+                <Truck size={15} style={{ color:'#d97706' }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize:14, fontWeight:800, color:'#1a3d2b', margin:0 }}>Pending Route Approvals</h3>
+                <p style={{ fontSize:11, color:'#9ca3af', margin:0 }}>Awaiting your review</p>
+              </div>
+            </div>
+            <span style={{ fontSize:11.5, color:'#9ca3af', fontWeight:600 }}>
+              {pending.length} item{pending.length !== 1 ? 's' : ''}
+            </span>
           </div>
 
+          <div className="ld-rule" />
+
           {pending.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-10 text-center shadow-sm">
-              <div className="text-4xl mb-3">✅</div>
-              <p className="font-medium text-gray-600">No pending approvals</p>
-              <p className="text-sm text-gray-400 mt-1">All routes have been reviewed</p>
+            <div className="ld-empty">
+              <div style={{ width:52, height:52, borderRadius:15, background:'#d8f3dc', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <CheckCircle2 size={26} style={{ color:'#2d6a4f' }} />
+              </div>
+              <p style={{ fontWeight:700, color:'#4b5563', margin:0, fontSize:14 }}>No pending approvals</p>
+              <p style={{ fontSize:12, margin:0 }}>All routes have been reviewed.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div>
               {pending.map(item => (
-                <ApprovalCard
-                  key={item.approval_id}
-                  item={item}
-                  onApprove={approveRoute}
-                  onDecline={declineRoute}
-                  drivers={drivers}
-                />
+                <ApprovalCard key={item.approval_id} item={item} onApprove={approveRoute} onDecline={declineRoute} drivers={drivers} />
               ))}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Driver Monitor Snapshot ───────────────────────── */}
+      {/* Driver Monitor snapshot panel */}
       {!loading && drivers.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700">Driver Monitor</h3>
-            <span className="text-xs text-gray-400">
+        <div className="ld-panel">
+          <div className="ld-sh">
+            <div className="ld-sh-left">
+              <div className="ld-sh-ico" style={{ background:'#eff6ff' }}>
+                <Users size={15} style={{ color:'#2563eb' }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize:14, fontWeight:800, color:'#1a3d2b', margin:0 }}>Driver Monitor</h3>
+                <p style={{ fontSize:11, color:'#9ca3af', margin:0 }}>Live status snapshot</p>
+              </div>
+            </div>
+            <span style={{ fontSize:11.5, color:'#9ca3af', fontWeight:600 }}>
               {drivers.filter(d => d.route_status).length} of {drivers.length} active
             </span>
           </div>
-          <div className="space-y-2">
+
+          <div className="ld-rule" />
+
+          <div>
             {drivers.slice(0, 3).map(d => <DriverRow key={d.user_id} driver={d} />)}
           </div>
+
           {drivers.length > 3 && (
-            <p className="text-xs text-gray-400 text-center mt-2">
-              +{drivers.length - 3} more · open Driver Monitor for full view
+            <p style={{ fontSize:11.5, color:'#9ca3af', textAlign:'center', marginTop:10 }}>
+              +{drivers.length - 3} more · open Driver Monitor tab for full view
             </p>
           )}
         </div>

@@ -25,7 +25,13 @@ const APPROVAL_TRANSITIONS = {
 };
 
 const SPOILAGE_TRANSITIONS = {
-  active: new Set(['pending_review']),
+  // FIX: 'active' is now a valid source state for approved/rejected.
+  // When an admin sends a spoilage alert to the IM queue, the alert status
+  // is set to 'pending_review'. However if that update races or was skipped,
+  // the alert may still be 'active' when the IM approves — blocking them
+  // with an illegal transition error. Both active and pending_review are
+  // valid precursor states for a manager decision.
+  active:        new Set(['pending_review', 'approved', 'rejected']),
   pending_review: new Set(['approved', 'rejected']),
   approved: new Set(['resolved']),
   rejected: new Set(['resolved'])
@@ -179,12 +185,10 @@ class ApprovalService {
           const routeUpdated = await DeliveryModel.updateStatus(approval.delivery_id, businessId, 'approved');
           if (!routeUpdated.success) return routeUpdated;
         } else {
-          // CRITICAL FIX-5: Unlock inventory on route rejection to prevent inventory deadlock
           if (typeof ApprovalModel.unlockInventoryForRoute === 'function') {
             const unlockResult = await ApprovalModel.unlockInventoryForRoute(approval.delivery_id, businessId);
             if (!unlockResult.success) {
               console.error('[ApprovalService._updateLinkedRecordsAfterDecision] Failed to unlock inventory:', unlockResult.error);
-              // Don't fail the whole operation if unlock fails, log and continue
             }
           }
 
@@ -205,24 +209,35 @@ class ApprovalService {
       if (approval.approval_type === 'spoilage_action' && approval.alert_id) {
         const alert = await AlertModel.findByIdAndBusiness(approval.alert_id, businessId);
 
-        // Some alert submissions come from inventory-derived "pseudo alerts" that
-        // are not persisted in the alerts table. Previously we returned a failure
-        // here, which short-circuited EcoTrust point creation even though the
-        // manager approval itself succeeded. To keep the approval flow resilient,
-        // we now treat a missing alert record as non-blocking and simply skip the
-        // status sync while still continuing with downstream actions (e.g. EcoTrust).
         if (!alert) {
           console.warn(`[ApprovalService._updateLinkedRecordsAfterDecision] Alert ${approval.alert_id} not found for business ${businessId}; skipping alert status sync.`);
         } else {
-          await this._assertTransition(
-            ctx,
-            SPOILAGE_TRANSITIONS,
-            'spoilage',
-            alert.status,
-            decisionStatus,
-            'alert',
-            approval.alert_id
-          );
+          // FIX: wrap the spoilage transition assert in a try/catch so that
+          // an unexpected alert status (e.g. 'resolved', 'active') does NOT
+          // block the inventory manager's approval decision.
+          // The approval record is the source of truth — the alert status sync
+          // is a secondary side-effect and should never veto a valid decision.
+          try {
+            await this._assertTransition(
+              ctx,
+              SPOILAGE_TRANSITIONS,
+              'spoilage',
+              alert.status,
+              decisionStatus,
+              'alert',
+              approval.alert_id
+            );
+          } catch (transitionErr) {
+            // Log it for audit visibility but do not rethrow — the IM's
+            // approve/decline action succeeds regardless of alert state.
+            console.warn(
+              `[ApprovalService._updateLinkedRecordsAfterDecision] Spoilage alert transition ` +
+              `${alert.status} → ${decisionStatus} not in map for alert ${approval.alert_id}. ` +
+              `Skipping alert status update but continuing approval. Error: ${transitionErr?.message}`
+            );
+            // Return ok so the approval flow continues cleanly
+            return this._ok(true);
+          }
 
           let targetAlertStatus = decisionStatus;
           if (targetAlertStatus === 'rejected') {
@@ -248,7 +263,6 @@ class ApprovalService {
             targetAlertStatus
           );
 
-          // Do not block approval if the alert status row is missing; log for traceability.
           if (!alertUpdated) {
             console.warn(`[ApprovalService._updateLinkedRecordsAfterDecision] Failed to update alert ${approval.alert_id}; continuing without blocking approval.`);
           }
@@ -285,26 +299,49 @@ class ApprovalService {
         return this._ok(true);
       }
 
-      // ── Spoilage approvals ──────────────────────────────────────────────
       const isSpoilageApproval =
         approval?.approval_type === 'spoilage_action' ||
         approval?.approval_type === 'spoilage_alert' ||
         !this._isNil(approval?.alert_id);
 
-      if (isSpoilageApproval) {
-        console.log('[EcoTrust] Spoilage approval → create transaction');
-        const payload = {
-          businessId,
-          actionId:           null,
-          actionType:         'Spoilage Alert Approved',
-          pointsEarned:       25, // fallback; table value used when present
-          approvalId:         approval.approval_id,
-          relatedRecordType:  'manager_approval',
-          relatedRecordId:    approval.approval_id,
-          verificationStatus: 'verified',
-          actorUserId,
-          source:             'approval_service'
-        };
+        if (isSpoilageApproval) {
+          console.log('[EcoTrust] Spoilage approval → create transaction');
+  
+          let spoilagePoints = 25;
+          let spoilageActionId = null;
+          try {
+            const { rows: saRows } = await pool.query(`
+              SELECT action_id, points_value
+              FROM sustainable_actions
+              WHERE LOWER(REPLACE(action_category, ' ', '_')) = 'spoilage_prevention'
+                 OR LOWER(action_name) = 'spoilage prevention'
+                 OR LOWER(action_name) = 'spoilage alert approved'
+              ORDER BY action_id ASC
+              LIMIT 1
+            `);
+            if (saRows.length > 0) {
+              spoilagePoints   = Number(saRows[0].points_value) || 25;
+              spoilageActionId = saRows[0].action_id;
+              console.log(`[EcoTrust] Spoilage points_value=${spoilagePoints} from sustainable_actions id=${spoilageActionId}`);
+            } else {
+              console.warn('[EcoTrust] No spoilage_prevention row found in sustainable_actions — using default 25 pts');
+            }
+          } catch (lookupErr) {
+            console.warn('[EcoTrust] sustainable_actions lookup failed (non-fatal):', lookupErr.message);
+          }
+  
+          const payload = {
+            businessId,
+            actionId:           spoilageActionId,
+            actionType:         'Spoilage Alert Approved',
+            pointsEarned:       spoilagePoints,
+            approvalId:         approval.approval_id,
+            relatedRecordType:  'manager_approval',
+            relatedRecordId:    approval.approval_id,
+            verificationStatus: 'verified',
+            actorUserId,
+            source:             'approval_service'
+          };
 
         const created = await ApprovalModel.createEcoTrustTransaction(payload);
         if (!created.success) {
@@ -314,10 +351,8 @@ class ApprovalService {
         return this._ok(created.data);
       }
 
-      // ── Route optimization approvals ─────────────────────────────────────
       const isRouteOptimization = approval?.approval_type === 'route_optimization';
       if (isRouteOptimization) {
-        // Only award if admin ran AI optimization (route_optimizations row exists)
         try {
           const { rowCount: hasOpt } = await pool.query(
             `SELECT 1 FROM route_optimizations WHERE route_id = $1 LIMIT 1`,
@@ -329,11 +364,9 @@ class ApprovalService {
           }
         } catch (checkErr) {
           console.error('[EcoTrust] route_optimizations check failed:', checkErr.message);
-          // Non-fatal: if we cannot verify, do not award to avoid false positives
           return this._ok(true);
         }
 
-        // Avoid duplicate EcoTrust transaction for this route
         try {
           const { rowCount: existing } = await pool.query(
             `SELECT 1 FROM ecotrust_transactions
@@ -356,7 +389,7 @@ class ApprovalService {
           businessId,
           actionId:           null,
           actionType:         'Route Optimization Approved',
-          pointsEarned:       30, // fallback; sustainable_actions value preferred
+          pointsEarned:       30,
           approvalId:         approval.approval_id,
           relatedRecordType:  'delivery',
           relatedRecordId:    approval.delivery_id,
@@ -373,13 +406,13 @@ class ApprovalService {
         return this._ok(created.data);
       }
 
-      // No EcoTrust side-effect for other approval types
       return this._ok(true);
     } catch (error) {
       console.error('[ApprovalService._createEcoTrustTransactionIfAvailable]', error);
       return this._fail('Failed to create EcoTrust transaction');
     }
   }
+
   async _notifyAdminsOnCarbonRevision(ctx, carbonRecordId, notes = '') {
     try {
       if (typeof ApprovalModel.findBusinessAdmins !== 'function') {
@@ -432,8 +465,6 @@ class ApprovalService {
       if (!ctxResult.success) return ctxResult;
       const ctx = ctxResult.data;
 
-      // CRITICAL FIX-6: Add idempotency check - prevent duplicate verification processing
-      // Query the carbon record to check its current verification status
       if (typeof ApprovalModel.getCarbonRecordById === 'function') {
         try {
           const existingRecord = await ApprovalModel.getCarbonRecordById(carbonRecordId, ctx.businessId);
@@ -443,7 +474,6 @@ class ApprovalService {
               || existingRecord.data.status
               || 'pending'
             );
-            // If already verified and we're trying to verify again, return idempotent success
             if (currentStatus === 'verified' && decision === 'verified') {
               console.log(`[ApprovalService.finalizeCarbonVerification] Idempotent: carbon record ${carbonRecordId} already verified`);
               return this._ok({
@@ -453,7 +483,6 @@ class ApprovalService {
                 message: 'Already verified - returning cached result'
               });
             }
-            // If already in revision_requested and we request revision again, return idempotent success
             if (currentStatus === 'revision_requested' && decision === 'revision_requested') {
               console.log(`[ApprovalService.finalizeCarbonVerification] Idempotent: carbon record ${carbonRecordId} already in revision_requested`);
               return this._ok({
@@ -466,14 +495,11 @@ class ApprovalService {
           }
         } catch (statusCheckError) {
           console.warn('[ApprovalService.finalizeCarbonVerification] Status check failed, proceeding:', statusCheckError?.message);
-          // Continue processing even if status check fails
         }
       }
 
       await this._assertCarbonTransition(ctx, 'pending', decision, carbonRecordId);
 
-      // CRITICAL FIX-6: Log approval history for audit trail
-      // If this is called again with verified status, return gracefully
       const historyResult = await this._logApprovalHistoryIfAvailable({
         approvalId: null,
         businessId: ctx.businessId,
@@ -753,7 +779,6 @@ class ApprovalService {
           const draftName   = `DRAFT - ${approval.product_name} · Batch: ${batchNumber} · ${approval.quantity} kg`;
           const originObj   = JSON.stringify({ address: approval.location || 'Warehouse' });
       
-          // Store approval_id so the admin can trace this draft back to the spoilage alert
           const draftMeta = JSON.stringify({
             from_approval_id: approval.approval_id,
             product_name:     approval.product_name,
@@ -786,7 +811,6 @@ class ApprovalService {
       
           console.log(`[ApprovalService.approveItem] Draft delivery created for approval ${approval.approval_id}`);
         } catch (draftErr) {
-          // Non-fatal — approval still succeeds even if draft creation fails
           console.error('[ApprovalService.approveItem] Draft creation failed (non-fatal):', draftErr.message);
         }
       }
