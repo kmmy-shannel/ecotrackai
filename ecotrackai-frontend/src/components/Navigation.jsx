@@ -18,10 +18,12 @@ import {
   Settings,
   CheckCircle2,
   User,
-  LogOut
+  LogOut,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getRoleNavItems } from '../utils/rolePermissions';
+import UserProfileModal from './UserProfileModal';
 
 const ICONS = {
   layout: LayoutDashboard,
@@ -43,11 +45,21 @@ const ICONS = {
   user: User
 };
 
+const ROLE_LABELS = {
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  logistics_manager: 'Logistics Manager',
+  inventory_manager: 'Inventory Manager',
+  sustainability_manager: 'Sustainability Manager',
+  driver: 'Driver',
+};
+
 const Navigation = ({ onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { role, logout } = useAuth();
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const { user, role, logout } = useAuth();
+  const [showLogoutModal,  setShowLogoutModal]  = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const navItems = getRoleNavItems(role);
 
@@ -55,10 +67,8 @@ const Navigation = ({ onLogout }) => {
     if (!path) return false;
     const [targetPath, targetQuery] = path.split('?');
     if (location.pathname !== targetPath) return false;
-
     if (!targetQuery) return true;
     if (!location.search && targetQuery === 'tab=pending') return true;
-
     const currentQuery = location.search.startsWith('?')
       ? location.search.slice(1)
       : location.search;
@@ -70,6 +80,13 @@ const Navigation = ({ onLogout }) => {
     if (onLogout) onLogout();
     navigate('/');
   };
+
+  const initials = (user?.fullName || user?.username || '?')
+    .split(' ')
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
     <>
@@ -91,6 +108,28 @@ const Navigation = ({ onLogout }) => {
       </nav>
 
       <div className="space-y-1 pt-6 border-t border-gray-200 mt-auto">
+
+        {/* ── Profile Button ── */}
+        <button
+          onClick={() => setShowProfileModal(true)}
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all hover:bg-green-50 group text-left"
+        >
+          {/* Avatar initials */}
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-700 to-green-900 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <span className="text-white text-xs font-bold">{initials}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-green-800 transition-colors">
+              {user?.fullName || user?.username || 'My Profile'}
+            </p>
+            <p className="text-xs text-gray-400 truncate">
+              {ROLE_LABELS[role] || role}
+            </p>
+          </div>
+          <ChevronRight size={13} className="text-gray-300 group-hover:text-green-500 transition-colors flex-shrink-0" />
+        </button>
+
+        {/* ── Logout Button ── */}
         <button
           onClick={() => setShowLogoutModal(true)}
           className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl transition-all text-left group"
@@ -100,14 +139,17 @@ const Navigation = ({ onLogout }) => {
         </button>
       </div>
 
+      {/* ── Logout Confirm Modal ── */}
       {showLogoutModal && (
         <LogoutConfirmModal
-          onConfirm={() => {
-            setShowLogoutModal(false);
-            handleLogout();
-          }}
+          onConfirm={() => { setShowLogoutModal(false); handleLogout(); }}
           onCancel={() => setShowLogoutModal(false)}
         />
+      )}
+
+      {/* ── User Profile Modal ── */}
+      {showProfileModal && (
+        <UserProfileModal onClose={() => setShowProfileModal(false)} />
       )}
     </>
   );
