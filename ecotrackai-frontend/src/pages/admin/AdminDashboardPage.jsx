@@ -4,8 +4,9 @@ import { useAuth } from '../../hooks/useAuth';
 import productService from '../../services/product.service';
 import alertService from '../../services/alert.service';
 import deliveryService from '../../services/delivery.service';
+import api from '../../services/api';
 import Layout from '../../components/Layout';
-import AddProductModal from '../../components/AddProductModal';
+import AddInventoryModal from '../../components/AddInventoryModal';
 import PlanNewDeliveryModal from '../../components/PlanNewDeliveryModal';
 import ManageAccountsModal from '../../components/admin/ManageAccountsModal';
 
@@ -172,35 +173,50 @@ const DashboardPage = () => {
     setLoading(true);
     // fire syncAlerts in background, don't await
     alertService.syncAlerts().catch(() => null);
-
+ 
     try {
-      const [productsRes, deliveriesRes, alertStatsRes, highRiskRes, approvedRes] =
+      const [productsRes, deliveriesRes, alertStatsRes, highRiskRes, approvedRes, ecoRes] =
         await Promise.allSettled([
           productService.getAllProducts(),
           deliveryService.getAllDeliveries(),
           alertService.getAlertStats(),
           alertService.getAllAlerts(),
           alertService.getApprovedBatches(),
+          // ── NEW: fetch real EcoTrust score from the same endpoint
+          // that EcoScorePage uses via useEcoTrust ────────────────────
+          api.get('/ecotrust/score'),
         ]);
-
+ 
       // Stats
-      const products   = productsRes.value?.data?.products   || productsRes.value?.products   || [];
+      const products   = productsRes.value?.data?.products    || productsRes.value?.products   || [];
       const deliveries = deliveriesRes.value?.data?.deliveries || deliveriesRes.value?.deliveries || [];
       const alertStats = alertStatsRes.value?.data || {};
       const high   = toCount(alertStats.high_risk);
       const medium = toCount(alertStats.medium_risk);
       const low    = toCount(alertStats.low_risk);
-      setStats({ totalProducts: products.length, totalDeliveries: getMonthlyCount(deliveries), totalAlerts: high + medium + low, ecoScore: 0 });
+ 
+      // ── NEW: read real score (same field path useEcoTrust uses) ───
+      const ecoPayload = ecoRes.value?.data?.data || ecoRes.value?.data || {};
+      const ecoScore   = Number(
+        ecoPayload.current_score ?? ecoPayload.total_points ?? ecoPayload.score ?? 0
+      );
+ 
+      setStats({
+        totalProducts:    products.length,
+        totalDeliveries:  getMonthlyCount(deliveries),
+        totalAlerts:      high + medium + low,
+        ecoScore,                                         // ← real value now
+      });
       setSpoilage({ high, medium, low });
-
+ 
       // High risk batches — filter from existing alerts response
       const allAlerts = highRiskRes.value?.data?.alerts || highRiskRes.value?.alerts || highRiskRes.value?.data || [];
       setHighRisk((Array.isArray(allAlerts) ? allAlerts : []).filter(a => (a.risk_level || a.riskLevel) === 'HIGH' && a.status === 'active'));
-
+ 
       // Approved
       const approvedList = approvedRes.value?.data?.approvedBatches || approvedRes.value?.approvedBatches || [];
       setApproved(Array.isArray(approvedList) ? approvedList : []);
-
+ 
       setLastSync(new Date());
     } catch (e) {
       console.error('Dashboard load error:', e);
@@ -518,8 +534,8 @@ const DashboardPage = () => {
 
       {/* ── Modals ── */}
       {showAddProduct && (
-        <AddProductModal onClose={() => setShowAdd(false)} onSuccess={() => { setShowAdd(false); loadAll(); }} />
-      )}
+   <AddInventoryModal onClose={() => setShowAdd(false)} onSuccess={() => { setShowAdd(false); loadAll(); }} />
+  )}
       {showPlanRoute && (
         <PlanNewDeliveryModal prefill={prefill} onClose={() => { setShowPlan(false); setPrefill(null); }} onSuccess={handlePlanSuccess} />
       )}

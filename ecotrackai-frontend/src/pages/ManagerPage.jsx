@@ -40,7 +40,7 @@ const STYLES = `
   .mg-stat-dk{background:linear-gradient(145deg,#1a3d2b,#2d6a4f);position:relative}
   .mg-stat-dk::after{content:'';position:absolute;right:-20px;top:-20px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.05);pointer-events:none}
   .mg-stat-lt{background:#fff}
-  .mg-stat-cell{padding:16px 18px;position:relative;z-index:1}
+ .mg-stat-cell{padding:18px 20px;position:relative;z-index:1;min-height:120px;display:flex;flex-direction:column;justify-content:space-between}
 
   /* ── Panels ── */
   .mg-panel{background:#fff;border-radius:18px;border:1px solid rgba(82,183,136,.14);box-shadow:0 2px 12px rgba(26,61,43,.07);overflow:hidden;animation:mg-in .32s ease both}
@@ -218,19 +218,37 @@ function useInventory() {
 /* ─── StatCard ───────────────────────────────────────────────────────────────── */
 const StatCard = ({ label, value, sub, icon: Icon, dark, delay = 0 }) => (
   <div className={`mg-stat ${dark ? 'mg-stat-dk' : 'mg-stat-lt'}`} style={{ animationDelay:`${delay}s` }}>
-    <div className="mg-stat-cell">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-        <p style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', margin:0, color: dark ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>{label}</p>
-        <div style={{ width:30, height:30, borderRadius:9, background: dark ? 'rgba(255,255,255,0.1)' : '#f0faf4', display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <Icon size={15} style={{ color: dark ? 'rgba(255,255,255,0.85)' : '#2d6a4f' }} />
+    <div className="mg-stat-cell" style={{ padding:'18px 20px' }}>
+      {/* Icon row */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+        <div style={{
+          width:36, height:36, borderRadius:10,
+          background: dark ? 'rgba(255,255,255,0.12)' : '#f0faf4',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          border: dark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(82,183,136,0.14)',
+        }}>
+          <Icon size={17} style={{ color: dark ? 'rgba(255,255,255,0.85)' : '#2d6a4f' }} />
         </div>
+        <p style={{
+          fontSize:9.5, fontWeight:800, textTransform:'uppercase',
+          letterSpacing:'.09em', margin:0,
+          color: dark ? 'rgba(255,255,255,0.45)' : '#b0bec5',
+        }}>{label}</p>
       </div>
-      <p style={{ fontSize:36, fontWeight:900, lineHeight:1, margin:'0 0 6px', letterSpacing:'-1.5px', color: dark ? '#fff' : '#111827' }}>{value}</p>
-      <p style={{ fontSize:11, margin:0, color: dark ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>{sub}</p>
+      {/* Number */}
+      <p style={{
+        fontSize:40, fontWeight:900, lineHeight:1,
+        margin:'0 0 5px', letterSpacing:'-2px',
+        color: dark ? '#fff' : '#111827',
+      }}>{value}</p>
+      {/* Sub */}
+      <p style={{
+        fontSize:11.5, margin:0, fontWeight:500,
+        color: dark ? 'rgba(255,255,255,0.45)' : '#9ca3af',
+      }}>{sub}</p>
     </div>
   </div>
 );
-
 /* ─── LogisticsCard ──────────────────────────────────────────────────────────── */
 const LogisticsCard = ({ item, onApprove, onDecline, delay = 0 }) => {
   const [open,    setOpen]    = useState(false);
@@ -659,12 +677,12 @@ const ManagerPage = () => {
         </div>
 
         {/* ── Stat Cards ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-          <StatCard dark  label="Total Pending"   value={totalPending}                sub="Awaiting review"            icon={Activity}  delay={0.04} />
-          <StatCard       label="Logistics"        value={logistics.pending.length}    sub="Route approvals"            icon={Truck}     delay={0.08} />
-          <StatCard dark  label="Inventory"        value={inventory.pending.length}    sub="Stock approvals"            icon={Package}   delay={0.12} />
-          <StatCard       label="Sustainability"   value={0}                           sub="Carbon approvals"           icon={Leaf}      delay={0.16} />
-        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
+    <StatCard dark  label="Total Pending"   value={totalPending}                sub="Awaiting review"   icon={Activity}  delay={0.04} />
+    <StatCard       label="Logistics"        value={logistics.pending.length}    sub="Route approvals"   icon={Truck}     delay={0.08} />
+    <StatCard dark  label="Inventory"        value={inventory.pending.length}    sub="Stock approvals"   icon={Package}   delay={0.12} />
+    <StatCard       label="Sustainability"   value={0}                           sub="Carbon approvals"  icon={Leaf}      delay={0.16} />
+  </div>
 
         {/* ── Main Grid ── */}
         <div style={{ display:'grid', gridTemplateColumns:'300px 1fr', gap:14, alignItems:'start' }}>

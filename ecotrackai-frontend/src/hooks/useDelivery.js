@@ -1,5 +1,14 @@
 // ============================================================
 // FILE: src/hooks/useDelivery.js
+// CHANGE: Added savedOptimizations state.
+//   When a delivery row is expanded, if the delivery has been
+//   optimized (aiOptimized=true or status=optimized/awaiting_approval),
+//   we fetch the saved optimization from the backend and store it
+//   in savedOptimizations[deliveryId] so DeliveryDetails can render
+//   the full AI panel + map inline without opening the modal.
+//
+//   Also exposed: savedOptimizations (map of deliveryId → result)
+//   Everything else is COMPLETELY UNCHANGED.
 // ============================================================
 import { useState, useEffect, useCallback } from 'react';
 import deliveryService from '../services/delivery.service';
@@ -27,7 +36,6 @@ const normalizeDelivery = (raw) => {
     };
   });
 
-  // Build origin/dest display name — prefer address string over raw coords
   const buildName = (loc) => {
     if (loc.address && !/^\d/.test(loc.address)) return loc.address;
     if (loc.name    && !/^\d/.test(loc.name))    return loc.name;
@@ -58,7 +66,6 @@ const normalizeDelivery = (raw) => {
     originName:        buildName(origin),
     destName:          buildName(dest),
     cargo:             Array.isArray(raw.cargo) ? raw.cargo : [],
-    // Keep raw coords for map use
     originLat: parseFloat(origin.lat || origin.latitude  || 0) || null,
     originLng: parseFloat(origin.lng || origin.longitude || 0) || null,
     destLat:   parseFloat(dest.lat   || dest.latitude    || 0) || null,
@@ -66,7 +73,6 @@ const normalizeDelivery = (raw) => {
   };
 };
 
-// ── Status badge colours ──────────────────────────────────
 const getStatusBadge = (status) => ({
   planned:            'bg-gray-100 text-gray-600',
   optimized:          'bg-purple-100 text-purple-700',
@@ -94,14 +100,19 @@ export default function useDelivery() {
   const [optimizingRoute,       setOptimizingRoute]       = useState(null);
   const [optimizationResult,    setOptimizationResult]    = useState(null);
   const [showOptimizationModal, setShowOptimizationModal] = useState(false);
-  const [confirmModal,          setConfirmModal]          = useState(null); // { type, id, isResubmit? }
+  const [confirmModal,          setConfirmModal]          = useState(null);
+
+  // ── NEW: stores saved optimization data per delivery ID ─────
+  // Shape: { [deliveryId]: { originalRoute, optimizedRoute, savings,
+  //                          aiRecommendations, improvementPct, usedFallback } }
+  // Populated on-demand when a row is expanded.
+  const [savedOptimizations, setSavedOptimizations] = useState({});
 
   const flash = (setter, msg, ms = 4000) => {
     setter(msg);
     setTimeout(() => setter(''), ms);
   };
 
-  // ── Load list ─────────────────────────────────────────────
   const loadDeliveries = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -120,6 +131,86 @@ export default function useDelivery() {
 
   useEffect(() => { loadDeliveries(); }, [loadDeliveries]);
 
+  // ── Fetch saved optimization from backend ────────────────────
+  // Calls GET /api/deliveries/:id — the response already includes
+  // route.optimization (from DeliveryModel.getOptimization) when
+  // the backend's getDelivery method is used. We reshape it into
+  // the same structure the OptimizationModal / inline panel expects.
+  const fetchSavedOptimization = useCallback(async (delivery, stops) => {
+    const id = delivery.id;
+    // Already fetched — skip
+    if (savedOptimizations[id]) return;
+
+    // Only fetch if there's something to show
+    const hasOpt = delivery.aiOptimized
+      || ['optimized', 'awaiting_approval', 'approved', 'in_transit', 'delivered', 'cancelled'].includes(delivery.status);
+    if (!hasOpt) return;
+
+    try {
+      const response = await deliveryService.getDeliveryById(id);
+      const detail   = response?.data?.data ?? response?.data ?? response;
+      const opt      = detail?.optimization;
+
+      if (!opt) return; // No optimization saved yet — nothing to show
+
+      // Normalize stops from the detail response (same as expandedStops logic)
+      const rawStops = (detail?.stops || stops || []).map(s => {
+        const loc = (() => {
+          try { return typeof s.location === 'string' ? JSON.parse(s.location) : (s.location || {}); }
+          catch { return {}; }
+        })();
+        return {
+          id:       s.stop_id,
+          type:     s.stop_type || s.type || 'stop',
+          location: s.location_name || loc.address || loc.name || 'Stop',
+          lat:      parseFloat(s.lat || loc.lat || loc.latitude  || 0) || null,
+          lng:      parseFloat(s.lng || loc.lng || loc.longitude || 0) || null,
+        };
+      });
+
+      // Build the result object in the same shape as the modal uses
+      const result = {
+        deliveryId: id,
+        originalRoute: {
+          deliveryCode:      delivery.deliveryCode,
+          totalDistance:     parseFloat(opt.original_distance_km    || opt.original_distance    || delivery.totalDistance    || 0),
+          estimatedDuration: parseInt(opt.original_duration_minutes || opt.original_duration   || delivery.estimatedDuration || 0),
+          fuelConsumption:   parseFloat(opt.original_fuel_liters    || opt.original_fuel        || delivery.fuelConsumption  || 0),
+          carbonEmissions:   parseFloat(opt.original_carbon_kg      || delivery.carbonEmissions || 0),
+          stops:             rawStops,
+        },
+        optimizedRoute: {
+          deliveryCode:      delivery.deliveryCode,
+          totalDistance:     parseFloat(opt.optimized_distance_km    || opt.optimized_distance    || 0),
+          estimatedDuration: parseInt(opt.optimized_duration_minutes || opt.optimized_duration   || 0),
+          fuelConsumption:   parseFloat(opt.optimized_fuel_liters    || opt.optimized_fuel        || 0),
+          carbonEmissions:   parseFloat(opt.optimized_carbon_kg      || 0),
+          stops:             rawStops, // same stops — order shown in table, not re-rendered here
+        },
+        savings: {
+          distance:  parseFloat(opt.savings_km   || 0),
+          time:      parseInt(opt.savings_time   || 0),
+          fuel:      parseFloat(opt.savings_fuel || 0),
+          emissions: parseFloat(opt.savings_co2  || 0),
+        },
+        aiRecommendations: opt.ai_recommendation
+          ? [opt.ai_recommendation]
+          : ['Route was optimized. See metrics for details.'],
+        improvementPct: Math.round(
+          opt.savings_km > 0 && opt.original_distance > 0
+            ? (opt.savings_km / opt.original_distance) * 100
+            : 0
+        ),
+        usedFallback: false,
+      };
+
+      setSavedOptimizations(prev => ({ ...prev, [id]: result }));
+    } catch (err) {
+      // Non-fatal — just means we won't show the inline panel
+      console.warn('[useDelivery] fetchSavedOptimization skipped:', err.message);
+    }
+  }, [savedOptimizations]);
+
   // ── Load stops on-demand when a row is expanded ───────────
   const handleExpandDelivery = useCallback(async (deliveryId) => {
     if (expandedDelivery === deliveryId) {
@@ -127,7 +218,12 @@ export default function useDelivery() {
       return;
     }
     setExpandedDelivery(deliveryId);
-    if (expandedStops[deliveryId]) return;
+    if (expandedStops[deliveryId]) {
+      // Stops already loaded — still try to load optimization if not yet fetched
+      const delivery = deliveries.find(d => d.id === deliveryId);
+      if (delivery) fetchSavedOptimization(delivery, expandedStops[deliveryId]);
+      return;
+    }
 
     try {
       const response = await deliveryService.getDeliveryById(deliveryId);
@@ -150,11 +246,15 @@ export default function useDelivery() {
       });
 
       setExpandedStops(prev => ({ ...prev, [deliveryId]: stops }));
+
+      // Also try to load saved optimization inline
+      const delivery = deliveries.find(d => d.id === deliveryId);
+      if (delivery) fetchSavedOptimization(delivery, stops);
     } catch (err) {
       console.error('[useDelivery] fetchStops error:', err);
       setExpandedStops(prev => ({ ...prev, [deliveryId]: [] }));
     }
-  }, [expandedDelivery, expandedStops]);
+  }, [expandedDelivery, expandedStops, deliveries, fetchSavedOptimization]);
 
   const handleDeliveryCreated = () => {
     setShowAddModal(false);
@@ -162,8 +262,6 @@ export default function useDelivery() {
     flash(setSuccess, 'Delivery route created successfully');
   };
 
-  // ── Submit route directly for logistics approval ──────────
-  // Called by ApprovalConfirmModal's onConfirm — submits immediately.
   const submitRouteForApproval = async (deliveryId, isResubmit = false) => {
     return confirmSubmit(deliveryId, isResubmit);
   };
@@ -212,14 +310,13 @@ export default function useDelivery() {
     setOptimizingRoute(delivery.id);
     setError('');
     try {
-      // Build the payload — ensure stops carry lat/lng for TSP reorder
       const stopsWithCoords = (expandedStops[delivery.id] || delivery.stops || []).map(s => ({
-        id:            s.id       || s.stop_id,
-        type:          s.type     || s.stop_type || 'stop',
-        location:      s.location || s.location_name || 'Stop',
-        lat:           parseFloat(s.lat || s.latitude  || 0) || null,
-        lng:           parseFloat(s.lng || s.longitude || 0) || null,
-        products:      s.products || [],
+        id:       s.id       || s.stop_id,
+        type:     s.type     || s.stop_type || 'stop',
+        location: s.location || s.location_name || 'Stop',
+        lat:      parseFloat(s.lat || s.latitude  || 0) || null,
+        lng:      parseFloat(s.lng || s.longitude || 0) || null,
+        products: s.products || [],
       }));
 
       const response = await deliveryService.optimizeRoute(delivery.id, {
@@ -231,18 +328,14 @@ export default function useDelivery() {
         deliveryCode:      delivery.deliveryCode,
       });
 
-     // Log raw response to see what shape it actually is
-console.log('[optimizeRoute] raw response:', JSON.stringify(response?.data)?.slice(0, 300));
-const payload = response?.data?.data ?? response?.data ?? response;
+      console.log('[optimizeRoute] raw response:', JSON.stringify(response?.data)?.slice(0, 300));
+      const payload = response?.data?.data ?? response?.data ?? response;
 
-// Guard: if payload doesn't have the expected shape, throw clearly
-if (!payload?.originalRoute || !payload?.optimizedRoute) {
-  console.error('[optimizeRoute] Unexpected payload shape:', payload);
-  throw new Error('Optimization response missing route data');
-}
+      if (!payload?.originalRoute || !payload?.optimizedRoute) {
+        console.error('[optimizeRoute] Unexpected payload shape:', payload);
+        throw new Error('Optimization response missing route data');
+      }
 
-// Do NOT reload here — wait until user actually confirms in the modal
-      // Status will update after applyOptimization() or when modal is closed
       const normalizeStops = (arr) =>
         (arr || []).map(s => ({
           ...s,
@@ -280,6 +373,11 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
         usedFallback:   payload.usedFallback   ?? false,
       };
 
+      // ── NEW: Also cache into savedOptimizations so the inline
+      // panel shows immediately if the user closes the modal and
+      // re-expands the row without refreshing.
+      setSavedOptimizations(prev => ({ ...prev, [delivery.id]: result }));
+
       setOptimizationResult(result);
       setShowOptimizationModal(true);
     } catch (err) {
@@ -290,13 +388,10 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     }
   };
 
-  // ── Apply optimization → submit for logistics approval ──
-  // Called when user clicks "Submit for Logistics Approval" in the modal
   const applyOptimization = async () => {
     if (!optimizationResult) return;
     try {
       const res = await deliveryService.submitForApproval(optimizationResult.deliveryId);
-      // Check if backend returned an error in the body
       const body = res?.data ?? res;
       if (body?.success === false) {
         flash(setError, body.message || body.error || 'Submission failed');
@@ -305,7 +400,6 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
       setShowOptimizationModal(false);
       setOptimizationResult(null);
       flash(setSuccess, 'Route submitted for logistics manager approval');
-      // Reload so status flips to awaiting_approval in the table
       await loadDeliveries();
     } catch (err) {
       console.error('[useDelivery] applyOptimization error:', err);
@@ -316,11 +410,9 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
   const closeOptimizationModal = async () => {
     setShowOptimizationModal(false);
     setOptimizationResult(null);
-    // Reload to sync whatever status the backend set (optimized or unchanged)
     await loadDeliveries();
   };
 
-  // ── Summary stats from backend actual metrics API ──────
   const [metricsSummary, setMetricsSummary] = useState({});
   const [metricsLoading, setMetricsLoading] = useState(true);
 
@@ -332,7 +424,6 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
         setMetricsSummary(payload);
       } catch (err) {
         console.warn('[useDelivery] metrics API failed:', err);
-        // Fallback to local calc
         const today = new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
         const deliveredToday = deliveries.filter(d => d.status === 'delivered' && d.date === today);
         setMetricsSummary({
@@ -340,7 +431,6 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
           inProgress: deliveries.filter(d => d.status === 'in_transit').length,
           totalDistance: deliveredToday.reduce((s, d) => s + parseFloat(d.totalDistance || 0), 0).toFixed(1),
           fuelSaved: '0.0',
-    // co2Reduced: '0.00' // Removed
         });
       } finally {
         setMetricsLoading(false);
@@ -362,7 +452,6 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     co2Reduced: '0.00',
     inProgress: derivedTotals.inProgress,
   } : {
-    // Prefer derived totals so the stat card always shows the visible list count
     totalDeliveries: derivedTotals.deliveries,
     totalDistance: metricsSummary.totalDistance ?? derivedTotals.distance,
     fuelSaved: metricsSummary.total_fuel_saved || metricsSummary.fuelSaved || '0.0',
@@ -370,8 +459,6 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     inProgress: metricsSummary.inProgress ?? derivedTotals.inProgress,
   };
 
-
-  // ── Filtered list ─────────────────────────────────────────
   const filtered = deliveries.filter(d => {
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
@@ -389,6 +476,9 @@ if (!payload?.originalRoute || !payload?.optimizedRoute) {
     optimizingRoute, optimizationResult, showOptimizationModal,
     confirmModal, setConfirmModal,
     summaryStats,
+    // ── NEW export ─────────────────────────────────────────
+    savedOptimizations,
+    // ───────────────────────────────────────────────────────
     setSearchTerm, setShowAddModal,
     setExpandedDelivery: handleExpandDelivery,
     deleteDelivery, confirmDelete,

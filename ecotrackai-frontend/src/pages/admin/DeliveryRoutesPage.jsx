@@ -415,56 +415,102 @@ const StopList = ({ title, stops, optimized }) => (
 );
 
 /* ─── DeliveryDetails ────────────────────────────────────────────────────────── */
-const DeliveryDetails = ({ delivery }) => {
+const DeliveryDetails = ({ delivery, savedOpt }) => {
   const chips = getTimelineChips('route', delivery.status);
   const stops = delivery.stops || [];
   const cargo = getRouteCargo(delivery, stops);
-
+ 
+  // ── Inline optimization metrics helpers ────────────────
+  const fmt = (v, dp = 2) => Number(v || 0).toFixed(dp);
+  const pct = (val, base) => (base > 0 ? `${Math.round((Number(val) / Number(base)) * 100)}%` : '0%');
+ 
+  const hasOpt = Boolean(savedOpt && savedOpt.originalRoute && savedOpt.optimizedRoute);
+ 
+  const optMetrics = hasOpt ? [
+    {
+      label: 'Distance',
+      icon:  <Navigation size={13} />,
+      color: '#3b82f6',
+      orig:  `${fmt(savedOpt.originalRoute.totalDistance)} km`,
+      opt:   `${fmt(savedOpt.optimizedRoute.totalDistance)} km`,
+      saved: `${fmt(savedOpt.savings?.distance)} km`,
+      pv:    savedOpt.savings?.distance,
+      base:  savedOpt.originalRoute.totalDistance,
+    },
+    {
+      label: 'Fuel',
+      icon:  <Fuel size={13} />,
+      color: '#f97316',
+      orig:  `${fmt(savedOpt.originalRoute.fuelConsumption)} L`,
+      opt:   `${fmt(savedOpt.optimizedRoute.fuelConsumption)} L`,
+      saved: `${fmt(savedOpt.savings?.fuel)} L`,
+      pv:    savedOpt.savings?.fuel,
+      base:  savedOpt.originalRoute.fuelConsumption,
+    },
+    {
+      label: 'CO₂',
+      icon:  <Leaf size={13} />,
+      color: '#16a34a',
+      orig:  `${fmt(savedOpt.originalRoute.carbonEmissions)} kg`,
+      opt:   `${fmt(savedOpt.optimizedRoute.carbonEmissions)} kg`,
+      saved: `${fmt(savedOpt.savings?.emissions)} kg`,
+      pv:    savedOpt.savings?.emissions,
+      base:  savedOpt.originalRoute.carbonEmissions,
+    },
+  ] : [];
+ 
   return (
     <div className="dr-detail">
       <div className="dr-detail-card">
-        <div style={{ padding:'14px 16px',borderBottom:'1px solid rgba(82,183,136,.1)' }}>
-          {(delivery.declineReason||delivery.decline_reason) && delivery.status==='declined' && (
+ 
+        {/* ── Timeline / status banners ─────────────────────── */}
+        <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(82,183,136,.1)' }}>
+          {(delivery.declineReason || delivery.decline_reason) && delivery.status === 'declined' && (
             <div className="dr-decline-card" style={{ marginBottom:12 }}>
-              <div style={{ display:'flex',alignItems:'center',gap:7,marginBottom:5 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
                 <AlertTriangle size={13} style={{ color:'#dc2626' }} />
-                <p style={{ fontSize:11,fontWeight:800,color:'#991b1b',margin:0,textTransform:'uppercase',letterSpacing:'.05em' }}>Declined by Logistics Manager</p>
+                <p style={{ fontSize:11, fontWeight:800, color:'#991b1b', margin:0, textTransform:'uppercase', letterSpacing:'.05em' }}>Declined by Logistics Manager</p>
               </div>
-              <p style={{ fontSize:12.5,color:'#b91c1c',margin:'0 0 4px' }}>"{delivery.declineReason||delivery.decline_reason}"</p>
-              <p style={{ fontSize:11,color:'#ef4444',margin:0 }}>Edit and resubmit for approval.</p>
+              <p style={{ fontSize:12.5, color:'#b91c1c', margin:'0 0 4px' }}>"{delivery.declineReason || delivery.decline_reason}"</p>
+              <p style={{ fontSize:11, color:'#ef4444', margin:0 }}>Edit and resubmit for approval.</p>
             </div>
           )}
           {delivery.status === 'cancelled' && (
             <div className="dr-cancel-card" style={{ marginBottom:12 }}>
-              <div style={{ display:'flex',alignItems:'center',gap:7,marginBottom:5 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
                 <Ban size={13} style={{ color:'#6b7280' }} />
-                <p style={{ fontSize:11,fontWeight:800,color:'#374151',margin:0,textTransform:'uppercase',letterSpacing:'.05em' }}>Delivery Cancelled</p>
+                <p style={{ fontSize:11, fontWeight:800, color:'#374151', margin:0, textTransform:'uppercase', letterSpacing:'.05em' }}>Delivery Cancelled</p>
               </div>
-              {delivery.notes && <p style={{ fontSize:12.5,color:'#6b7280',margin:0 }}>Reason: "{delivery.notes}"</p>}
+              {delivery.notes && <p style={{ fontSize:12.5, color:'#6b7280', margin:0 }}>Reason: "{delivery.notes}"</p>}
             </div>
           )}
-          <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
-            {chips.map(c => <span key={c.status} className={`dr-chip ${c.state==='done'?'dr-chip-done':c.state==='current'?'dr-chip-current':'dr-chip-next'}`}>{c.status.replace(/_/g,' ')}</span>)}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            {chips.map(c => (
+              <span key={c.status} className={`dr-chip ${c.state==='done'?'dr-chip-done':c.state==='current'?'dr-chip-current':'dr-chip-next'}`}>
+                {c.status.replace(/_/g,' ')}
+              </span>
+            ))}
           </div>
         </div>
-
+ 
+        {/* ── Cargo manifest ───────────────────────────────── */}
         {cargo.length > 0 && (
-          <div style={{ padding:'14px 16px',borderBottom:'1px solid rgba(82,183,136,.1)' }}>
-            <p style={{ fontSize:11,fontWeight:800,color:'#9ca3af',textTransform:'uppercase',letterSpacing:'.07em',margin:'0 0 10px',display:'flex',alignItems:'center',gap:6 }}>
+          <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(82,183,136,.1)' }}>
+            <p style={{ fontSize:11, fontWeight:800, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.07em', margin:'0 0 10px', display:'flex', alignItems:'center', gap:6 }}>
               <Package size={12} style={{ color:'#2d6a4f' }} /> Cargo Manifest
             </p>
             <div className="dr-cargo-strip">
               {cargo.map((c, i) => (
                 <div key={i} className="dr-cargo-item">
-                  <div style={{ width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <div style={{ width:28, height:28, borderRadius:8, background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     <Leaf size={13} style={{ color:'#1a3d2b' }} />
                   </div>
-                  <div style={{ flex:1,minWidth:0 }}>
-                    <p style={{ fontSize:12.5,fontWeight:700,color:'#1a3d2b',margin:0 }}>{c.productName||c.name}</p>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:12.5, fontWeight:700, color:'#1a3d2b', margin:0 }}>{c.productName || c.name}</p>
                   </div>
-                  {(c.quantity > 0) && (
-                    <span style={{ fontSize:12,fontWeight:800,color:'#166534',background:'#d8f3dc',padding:'2px 10px',borderRadius:99,flexShrink:0 }}>
-                      {c.quantity} {c.unit||'kg'}
+                  {c.quantity > 0 && (
+                    <span style={{ fontSize:12, fontWeight:800, color:'#166534', background:'#d8f3dc', padding:'2px 10px', borderRadius:99, flexShrink:0 }}>
+                      {c.quantity} {c.unit || 'kg'}
                     </span>
                   )}
                 </div>
@@ -472,37 +518,129 @@ const DeliveryDetails = ({ delivery }) => {
             </div>
           </div>
         )}
-
-        <div style={{ padding:'14px 16px',borderBottom:'1px solid rgba(82,183,136,.1)' }}>
-          <p style={{ fontSize:11,fontWeight:800,color:'#9ca3af',textTransform:'uppercase',letterSpacing:'.07em',margin:'0 0 10px',display:'flex',alignItems:'center',gap:6 }}>
+ 
+        {/* ── Route stops ──────────────────────────────────── */}
+        <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(82,183,136,.1)' }}>
+          <p style={{ fontSize:11, fontWeight:800, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.07em', margin:'0 0 10px', display:'flex', alignItems:'center', gap:6 }}>
             <MapPin size={12} style={{ color:'#3b82f6' }} /> Route Stops
           </p>
-          {stops.length===0 ? <p style={{ fontSize:12.5,color:'#9ca3af',margin:0 }}>Loading stops…</p> : (
-            <div style={{ display:'flex',flexDirection:'column' }}>
-              {stops.map((stop,i) => (
-                <div key={stop.id||i} style={{ display:'flex',alignItems:'start',gap:10 }}>
-                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',paddingTop:2 }}>
+          {stops.length === 0 ? (
+            <p style={{ fontSize:12.5, color:'#9ca3af', margin:0 }}>Loading stops…</p>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column' }}>
+              {stops.map((stop, i) => (
+                <div key={stop.id || i} style={{ display:'flex', alignItems:'start', gap:10 }}>
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', paddingTop:2 }}>
                     <div className={stop.type==='origin'?'dr-stop-dot-o':stop.type==='destination'?'dr-stop-dot-d':'dr-stop-dot-m'} />
-                    {i<stops.length-1 && <div className="dr-stop-line" />}
+                    {i < stops.length - 1 && <div className="dr-stop-line" />}
                   </div>
-                  <div style={{ paddingBottom:i<stops.length-1?8:0 }}>
-                    <p style={{ fontSize:12.5,fontWeight:600,color:'#111827',margin:0 }}>{stop.location}</p>
-                    {stop.products?.length>0 && <p style={{ fontSize:11,color:'#9ca3af',margin:'2px 0 0' }}>Products: {stop.products.map(p=>p.productName||p.product_name||p).join(', ')}</p>}
+                  <div style={{ paddingBottom: i < stops.length - 1 ? 8 : 0 }}>
+                    <p style={{ fontSize:12.5, fontWeight:600, color:'#111827', margin:0 }}>{stop.location}</p>
+                    {stop.products?.length > 0 && (
+                      <p style={{ fontSize:11, color:'#9ca3af', margin:'2px 0 0' }}>
+                        Products: {stop.products.map(p => p.productName || p.product_name || p).join(', ')}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-
-        <div style={{ padding:'12px 16px',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10 }}>
-          {[['Vehicle',delivery.vehicleType?.replace(/_/g,' ')||'—',Truck],['Fuel',`${delivery.fuelConsumption} L`,Fuel],['Distance',`${delivery.totalDistance} km`,Navigation]].map(([label,value,Icon]) => (
+ 
+        {/* ── Vehicle / fuel / distance quick stats ────────── */}
+        <div style={{ padding:'12px 16px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, borderBottom: hasOpt ? '1px solid rgba(82,183,136,.1)' : 'none' }}>
+          {[
+            ['Vehicle',  delivery.vehicleType?.replace(/_/g,' ') || '—', Truck],
+            ['Fuel',     `${delivery.fuelConsumption} L`,               Fuel],
+            ['Distance', `${delivery.totalDistance} km`,                Navigation],
+          ].map(([label, value, Icon]) => (
             <div key={label} className="dr-det-cell">
-              <p style={{ fontSize:9.5,color:'#9ca3af',margin:'0 0 3px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',display:'flex',alignItems:'center',gap:4 }}><Icon size={10} style={{ color:'#2d6a4f' }} />{label}</p>
-              <p style={{ fontSize:13,fontWeight:700,color:'#1a3d2b',margin:0,textTransform:'capitalize' }}>{value}</p>
+              <p style={{ fontSize:9.5, color:'#9ca3af', margin:'0 0 3px', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', display:'flex', alignItems:'center', gap:4 }}>
+                <Icon size={10} style={{ color:'#2d6a4f' }} />{label}
+              </p>
+              <p style={{ fontSize:13, fontWeight:700, color:'#1a3d2b', margin:0, textTransform:'capitalize' }}>{value}</p>
             </div>
           ))}
         </div>
+ 
+        {/* ── INLINE OPTIMIZATION PANEL ───────────────────── */}
+        {/* Shown when a saved optimization exists for this delivery */}
+        {hasOpt && (
+          <div style={{ padding:'16px', background:'linear-gradient(135deg,#f0fdf4,#e6f7ee)' }}>
+ 
+            {/* Panel header */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+              <div style={{ width:28, height:28, borderRadius:8, background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <Sparkles size={14} style={{ color:'#1a3d2b' }} />
+              </div>
+              <div>
+                <p style={{ fontSize:12, fontWeight:800, color:'#1a3d2b', margin:0 }}>AI Route Optimization Results</p>
+                <p style={{ fontSize:11, color:'#52b788', margin:0 }}>
+                  {savedOpt.improvementPct ? `${savedOpt.improvementPct}% efficiency improvement` : 'Route analyzed'}
+                  {savedOpt.usedFallback ? ' · Nearest-Neighbor TSP' : ' · AI optimized'}
+                </p>
+              </div>
+              {savedOpt.improvementPct > 0 && (
+                <span style={{ marginLeft:'auto', background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)', color:'#1a3d2b', padding:'3px 10px', borderRadius:99, fontSize:11, fontWeight:800 }}>
+                  ↓ {savedOpt.improvementPct}% savings
+                </span>
+              )}
+            </div>
+ 
+            {/* Before / After metrics table */}
+            <div style={{ background:'#fff', borderRadius:12, border:'1px solid rgba(82,183,136,.18)', overflow:'hidden', marginBottom:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr 1.2fr', gap:8, padding:'8px 14px', background:'linear-gradient(to right,#f8fdf9,#edfaf2)', borderBottom:'1px solid rgba(82,183,136,.1)' }}>
+                {['Metric','Before','After','Saved'].map((h, i) => (
+                  <span key={h} style={{ fontSize:9.5, fontWeight:800, color: i===2?'#166534':i===3?'#1a3d2b':'#9ca3af', textTransform:'uppercase', letterSpacing:'.07em', textAlign:i>0?'center':'left' }}>{h}</span>
+                ))}
+              </div>
+              {optMetrics.map(r => (
+                <div key={r.label} style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr 1.2fr', gap:8, padding:'10px 14px', borderBottom:'1px solid rgba(82,183,136,.06)', alignItems:'center' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, color:r.color }}>
+                    {r.icon}
+                    <span style={{ fontSize:12, fontWeight:600 }}>{r.label}</span>
+                  </div>
+                  <div style={{ textAlign:'center', fontSize:12, color:'#6b7280' }}>{r.orig}</div>
+                  <div style={{ textAlign:'center', fontSize:12, fontWeight:700, color:'#166534' }}>{r.opt}</div>
+                  <div style={{ textAlign:'center' }}>
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:3, background:'linear-gradient(135deg,#d8f3dc,#b7e4c7)', color:'#1a3d2b', padding:'2px 8px', borderRadius:99, fontSize:10.5, fontWeight:800 }}>
+                      ↓ {r.saved} <span style={{ fontWeight:400, fontSize:10, opacity:.7 }}>({pct(r.pv, r.base)})</span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+ 
+            {/* Route visualization map */}
+            <div style={{ marginBottom:14 }}>
+              <p style={{ fontSize:10.5, fontWeight:800, color:'#52b788', textTransform:'uppercase', letterSpacing:'.07em', margin:'0 0 8px', display:'flex', alignItems:'center', gap:5 }}>
+                <Map size={11} style={{ color:'#2d6a4f' }} /> Route visualization · Dagupan City
+              </p>
+              <RouteMap
+                originalStops={savedOpt.originalRoute?.stops}
+                optimizedStops={savedOpt.optimizedRoute?.stops}
+              />
+            </div>
+ 
+            {/* AI Recommendations */}
+            {(savedOpt.aiRecommendations || []).length > 0 && (
+              <div>
+                <p style={{ fontSize:10.5, fontWeight:800, color:'#52b788', textTransform:'uppercase', letterSpacing:'.07em', margin:'0 0 8px', display:'flex', alignItems:'center', gap:5 }}>
+                  <Sparkles size={11} style={{ color:'#2d6a4f' }} /> AI Recommendations
+                </p>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {savedOpt.aiRecommendations.map((rec, i) => (
+                    <div key={i} className="dr-rec-item">
+                      <div className="dr-rec-num">{i + 1}</div>
+                      <p style={{ fontSize:12.5, color:'#374151', margin:0, lineHeight:1.5 }}>{rec}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -796,16 +934,17 @@ const ApprovalConfirmModal = ({ delivery, onConfirm, onCancel, loading }) => {
 /* ─── DeliveryRoutesPage ────────────────────────────────────────────────────── */
 const DeliveryRoutesPage = () => {
   const { user } = useAuth();
-  const {
-    deliveries, loading, error, success,
-    searchTerm, showAddModal, expandedDelivery, expandedStops,
-    optimizingRoute, optimizationResult, showOptimizationModal, summaryStats,
-    setSearchTerm, setShowAddModal, setExpandedDelivery,
-    deleteDelivery, confirmDelete, optimizeRoute, applyOptimization,
-    handleDeliveryCreated, closeOptimizationModal,
-    submitRouteForApproval,
-    refreshDeliveries,
-  } = useDelivery();
+    const {
+      deliveries, loading, error, success,
+      searchTerm, showAddModal, expandedDelivery, expandedStops,
+      optimizingRoute, optimizationResult, showOptimizationModal, summaryStats,
+      savedOptimizations,
+      setSearchTerm, setShowAddModal, setExpandedDelivery,
+      deleteDelivery, confirmDelete, optimizeRoute, applyOptimization,
+      handleDeliveryCreated, closeOptimizationModal,
+      submitRouteForApproval,
+      refreshDeliveries,
+      } = useDelivery();
 
   const [draftDeliveries,    setDraftDeliveries]    = useState([]);
   const [loadingDrafts,      setLoadingDrafts]      = useState(false);
@@ -1135,14 +1274,18 @@ const DeliveryRoutesPage = () => {
                         </button>
 
                       {/* AI Optimize — hidden for declined (resubmit first, then optimize) */}
-                      {delivery.status !== 'cancelled' && delivery.status !== 'delivered' && delivery.status !== 'declined' && (
-                          <button className="dr-act dr-act-ai"
-                            onClick={() => optimizeRoute(delivery)}
-                            disabled={optimizingRoute===delivery.id||(!canTransitionRoute(delivery.status,'optimized')&&delivery.status!=='optimized')}
-                            title="AI Optimize">
-                            <Sparkles size={16} style={optimizingRoute===delivery.id?{animation:'dr-spin .7s linear infinite'}:{}} />
-                          </button>
-                        )}
+                      {/* AI Optimize — hidden for declined/cancelled/delivered/awaiting_approval */}
+  {delivery.status !== 'cancelled' && delivery.status !== 'delivered' && delivery.status !== 'declined' && delivery.status !== 'awaiting_approval' && (
+    <button className="dr-act dr-act-ai"
+      onClick={() => optimizeRoute(delivery)}
+      disabled={
+        optimizingRoute === delivery.id ||
+        (!canTransitionRoute(delivery.status, 'optimized') && delivery.status !== 'optimized')
+      }
+      title={savedOptimizations[delivery.id] ? 'Already optimized — see dropdown for details' : 'AI Optimize'}>
+      <Sparkles size={16} style={optimizingRoute===delivery.id?{animation:'dr-spin .7s linear infinite'}:{}} />
+    </button>
+  )}
 
                         {/* Submit / Resubmit */}
                         {(delivery.status==='planned'||delivery.status==='optimized'||delivery.status==='declined') && (
@@ -1180,7 +1323,12 @@ const DeliveryRoutesPage = () => {
                       </div>
                     </div>
 
-                    {isExpanded && <DeliveryDetails delivery={{ ...delivery, stops }} />}
+                    {isExpanded && (
+                      <DeliveryDetails
+                        delivery={{ ...delivery, stops }}
+                        savedOpt={savedOptimizations[delivery.id] || null}
+                      />
+                    )}
                   </React.Fragment>
                 );
               })}

@@ -779,6 +779,7 @@ const AlertService = {
         i.batch_number,
         i.quantity,
         i.unit_of_measure,
+        i.ripeness_stage,
         (i.expected_expiry_date - CURRENT_DATE)::int AS days_left,
         CASE
           WHEN (i.expected_expiry_date - CURRENT_DATE)::int <= 4 THEN 'HIGH'
@@ -786,13 +787,41 @@ const AlertService = {
           ELSE 'LOW'
         END AS risk_level,
         i.current_condition,
-        'Main Warehouse' AS location
+        'Main Warehouse' AS location,
+ 
+        -- ── Live catalog fields from products table ──────────────────────
+        -- These are now passed to the AI prompt so Groq uses real DB data
+        -- instead of the static fallback catalog in ai.service.js
+        p.storage_category,
+        p.shelf_life_days,
+        p.optimal_temp_min,
+        p.optimal_temp_max,
+        p.optimal_humidity_min,
+        p.optimal_humidity_max,
+        p.is_ethylene_producer,
+        p.ethylene_producer,
+        p.compatible_with,
+        p.avoid_with,
+        p.avoid_storing_near,
+        p.ripeness_stages,
+ 
+        -- Estimated PHP value: quantity × unit_price, or fallback to quantity × 80
+        COALESCE(
+          i.quantity * i.unit_price_at_entry,
+          i.quantity * 80
+        ) AS value
+ 
       FROM inventory i
       JOIN products p ON i.product_id = p.product_id
       WHERE i.inventory_id = $1
         AND i.business_id = $2
     `, [id, businessId]);
+ 
     if (!rows[0]) throw { status: 404, message: 'Inventory item not found' };
+ 
+    // Pass the enriched row directly — ai.service._buildAlertPrompt
+    // will prefer live DB fields (compatible_with, avoid_with, etc.)
+    // over the static FRUIT_CATALOG fallback automatically.
     return aiService.generateAlertInsights(rows[0]);
   },
 
