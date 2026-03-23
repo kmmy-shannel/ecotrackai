@@ -21,10 +21,12 @@ const BusinessRegistry = ({
   onApprove,
   onReject,
 }) => {
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [submitting,   setSubmitting]   = useState(false);
-  const [rejectingId,  setRejectingId]  = useState(null);
-  const [rejectReason, setRejectReason] = useState('');
+  const [filterStatus,    setFilterStatus]    = useState('all');
+  const [submitting,      setSubmitting]       = useState(false);
+  const [rejectingId,     setRejectingId]      = useState(null);
+  const [rejectReason,    setRejectReason]     = useState('');
+  const [suspendTarget,   setSuspendTarget]    = useState(null); // business object | null
+  const [suspending,      setSuspending]       = useState(false);
 
   const allBusinesses = [
     ...pendingRegs.map(b => ({ ...b, status: 'pending' })),
@@ -202,13 +204,9 @@ const BusinessRegistry = ({
                     <td className="py-4 px-4">{getStatusBadge(b.status)}</td>
                     <td className="py-4 px-4">
                       <div className="flex items-center justify-center gap-1">
-                        {b.status === 'active' && (
+                      {b.status === 'active' && (
                           <button
-                            onClick={() => {
-                              if (window.confirm(`Suspend ${b.business_name}? Their users will lose access.`)) {
-                                onSuspend?.(b.business_id);
-                              }
-                            }}
+                            onClick={() => setSuspendTarget(b)}
                             className="flex items-center gap-1 px-3 py-1.5 text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-semibold transition-colors">
                             <Pause size={12} /> Suspend
                           </button>
@@ -233,6 +231,134 @@ const BusinessRegistry = ({
           </table>
         </div>
       </div>
+      
+
+{/* ── Suspend Confirmation Modal ── */}
+{suspendTarget && (
+  <div style={{
+    position:'fixed', inset:0, background:'rgba(0,0,0,0.45)',
+    backdropFilter:'blur(4px)', display:'flex', alignItems:'center',
+    justifyContent:'center', zIndex:9999, padding:16,
+  }}>
+    <div style={{
+      background:'#fff', borderRadius:20, maxWidth:400, width:'100%',
+      overflow:'hidden', boxShadow:'0 24px 64px rgba(0,0,0,0.22)',
+      fontFamily:'system-ui,sans-serif',
+    }}>
+
+      {/* Orange header */}
+      <div style={{
+        background:'linear-gradient(135deg,#ea580c,#c2410c)',
+        padding:'18px 22px', display:'flex', alignItems:'center', gap:12,
+      }}>
+        <div style={{
+          width:36, height:36, borderRadius:10,
+          background:'rgba(255,255,255,0.15)',
+          display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+        }}>
+          <Pause size={18} style={{ color:'#fff' }} />
+        </div>
+        <div>
+          <p style={{ color:'#fff', fontWeight:800, fontSize:14, margin:0 }}>Suspend Business</p>
+          <p style={{ color:'rgba(255,255,255,0.65)', fontSize:11.5, margin:0 }}>
+            This will lock out all users immediately
+          </p>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding:'20px 22px' }}>
+        <p style={{ fontSize:13.5, color:'#374151', margin:'0 0 8px' }}>
+          Are you sure you want to suspend{' '}
+          <span style={{ fontWeight:800, color:'#111827' }}>{suspendTarget.business_name}</span>?
+        </p>
+        <p style={{ fontSize:12, color:'#9ca3af', margin:'0 0 16px' }}>
+          All users under this business will immediately lose access until the account is reactivated.
+        </p>
+
+        {/* Business info pill */}
+        <div style={{
+          background:'#fff7ed', border:'1px solid #fed7aa',
+          borderRadius:12, padding:'10px 14px',
+          display:'flex', alignItems:'center', gap:10, marginBottom:20,
+        }}>
+          <div style={{
+            width:34, height:34, borderRadius:10,
+            background:'linear-gradient(135deg,#ea580c,#c2410c)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            color:'#fff', fontSize:14, fontWeight:800, flexShrink:0,
+          }}>
+            {suspendTarget.business_name?.charAt(0)?.toUpperCase() || '?'}
+          </div>
+          <div>
+            <p style={{ fontSize:13, fontWeight:700, color:'#111827', margin:0 }}>
+              {suspendTarget.business_name}
+            </p>
+            <p style={{ fontSize:11, color:'#9ca3af', margin:0 }}>
+              {suspendTarget.contact_email || suspendTarget.business_type || '—'}
+            </p>
+          </div>
+          <div style={{ marginLeft:'auto' }}>
+            <span style={{
+              fontSize:10, fontWeight:700, background:'#fed7aa',
+              color:'#c2410c', padding:'3px 10px', borderRadius:99,
+            }}>
+              {suspendTarget.user_count ?? suspendTarget.total_users ?? 0} users affected
+            </span>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display:'flex', gap:10 }}>
+          <button
+            onClick={() => setSuspendTarget(null)}
+            disabled={suspending}
+            style={{
+              flex:1, padding:'10px', border:'1.5px solid #e5e7eb',
+              background:'#fff', color:'#374151', fontSize:13,
+              fontWeight:600, borderRadius:12, cursor:'pointer',
+              fontFamily:'inherit', opacity: suspending ? .5 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={async () => {
+              setSuspending(true);
+              await onSuspend?.(suspendTarget.business_id);
+              setSuspending(false);
+              setSuspendTarget(null);
+            }}
+            disabled={suspending}
+            style={{
+              flex:1, padding:'10px',
+              background: suspending ? '#fdba74' : 'linear-gradient(135deg,#ea580c,#c2410c)',
+              color:'#fff', fontSize:13, fontWeight:700,
+              borderRadius:12, border:'none', cursor: suspending ? 'not-allowed' : 'pointer',
+              fontFamily:'inherit', display:'flex', alignItems:'center',
+              justifyContent:'center', gap:6,
+              boxShadow:'0 2px 8px rgba(234,88,12,0.3)',
+            }}
+          >
+            {suspending ? (
+              <>
+                <div style={{
+                  width:13, height:13, borderRadius:'50%',
+                  border:'2px solid rgba(255,255,255,0.3)',
+                  borderTopColor:'#fff',
+                  animation:'spin 0.6s linear infinite',
+                }} />
+                Suspending…
+              </>
+            ) : (
+              <><Pause size={13} /> Yes, Suspend</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+    )}
     </div>
   );
 };

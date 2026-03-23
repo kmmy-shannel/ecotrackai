@@ -113,8 +113,8 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
 
   const pick = async (f) => {
     const base  = f.shelf_life_days || f.shelfLife || f.default_shelf_life_days || 7;
-    const tMin  = f.optimal_temp_min  ?? f.tempMin  ?? '';
-    const hMin  = f.optimal_humidity_min ?? f.humMin ?? '';
+    const tMin  = f.optimal_temp_min  ?? f.tempMin  ?? f.temperature_range_min  ?? '';
+    const hMin  = f.optimal_humidity_min ?? f.humMin ?? f.humidity_range ?? '';
     const unit  = f.unit_of_measure || f.unit || 'kg';
     const avoid = f.avoid_with || f.avoid || [];
     setFruit({
@@ -298,7 +298,7 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:7 }}>
                   {[
                     ['Default Shelf', `${fruit.shelfLife}d`],
-                    ['Temp Range',    `${fruit.optimal_temp_min ?? fruit.tempMin ?? '?'}–${fruit.optimal_temp_max ?? fruit.tempMax ?? '?'}°C`],
+                    ['Temp Range',    `${fruit.optimal_temp_min ?? fruit.tempMin ?? fruit.temperature_range_min ?? '?'}–${fruit.optimal_temp_max ?? fruit.tempMax ?? fruit.temperature_range_max ?? '?'}°C`],
                     ['Storage',       fruit.storage_category || fruit.default_storage_type || '—'],
                   ].map(([l, v]) => (
                     <div key={l} style={{ background:'#fff', borderRadius:9, padding:'8px 10px', border:'1px solid rgba(82,183,136,.13)' }}>
@@ -318,13 +318,12 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
                     placeholder="e.g. 200" className="aim-inp" />
                 </div>
                 <div>
-                  <label className="aim-lbl">Unit of Measure</label>
-                  <select value={form.unit_of_measure}
-                    onChange={e => setForm(p => ({ ...p, unit_of_measure: e.target.value }))}
-                    className="aim-inp">
-                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                <label className="aim-lbl">Unit of Measure</label>
+                <div className="aim-inp" style={{ background:'#f3f4f6', color:'#6b7280', cursor:'not-allowed', display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ fontWeight:700, color:'#1a3d2b' }}>kg</span>
+                  <span style={{ fontSize:11, color:'#9ca3af' }}>— Kilogram (fixed)</span>
                 </div>
+              </div>
               </div>
 
               {/* Ripeness */}
@@ -371,10 +370,17 @@ const AddInventoryModal = ({ onClose, onSuccess }) => {
 
               {/* Batch number */}
               <div>
-                <label className="aim-lbl">Batch Number</label>
-                <input type="text" value={form.batch_number}
-                  onChange={e => setForm(p => ({ ...p, batch_number: e.target.value }))}
-                  className="aim-inp" style={{ fontFamily:'monospace', letterSpacing:'.03em' }} />
+                <label className="aim-lbl" style={{ display:'flex', alignItems:'center', gap:5 }}>
+                  Batch Number
+                  <span style={{ fontSize:10, fontWeight:600, color:'#9ca3af', background:'#f3f4f6', padding:'1px 7px', borderRadius:99, letterSpacing:'.04em' }}>AUTO-GENERATED</span>
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={form.batch_number}
+                  className="aim-inp"
+                  style={{ fontFamily:'monospace', letterSpacing:'.03em', background:'#f3f4f6', color:'#6b7280', cursor:'not-allowed' }}
+                />
               </div>
 
               {err && <div className="aim-err"><AlertTriangle size={12} />{err}</div>}

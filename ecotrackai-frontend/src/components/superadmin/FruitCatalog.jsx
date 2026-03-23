@@ -22,7 +22,6 @@ const EMPTY_FORM = {
   ripeness_stages: {
     Unripe: { temp_min: '', temp_max: '', humidity: '', storage: 'ambient'      },
     Ripe:   { temp_min: '', temp_max: '', humidity: '', storage: 'refrigerated' },
-    Cut:    { temp_min: '', temp_max: '', humidity: '', storage: 'refrigerated' },
   },
 };
 
@@ -308,21 +307,15 @@ const FruitCatalog = ({ catalogService }) => {
             </div>
           </div>
 
-          {/* Unit of Measure */}
-          <div>
+     {/* Unit of Measure — fixed to kg */}
+     <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Unit of Measure
             </label>
-            <select
-              value={form.unit_of_measure}
-              onChange={e => setForm({ ...form, unit_of_measure: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="kg">kg</option>
-              <option value="pieces">pieces</option>
-              <option value="trays">trays</option>
-              <option value="boxes">boxes</option>
-            </select>
+            <div className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-400 cursor-not-allowed flex items-center gap-6">
+              <span className="font-700 text-green-800 font-bold">kg</span>
+              <span>— Kilogram (fixed)</span>
+            </div>
           </div>
 
           {/* Ethylene Producer */}

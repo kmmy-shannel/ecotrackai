@@ -1,96 +1,232 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Trash2, UserCheck, UserX, UserPlus, AlertTriangle } from 'lucide-react';
+import { X, Users, Trash2, UserCheck, UserX, UserPlus, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import managerService from '../../services/manager.service';
 
-const roleOptions = [
-  { value: 'inventory_manager',      label: 'Inventory Manager',     description: 'Manages products & stock' },
-  { value: 'logistics_manager',      label: 'Logistics Manager',     description: 'Manages routes & deliveries' },
-  { value: 'sustainability_manager', label: 'Sustainability Manager', description: 'Reviews environmental impact' },
+/* ── Styles — mirrors mg-* design system from ManagerPage ── */
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+  .mam-root, .mam-root * { font-family:'Poppins',sans-serif; box-sizing:border-box; }
+
+  @keyframes mam-in   { from{opacity:0;transform:translateY(12px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes mam-fade { from{opacity:0} to{opacity:1} }
+  @keyframes mam-spin { to{transform:rotate(360deg)} }
+
+  .mam-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.5);
+    backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center;
+    z-index:9999; padding:20px; animation:mam-fade .2s ease both;
+  }
+  .mam-card {
+    background:#fff; border-radius:22px; width:100%; max-width:520px;
+    max-height:88vh; display:flex; flex-direction:column;
+    box-shadow:0 24px 64px rgba(26,61,43,0.22);
+    animation:mam-in .25s cubic-bezier(.34,1.56,.64,1) both;
+    overflow:hidden; border:1px solid rgba(82,183,136,0.16);
+  }
+
+  /* Header */
+  .mam-header {
+    background:linear-gradient(130deg,#0f2419 0%,#1a3d2b 55%,#2d6a4f 100%);
+    padding:18px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0; position:relative; overflow:hidden;
+  }
+  .mam-header::after {
+    content:''; position:absolute; right:-40px; top:-40px;
+    width:130px; height:130px; border-radius:50%;
+    background:rgba(255,255,255,0.04); pointer-events:none;
+  }
+  .mam-header-ico {
+    width:34px; height:34px; border-radius:10px;
+    background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.14);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .mam-close {
+    width:30px; height:30px; border-radius:9px;
+    background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.14);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:background .13s; z-index:1; flex-shrink:0;
+    outline:none;
+  }
+  .mam-close:hover { background:rgba(255,255,255,0.2); }
+
+  /* Body */
+  .mam-body { flex:1; overflow-y:auto; padding:18px 20px; display:flex; flex-direction:column; gap:12px; }
+
+  /* Create button */
+  .mam-btn-create {
+    width:100%; display:flex; align-items:center; justify-content:center; gap:7px;
+    padding:10px; background:linear-gradient(135deg,#1a3d2b,#2d6a4f);
+    color:#fff; border:none; border-radius:13px;
+    font-size:13px; font-weight:700; font-family:'Poppins',sans-serif;
+    cursor:pointer; transition:opacity .15s, transform .12s;
+    box-shadow:0 4px 12px rgba(26,61,43,0.22);
+  }
+  .mam-btn-create:hover { opacity:.88; transform:translateY(-1px); }
+
+  /* Account row */
+  .mam-acct {
+    display:flex; align-items:center; gap:11px;
+    padding:11px 14px; border-radius:13px;
+    border:1px solid rgba(82,183,136,0.14);
+    background:#fff; transition:border-color .14s, background .14s;
+  }
+  .mam-acct:hover { border-color:rgba(82,183,136,0.35); background:#f8fdf9; }
+  .mam-acct-av {
+    width:38px; height:38px; border-radius:12px;
+    background:linear-gradient(135deg,#1a3d2b,#2d6a4f);
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:800; color:#fff; flex-shrink:0;
+  }
+  .mam-acct-del {
+    width:30px; height:30px; border-radius:9px; border:none;
+    background:transparent; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    color:#d1d5db; transition:background .12s, color .12s; flex-shrink:0;
+  }
+  .mam-acct-del:hover { background:#fee2e2; color:#dc2626; }
+  .mam-acct-del:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* Status dot */
+  .mam-dot-active   { width:6px; height:6px; border-radius:50%; background:#4ade80; display:inline-block; flex-shrink:0; }
+  .mam-dot-inactive { width:6px; height:6px; border-radius:50%; background:#d1d5db; display:inline-block; flex-shrink:0; }
+
+  /* Form fields */
+  .mam-lbl { font-size:10.5px; font-weight:700; color:#374151; display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
+  .mam-field {
+    width:100%; padding:10px 13px; border:1.5px solid rgba(82,183,136,0.22);
+    border-radius:11px; font-size:13px; font-family:'Poppins',sans-serif;
+    outline:none; transition:border-color .15s, box-shadow .15s;
+    color:#1a3d2b; background:#fafffe;
+  }
+  .mam-field::placeholder { color:#adb5bd; }
+  .mam-field:focus { border-color:#2d6a4f; box-shadow:0 0 0 3px rgba(45,106,79,0.09); background:#fff; }
+
+  /* Role radio */
+  .mam-radio {
+    display:flex; align-items:center; gap:10px; padding:10px 13px;
+    border:1.5px solid rgba(82,183,136,0.16); border-radius:12px;
+    cursor:pointer; transition:all .14s; background:#fff;
+  }
+  .mam-radio:hover { border-color:#52b788; background:#f0faf4; }
+  .mam-radio.sel   { border-color:#1a3d2b; background:#d8f3dc; }
+
+  /* Form action buttons */
+  .mam-btn-cancel {
+    flex:1; padding:10px; border:1.5px solid rgba(82,183,136,0.2);
+    border-radius:12px; font-size:13px; font-weight:600;
+    color:#6b7280; background:#fff; cursor:pointer;
+    transition:background .14s; font-family:'Poppins',sans-serif;
+  }
+  .mam-btn-cancel:hover { background:#f0faf4; color:#1a3d2b; border-color:#52b788; }
+  .mam-btn-submit {
+    flex:1; padding:10px; background:linear-gradient(135deg,#1a3d2b,#2d6a4f);
+    color:#fff; border-radius:12px; font-size:13px; font-weight:700;
+    border:none; cursor:pointer; font-family:'Poppins',sans-serif;
+    box-shadow:0 4px 10px rgba(26,61,43,0.22); transition:opacity .15s;
+  }
+  .mam-btn-submit:hover:not(:disabled) { opacity:.88; }
+  .mam-btn-submit:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* Toasts */
+  .mam-toast-ok  { background:#d8f3dc; border:1px solid #86efac; color:#166534; border-radius:11px; padding:10px 13px; font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:7px; }
+  .mam-toast-err { background:#fee2e2; border:1px solid #fecaca; color:#991b1b; border-radius:11px; padding:10px 13px; font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:7px; }
+
+  /* Spinner */
+  .mam-spin { width:18px; height:18px; border-radius:50%; border:2.5px solid #95d5b2; border-top-color:#2d6a4f; animation:mam-spin .65s linear infinite; flex-shrink:0; }
+
+  /* Empty state */
+  .mam-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:36px 20px; gap:9px; text-align:center; }
+
+  /* Section divider label */
+  .mam-section-label {
+    font-size:9.5px; font-weight:800; color:rgba(255,255,255,0.35);
+    text-transform:uppercase; letter-spacing:.12em; padding:0 6px;
+  }
+`;
+
+if (typeof document !== 'undefined' && !document.getElementById('mam-styles')) {
+  const el = document.createElement('style');
+  el.id = 'mam-styles'; el.textContent = STYLES;
+  document.head.appendChild(el);
+}
+
+const ROLE_OPTIONS = [
+  { value:'inventory_manager',      label:'Inventory Manager',     icon:'📦', desc:'Manages products & stock' },
+  { value:'logistics_manager',      label:'Logistics Manager',     icon:'🚛', desc:'Manages routes & deliveries' },
+  { value:'sustainability_manager', label:'Sustainability Manager', icon:'🌿', desc:'Reviews environmental impact' },
+  { value:'driver',                 label:'Driver',                icon:'🧭', desc:'Executes delivery routes' },
 ];
 
-// ─── Styled Confirmation Modal ───────────────────────────────────────────────
-// Replaces window.confirm — renders inline inside the parent modal overlay
-const ConfirmDeleteModal = ({ manager, onConfirm, onCancel, loading }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
-    <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden">
-      {/* Red header bar */}
-      <div className="bg-red-500 px-6 py-4 flex items-center gap-3">
-        <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
-          <AlertTriangle size={20} className="text-white" />
+/* ── Confirm Deactivate Modal — same pattern as before, restyled ── */
+const ConfirmDeactivateModal = ({ manager, onConfirm, onCancel, loading }) => (
+  <div style={{
+    position:'fixed', inset:0, background:'rgba(0,0,0,0.6)',
+    backdropFilter:'blur(4px)', display:'flex', alignItems:'center',
+    justifyContent:'center', zIndex:10000, padding:16,
+  }}>
+    <div style={{
+      background:'#fff', borderRadius:20, maxWidth:380, width:'100%',
+      overflow:'hidden', boxShadow:'0 24px 64px rgba(0,0,0,0.25)',
+    }}>
+      {/* Red header */}
+      <div style={{ background:'linear-gradient(135deg,#dc2626,#b91c1c)', padding:'16px 20px', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ width:34, height:34, borderRadius:10, background:'rgba(255,255,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <AlertTriangle size={17} style={{ color:'#fff' }} />
         </div>
         <div>
-          <p className="text-white font-bold text-sm">Deactivate Account</p>
-          <p className="text-red-100 text-xs">This action cannot be undone easily</p>
+          <p style={{ color:'#fff', fontWeight:800, fontSize:13.5, margin:0, fontFamily:'Poppins,sans-serif' }}>Deactivate Account</p>
+          <p style={{ color:'rgba(255,255,255,0.65)', fontSize:11, margin:0, fontFamily:'Poppins,sans-serif' }}>This action cannot be undone easily</p>
         </div>
       </div>
-
       {/* Body */}
-      <div className="px-6 py-5">
-        <p className="text-gray-700 text-sm leading-relaxed">
+      <div style={{ padding:'18px 20px' }}>
+        <p style={{ fontSize:13, color:'#374151', margin:'0 0 6px', fontFamily:'Poppins,sans-serif' }}>
           Are you sure you want to deactivate{' '}
-          <span className="font-bold text-gray-900">{manager?.full_name}</span>?
+          <span style={{ fontWeight:800, color:'#111827' }}>{manager?.full_name}</span>?
         </p>
-        <p className="text-gray-500 text-xs mt-2">
-          Their account will be set to <span className="font-semibold text-red-500">Inactive</span>.
-          They will no longer be able to log in. All their records and history will be preserved.
+        <p style={{ fontSize:11.5, color:'#9ca3af', margin:'0 0 14px', fontFamily:'Poppins,sans-serif' }}>
+          Their account will be set to <span style={{ fontWeight:700, color:'#dc2626' }}>Inactive</span>. All records and history will be preserved.
         </p>
-
         {/* Manager info pill */}
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+        <div style={{ background:'#f8fdf9', border:'1px solid rgba(82,183,136,0.16)', borderRadius:12, padding:'10px 13px', display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
+          <div style={{ width:34, height:34, borderRadius:10, background:'linear-gradient(135deg,#1a3d2b,#2d6a4f)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:800, flexShrink:0, fontFamily:'Poppins,sans-serif' }}>
             {manager?.full_name?.charAt(0) || '?'}
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-800">{manager?.full_name}</p>
-            <p className="text-xs text-gray-500">{manager?.email}</p>
-            <p className="text-xs text-gray-400">{roleOptions.find(r => r.value === manager?.role)?.label || manager?.role}</p>
+            <p style={{ fontSize:12.5, fontWeight:700, color:'#111827', margin:0, fontFamily:'Poppins,sans-serif' }}>{manager?.full_name}</p>
+            <p style={{ fontSize:11, color:'#9ca3af', margin:0, fontFamily:'Poppins,sans-serif' }}>{manager?.email}</p>
           </div>
         </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="px-6 pb-5 flex gap-3">
-        <button
-          onClick={onCancel}
-          disabled={loading}
-          className="flex-1 px-4 py-2.5 border-2 border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition-colors text-sm disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={loading}
-          className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors text-sm disabled:opacity-60 flex items-center justify-center gap-2"
-        >
-          {loading ? (
-            <>
-              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              Deactivating...
-            </>
-          ) : (
-            <>
-              <Trash2 size={14} />
-              Yes, Deactivate
-            </>
-          )}
-        </button>
+        <div style={{ display:'flex', gap:9 }}>
+          <button onClick={onCancel} disabled={loading}
+            style={{ flex:1, padding:'10px', border:'1.5px solid rgba(82,183,136,0.2)', borderRadius:12, fontSize:13, fontWeight:600, color:'#6b7280', background:'#fff', cursor:'pointer', fontFamily:'Poppins,sans-serif' }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            style={{ flex:1, padding:'10px', background:'#dc2626', color:'#fff', border:'none', borderRadius:12, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'Poppins,sans-serif', display:'flex', alignItems:'center', justifyContent:'center', gap:6, boxShadow:'0 2px 8px rgba(220,38,38,0.25)', opacity: loading ? .6 : 1 }}>
+            {loading
+              ? <><div style={{ width:14, height:14, borderRadius:'50%', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', animation:'mam-spin .6s linear infinite' }} /> Deactivating…</>
+              : <><Trash2 size={13} /> Yes, Deactivate</>
+            }
+          </button>
+        </div>
       </div>
     </div>
   </div>
 );
 
-// ─── Main Modal ──────────────────────────────────────────────────────────────
+/* ── Main Modal ── */
 const ManageAccountsModal = ({ onClose }) => {
-  const [managers, setManagers]             = useState([]);
-  const [showForm, setShowForm]             = useState(false);
-  const [loading, setLoading]               = useState(false);
-  const [deleteLoading, setDeleteLoading]   = useState(false);
-  const [error, setError]                   = useState('');
-  const [success, setSuccess]               = useState('');
-  // ── Fix: track which manager is pending deletion ──
-  const [confirmDelete, setConfirmDelete]   = useState(null); // null | manager object
-  const [formData, setFormData]             = useState({
-    username: '', email: '', password: '', fullName: '', role: ''
+  const [managers,        setManagers]        = useState([]);
+  const [showForm,        setShowForm]        = useState(false);
+  const [loading,         setLoading]         = useState(false);
+  const [deleteLoading,   setDeleteLoading]   = useState(false);
+  const [error,           setError]           = useState('');
+  const [success,         setSuccess]         = useState('');
+  const [confirmDelete,   setConfirmDelete]   = useState(null);
+  const [formData,        setFormData]        = useState({
+    username:'', email:'', password:'', fullName:'', role:''
   });
 
   useEffect(() => { loadManagers(); }, []);
@@ -99,8 +235,8 @@ const ManageAccountsModal = ({ onClose }) => {
     try {
       setLoading(true);
       setError('');
-      const response = await managerService.getAllManagers();
-      setManagers(response.data?.managers || []);
+      const res = await managerService.getAllManagers();
+      setManagers(res.data?.managers || res.data?.data || []);
     } catch {
       setError('Failed to load managers');
     } finally {
@@ -110,29 +246,29 @@ const ManageAccountsModal = ({ onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    setLoading(true); setError(''); setSuccess('');
     try {
       await managerService.createManager(formData);
-      setSuccess('Manager account created!');
-      setFormData({ username: '', email: '', password: '', fullName: '', role: '' });
+      setSuccess('Account created successfully!');
+      setFormData({ username:'', email:'', password:'', fullName:'', role:'' });
       setShowForm(false);
       loadManagers();
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create manager');
+      const d = err.response?.data;
+      const errs = d?.error;
+      setError(Array.isArray(errs) && errs.length > 0 ? errs[0] : d?.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Fix #1 core: open styled modal instead of window.confirm ──
+  // ── Same logic as before — opens styled confirm modal ──
   const requestDelete = (manager) => {
     setError('');
     setConfirmDelete(manager);
   };
 
-  // ── Fix #1 core: actual delete/deactivate call ──
   const confirmDeleteAction = async () => {
     if (!confirmDelete) return;
     setDeleteLoading(true);
@@ -150,202 +286,195 @@ const ManageAccountsModal = ({ onClose }) => {
     }
   };
 
-  const cancelDelete = () => {
-    setConfirmDelete(null);
-  };
+  const roleLabel = (role) => ROLE_OPTIONS.find(r => r.value === role)?.label || role;
 
   return (
-    <>
-      {/* ── Confirmation modal renders on top when triggered ── */}
+    <div className="mam-root">
+
+      {/* Confirm deactivate modal */}
       {confirmDelete && (
-        <ConfirmDeleteModal
+        <ConfirmDeactivateModal
           manager={confirmDelete}
           onConfirm={confirmDeleteAction}
-          onCancel={cancelDelete}
+          onCancel={() => setConfirmDelete(null)}
           loading={deleteLoading}
         />
       )}
 
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="mam-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="mam-card">
 
-          {/* Header — unchanged */}
-          <div className="bg-gradient-to-r from-green-700 to-green-600 text-white p-6 rounded-t-2xl flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <Users size={22} />
+          {/* ── Header ── */}
+          <div className="mam-header">
+            <div style={{ display:'flex', alignItems:'center', gap:11, position:'relative', zIndex:1 }}>
+              <div className="mam-header-ico">
+                <Users size={16} style={{ color:'#86efac' }} />
               </div>
               <div>
-                <h2 className="text-xl font-bold">Manage Accounts</h2>
-                <p className="text-green-200 text-sm">Create and manage manager accounts</p>
+                <p style={{ color:'#fff', fontWeight:800, fontSize:15, margin:0, letterSpacing:'-.2px' }}>
+                  {showForm ? 'Create Account' : 'Manage Accounts'}
+                </p>
+                <p style={{ color:'rgba(255,255,255,0.45)', fontSize:11, margin:0 }}>
+                  {showForm ? 'Fill in the details below' : `${managers.length} account${managers.length !== 1 ? 's' : ''} total`}
+                </p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-              <X size={22} />
+            <button className="mam-close" onClick={onClose}>
+              <X size={14} style={{ color:'#fff' }} />
             </button>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* ── Body ── */}
+          <div className="mam-body">
 
+            {/* Toasts */}
             {success && (
-              <div className="p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm flex items-center gap-2">
-                <UserCheck size={16} /> {success}
+              <div className="mam-toast-ok">
+                <UserCheck size={14} /> {success}
               </div>
             )}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
-                {error}
+              <div className="mam-toast-err">
+                <AlertTriangle size={14} /> {error}
               </div>
             )}
 
             {!showForm ? (
               <>
                 {/* Create button */}
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl font-semibold text-sm shadow-md transition-all"
-                >
-                  <UserPlus size={18} /> Create New Manager Account
+                <button className="mam-btn-create" onClick={() => { setShowForm(true); setError(''); }}>
+                  <UserPlus size={15} /> Create New Account
                 </button>
 
-                {/* Manager list */}
+                {/* Account list */}
                 {loading ? (
-                  <div className="text-center py-10 text-gray-400 text-sm">Loading managers...</div>
+                  <div className="mam-empty">
+                    <div className="mam-spin" />
+                    <p style={{ fontSize:13, color:'#9ca3af', margin:0 }}>Loading accounts…</p>
+                  </div>
                 ) : managers.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <UserX size={30} className="text-gray-400" />
+                  <div className="mam-empty">
+                    <div style={{ width:50, height:50, borderRadius:15, background:'#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <UserX size={24} style={{ color:'#d1d5db' }} />
                     </div>
-                    <p className="text-gray-500 font-medium text-sm">No managers yet</p>
+                    <p style={{ fontWeight:700, color:'#4b5563', margin:0, fontSize:13 }}>No accounts yet</p>
+                    <p style={{ fontSize:12, color:'#9ca3af', margin:0 }}>Create your first manager account above.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {managers.map((mgr) => {
-                      const roleInfo = roleOptions.find(r => r.value === mgr.role) || { label: mgr.role };
-                      return (
-                        <div key={mgr.user_id} className="border-2 border-gray-100 rounded-xl p-4 hover:border-green-200 transition-all">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3">
-                              <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
-                                {mgr.full_name?.charAt(0) || '?'}
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="font-bold text-gray-800 text-sm">{mgr.full_name}</p>
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${mgr.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                    {mgr.is_active ? 'Active' : 'Inactive'}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-gray-500">{mgr.email} · @{mgr.username}</p>
-                                <p className="text-xs text-gray-600 font-medium mt-0.5">{roleInfo.label}</p>
-                              </div>
-                            </div>
-
-                            {/* ── Fix: only show delete button for active managers ── */}
-                            {mgr.is_active && (
-                              <button
-                                onClick={() => requestDelete(mgr)}
-                                title="Deactivate account"
-                                className="p-1.5 hover:bg-red-50 text-red-400 hover:text-red-600 rounded-lg transition-colors"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            )}
-
-                            {/* Show a muted icon for already-inactive managers */}
-                            {!mgr.is_active && (
-                              <span className="p-1.5 text-gray-300 cursor-default" title="Already inactive">
-                                <Trash2 size={15} />
-                              </span>
-                            )}
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {managers.map((mgr) => (
+                      <div key={mgr.user_id} className="mam-acct">
+                        <div className="mam-acct-av">
+                          {mgr.full_name?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontSize:13, fontWeight:700, color:'#111827', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {mgr.full_name}
+                          </p>
+                          <p style={{ fontSize:11, fontWeight:600, color:'#2d6a4f', margin:0 }}>
+                            {roleLabel(mgr.role)}
+                          </p>
+                          <p style={{ fontSize:10.5, color:'#9ca3af', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {mgr.email} · @{mgr.username}
+                          </p>
+                          <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:3 }}>
+                            <span className={mgr.is_active ? 'mam-dot-active' : 'mam-dot-inactive'} />
+                            <span style={{ fontSize:10, color:'#9ca3af' }}>{mgr.is_active ? 'Active' : 'Inactive'}</span>
                           </div>
                         </div>
-                      );
-                    })}
+                        {mgr.is_active ? (
+                          <button
+                            className="mam-acct-del"
+                            onClick={() => requestDelete(mgr)}
+                            title="Deactivate account"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : (
+                          <span style={{ width:30, height:30, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', flexShrink:0 }}>
+                            <Trash2 size={14} />
+                          </span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </>
             ) : (
-              /* Create Form — completely unchanged from original */
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-                  <h3 className="font-semibold text-gray-800 text-sm">New Manager Account</h3>
-                </div>
+              /* ── Create Form — matches ManagerPage form exactly ── */
+              <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:13 }}>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Full Name *</label>
-                    <input type="text" required placeholder="John Doe"
+                    <label className="mam-lbl">Full Name *</label>
+                    <input type="text" required placeholder="John Doe" className="mam-field"
                       value={formData.fullName}
                       onChange={e => setFormData({...formData, fullName: e.target.value})}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Username *</label>
-                    <input type="text" required placeholder="johndoe"
+                    <label className="mam-lbl">Username *</label>
+                    <input type="text" required placeholder="johndoe" className="mam-field"
                       value={formData.username}
                       onChange={e => setFormData({...formData, username: e.target.value})}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Email *</label>
-                  <input type="email" required placeholder="john@company.com"
+                  <label className="mam-lbl">Email *</label>
+                  <input type="email" required placeholder="john@company.com" className="mam-field"
                     value={formData.email}
                     onChange={e => setFormData({...formData, email: e.target.value})}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Password *</label>
-                  <input type="password" required minLength={6} placeholder="Min. 6 characters"
+                  <label className="mam-lbl">Password *</label>
+                  <input type="password" required minLength={6} placeholder="Min. 6 characters" className="mam-field"
                     value={formData.password}
                     onChange={e => setFormData({...formData, password: e.target.value})}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">Manager Role *</label>
-                  <div className="space-y-2">
-                    {roleOptions.map(option => (
-                      <label key={option.value}
-                        className={`flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${
-                          formData.role === option.value
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-gray-200 hover:border-green-300'
-                        }`}
+                  <label className="mam-lbl" style={{ marginBottom:8 }}>Role *</label>
+                  <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+                    {ROLE_OPTIONS.map(opt => (
+                      <label
+                        key={opt.value}
+                        className={`mam-radio${formData.role === opt.value ? ' sel' : ''}`}
                       >
-                        <input type="radio" name="role" required
-                          value={option.value}
-                          checked={formData.role === option.value}
+                        <input
+                          type="radio" name="role" required
+                          value={opt.value}
+                          checked={formData.role === opt.value}
                           onChange={e => setFormData({...formData, role: e.target.value})}
+                          style={{ accentColor:'#1a3d2b' }}
                         />
+                        <span style={{ fontSize:18 }}>{opt.icon}</span>
                         <div>
-                          <p className="font-semibold text-gray-800 text-sm">{option.label}</p>
-                          <p className="text-xs text-gray-500">{option.description}</p>
+                          <p style={{ fontSize:12.5, fontWeight:700, color:'#1a3d2b', margin:0 }}>{opt.label}</p>
+                          <p style={{ fontSize:11, color:'#9ca3af', margin:0 }}>{opt.desc}</p>
                         </div>
                       </label>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-2">
-                  <button type="button"
-                    onClick={() => { setShowForm(false); setError(''); }}
-                    className="flex-1 px-4 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 text-sm"
+                <div style={{ display:'flex', gap:9, paddingTop:4 }}>
+                  <button
+                    type="button"
+                    className="mam-btn-cancel"
+                    onClick={() => { setShowForm(false); setError(''); setFormData({ username:'', email:'', password:'', fullName:'', role:'' }); }}
                   >
                     Cancel
                   </button>
-                  <button type="submit" disabled={loading}
-                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold rounded-xl shadow-md disabled:opacity-50 text-sm"
-                  >
-                    {loading ? 'Creating...' : 'Create Account'}
+                  <button type="submit" disabled={loading} className="mam-btn-submit">
+                    {loading
+                      ? <span style={{ display:'flex', alignItems:'center', gap:6 }}><div className="mam-spin" style={{ borderColor:'rgba(255,255,255,0.3)', borderTopColor:'#fff' }} /> Creating…</span>
+                      : 'Create Account'
+                    }
                   </button>
                 </div>
               </form>
@@ -353,7 +482,7 @@ const ManageAccountsModal = ({ onClose }) => {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

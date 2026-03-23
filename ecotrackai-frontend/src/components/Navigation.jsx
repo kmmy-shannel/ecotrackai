@@ -1,65 +1,87 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  Package,
-  Truck,
-  AlertTriangle,
-  Leaf,
-  Users,
-  Award,
-  Building2,
-  ClipboardList,
-  LineChart,
-  History,
-  Map,
-  Navigation as NavigationIcon,
-  Activity,
-  Settings,
-  CheckCircle2,
-  User,
-  LogOut,
-  ChevronRight
+  LayoutDashboard, Package, Truck, AlertTriangle, Leaf,
+  Users, Award, Building2, ClipboardList, LineChart,
+  History, Map, Navigation as NavigationIcon, Activity,
+  Settings, CheckCircle2, User, LogOut, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getRoleNavItems } from '../utils/rolePermissions';
-import UserProfileModal from './UserProfileModal';
 
 const ICONS = {
-  layout: LayoutDashboard,
-  box: Package,
-  truck: Truck,
-  bell: AlertTriangle,
-  leaf: Leaf,
-  users: Users,
-  building: Building2,
-  list: ClipboardList,
-  chart: LineChart,
-  history: History,
-  flag: Award,
-  map: Map,
-  navigation: NavigationIcon,
-  settings: Settings,
-  pulse: Activity,
-  check: CheckCircle2,
-  user: User
+  layout: LayoutDashboard, box: Package, truck: Truck,
+  bell: AlertTriangle, leaf: Leaf, users: Users,
+  building: Building2, list: ClipboardList, chart: LineChart,
+  history: History, flag: Award, map: Map,
+  navigation: NavigationIcon, settings: Settings,
+  pulse: Activity, check: CheckCircle2, user: User,
 };
 
 const ROLE_LABELS = {
-  super_admin: 'Super Admin',
-  admin: 'Admin',
+  super_admin: 'Super Admin', admin: 'Admin',
   logistics_manager: 'Logistics Manager',
   inventory_manager: 'Inventory Manager',
   sustainability_manager: 'Sustainability Manager',
   driver: 'Driver',
 };
 
-const Navigation = ({ onLogout }) => {
+/* ── Injected styles — only affect nav items inside dark sidebar ── */
+const NAV_STYLES = `
+  .adm-nav-item {
+    width:100%; display:flex; align-items:center; gap:10px;
+    padding:10px 12px; border-radius:13px; border:none; cursor:pointer;
+    font-size:12.5px; font-weight:600; font-family:'Poppins',sans-serif;
+    transition:background .15s, transform .12s;
+    background:transparent; color:rgba(255,255,255,0.55); text-align:left;
+    position:relative;
+  }
+  .adm-nav-item:hover {
+    background:rgba(255,255,255,0.07);
+    color:rgba(255,255,255,0.85);
+    transform:translateX(2px);
+  }
+  .adm-nav-item.active {
+    background:rgba(255,255,255,0.12);
+    color:#fff; font-weight:700;
+    border:1px solid rgba(255,255,255,0.12);
+    box-shadow:0 2px 8px rgba(0,0,0,0.12);
+  }
+  .adm-nav-item.active::before {
+    content:''; position:absolute; left:0; top:50%;
+    transform:translateY(-50%);
+    width:3px; height:18px; background:#86efac;
+    border-radius:0 3px 3px 0;
+  }
+  .adm-nav-label {
+    font-size:9.5px; font-weight:800;
+    color:rgba(255,255,255,0.3);
+    text-transform:uppercase; letter-spacing:.12em;
+    margin-bottom:8px; padding:0 8px;
+  }
+  .adm-logout {
+    display:flex; align-items:center; gap:10px;
+    width:100%; padding:10px 12px; border-radius:13px;
+    border:none; cursor:pointer; background:transparent;
+    color:rgba(255,255,255,0.4); font-size:12.5px; font-weight:600;
+    font-family:'Poppins',sans-serif;
+    transition:background .15s, color .15s; margin-top:8px;
+  }
+  .adm-logout:hover { background:rgba(239,68,68,0.15); color:#fca5a5; }
+`;
+
+if (typeof document !== 'undefined' && !document.getElementById('adm-nav-styles')) {
+  const el = document.createElement('style');
+  el.id = 'adm-nav-styles'; el.textContent = NAV_STYLES;
+  document.head.appendChild(el);
+}
+
+// ── CHANGE 1: Added onLogoutRequest to props ──────────────────
+const Navigation = ({ onLogout, onLogoutRequest }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, role, logout } = useAuth();
-  const [showLogoutModal,  setShowLogoutModal]  = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+  // ── CHANGE 3a: showLogoutModal state REMOVED ─────────────────
 
   const navItems = getRoleNavItems(role);
 
@@ -70,8 +92,7 @@ const Navigation = ({ onLogout }) => {
     if (!targetQuery) return true;
     if (!location.search && targetQuery === 'tab=pending') return true;
     const currentQuery = location.search.startsWith('?')
-      ? location.search.slice(1)
-      : location.search;
+      ? location.search.slice(1) : location.search;
     return currentQuery === targetQuery;
   };
 
@@ -81,122 +102,51 @@ const Navigation = ({ onLogout }) => {
     navigate('/');
   };
 
-  const initials = (user?.fullName || user?.username || '?')
-    .split(' ')
-    .map(w => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
   return (
     <>
-      <p className="text-xs text-gray-500 font-semibold mb-4 uppercase tracking-wider">Menu</p>
+      <p className="adm-nav-label">Menu</p>
 
-      <nav className="space-y-1 flex-1">
+      <nav style={{ flex:1, display:'flex', flexDirection:'column', gap:3 }}>
         {navItems.map((item) => {
           const Icon = ICONS[item.icon] || LayoutDashboard;
+          const active = isActive(item.path);
           return (
-            <NavItem
+            <button
               key={`${item.path}-${item.label}`}
-              Icon={Icon}
-              label={item.label}
-              active={isActive(item.path)}
               onClick={() => navigate(item.path)}
-            />
+              className={`adm-nav-item${active ? ' active' : ''}`}
+            >
+              <Icon size={15} style={{ flexShrink:0,
+                color: active ? '#86efac' : 'rgba(255,255,255,0.4)' }} />
+              <span>{item.label}</span>
+            </button>
           );
         })}
       </nav>
 
-      <div className="space-y-1 pt-6 border-t border-gray-200 mt-auto">
-
-        {/* ── Profile Button ── */}
-        <button
-          onClick={() => setShowProfileModal(true)}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all hover:bg-green-50 group text-left"
-        >
-          {/* Avatar initials */}
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-700 to-green-900 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <span className="text-white text-xs font-bold">{initials}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-green-800 transition-colors">
-              {user?.fullName || user?.username || 'My Profile'}
-            </p>
-            <p className="text-xs text-gray-400 truncate">
-              {ROLE_LABELS[role] || role}
-            </p>
-          </div>
-          <ChevronRight size={13} className="text-gray-300 group-hover:text-green-500 transition-colors flex-shrink-0" />
-        </button>
-
-        {/* ── Logout Button ── */}
-        <button
-          onClick={() => setShowLogoutModal(true)}
-          className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl transition-all text-left group"
-        >
-          <LogOut size={20} className="text-gray-400 group-hover:text-red-500 transition-colors" />
-          <span className="group-hover:text-red-600 transition-colors">Logout</span>
+      {/* ── CHANGE 2: onClick now calls onLogoutRequest from Layout ── */}
+      <div style={{ borderTop:'1px solid rgba(255,255,255,0.07)', paddingTop:12, marginTop:8 }}>
+        <button className="adm-logout" onClick={() => onLogoutRequest ? onLogoutRequest() : handleLogout()}>
+          <LogOut size={15} />
+          <span>Logout</span>
         </button>
       </div>
 
-      {/* ── Logout Confirm Modal ── */}
-      {showLogoutModal && (
-        <LogoutConfirmModal
-          onConfirm={() => { setShowLogoutModal(false); handleLogout(); }}
-          onCancel={() => setShowLogoutModal(false)}
-        />
-      )}
-
-      {/* ── User Profile Modal ── */}
-      {showProfileModal && (
-        <UserProfileModal onClose={() => setShowProfileModal(false)} />
-      )}
+      {/* ── CHANGE 3b: LogoutConfirmModal render REMOVED from here ── */}
     </>
   );
 };
 
+/* ── NavItem kept for any external references ── */
 const NavItem = ({ Icon, label, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
-      active
-        ? 'bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 font-semibold shadow-sm border-l-4 border-green-500'
-        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
-    }`}
+    className={`adm-nav-item${active ? ' active' : ''}`}
   >
-    <Icon size={20} className={active ? 'text-green-500' : 'text-gray-400'} />
+    <Icon size={15} style={{ flexShrink:0,
+      color: active ? '#86efac' : 'rgba(255,255,255,0.4)' }} />
     <span>{label}</span>
   </button>
-);
-
-const LogoutConfirmModal = ({ onConfirm, onCancel }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-    <div className="bg-white text-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-gray-200">
-      <div className="flex flex-col items-center text-center">
-        <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-4">
-          <LogOut size={26} className="text-red-500" />
-        </div>
-        <h3 className="text-lg font-bold mb-1">Log out</h3>
-        <p className="text-sm text-gray-500 mb-6">
-          Are you sure you want to log out of your account?
-        </p>
-        <div className="flex gap-3 w-full">
-          <button
-            onClick={onCancel}
-            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all text-sm shadow-md"
-          >
-            Log out
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 );
 
 export default Navigation;
