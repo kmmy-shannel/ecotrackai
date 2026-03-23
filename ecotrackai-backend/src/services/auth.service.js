@@ -268,13 +268,18 @@ const AuthService = {
     }
   },
 
-  async login(email, password, ip, userAgent) {
+  async login(identifier, password, ip, userAgent) {
     try {
-      if (!email || !password) {
-        return this._fail('Please provide email and password');
+      if (!identifier || !password) {
+        return this._fail('Email or username and password are required');
       }
 
-      const userResult = await UserModel.findByEmail(email);
+      const cleanIdentifier = String(identifier).trim();
+      if (!cleanIdentifier) {
+        return this._fail('Email or username and password are required');
+      }
+
+      const userResult = await UserModel.findByLoginIdentifier(cleanIdentifier);
       if (!userResult.success) return userResult;
       const user = userResult.data;
       if (!user) return this._fail('Invalid credentials');
@@ -508,7 +513,56 @@ const AuthService = {
       console.error('[AuthService.changePassword]', error);
       return this._fail('Failed to change password');
     }
-  }
+  },
+  async sendChangePasswordOTP(email) {
+ try {
+   if (!email) return this._fail('Email is required');
+ 
+   // Find user regardless of email_verified status
+   const userResult = await UserModel.findByEmailBasic(email);
+   if (!userResult.success) return userResult;
+   const user = userResult.data;
+   if (!user) return this._fail('User not found');
+ 
+   const otp = generateOTP();
+   const otpExpires = new Date();
+   otpExpires.setMinutes(otpExpires.getMinutes() + 10);
+ 
+   const otpResult = await UserModel.updateOTP(user.user_id, otp, otpExpires);
+   if (!otpResult.success) return otpResult;
+ 
+   await emailService.sendVerificationEmail(email, otp, user.full_name || user.username);
+   return this._ok({ sent: true });
+ } catch (error) {
+   console.error('[AuthService.sendChangePasswordOTP]', error);
+   return this._fail('Failed to send verification code');
+ }
+ },
+ 
+ async verifyChangePasswordOTP(email, otp) {
+ try {
+   if (!email || !otp) return this._fail('Email and OTP are required');
+ 
+   const userResult = await UserModel.findByEmailWithBusiness(email);
+   if (!userResult.success) return userResult;
+   const user = userResult.data;
+ 
+   if (!user) return this._fail('User not found');
+   if (user.verification_code !== otp) return this._fail('Invalid verification code');
+   if (new Date() > new Date(user.verification_code_expires)) {
+     return this._fail('Verification code has expired. Please request a new one.');
+   }
+ 
+   // Clear the OTP after successful verification (security hygiene)
+   await UserModel.updateOTP(user.user_id, null, new Date());
+ 
+   return this._ok({ verified: true });
+ } catch (error) {
+   console.error('[AuthService.verifyChangePasswordOTP]', error);
+   return this._fail('Verification failed');
+ }
+ },
+
 };
 
 module.exports = AuthService;

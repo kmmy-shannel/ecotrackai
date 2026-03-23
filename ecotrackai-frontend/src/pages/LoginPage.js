@@ -145,7 +145,7 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [formData,   setFormData]   = useState({ email: '', password: '' });
+  const [formData,   setFormData]   = useState({ identifier: '', password: '' });
   const [error,      setError]      = useState('');
   const [loading,    setLoading]    = useState(false);
   const [showPass,   setShowPass]   = useState(false);
@@ -214,7 +214,7 @@ const LoginPage = () => {
     setLoading(true);
     setError('');
     try {
-      const result = await login({ email: formData.email.trim(), password: formData.password });
+      const result = await login({ identifier: formData.identifier.trim(), password: formData.password });
       navigate(getDashboardRoute(result?.data?.user?.role), { replace: true });
     } catch (err) {
       setError(err?.response?.data?.message || 'Login failed. Please try again.');
@@ -322,11 +322,11 @@ const LoginPage = () => {
 
           <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <div>
-              <label htmlFor="email" style={{ display:'block', fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 }}>
-                Email address
+              <label htmlFor="identifier" style={{ display:'block', fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 }}>
+                Email or username
               </label>
-              <input id="email" type="email" name="email" value={formData.email}
-                onChange={handleChange} required placeholder="you@company.com"
+              <input id="identifier" type="text" name="identifier" value={formData.identifier}
+                onChange={handleChange} required autoComplete="username" placeholder="you@company.com or admin_user"
                 className="inp-field"
                 style={{ width:'100%', height:44, padding:'0 14px', border:'1.5px solid #E5E7EB',
                   borderRadius:10, background:'#FAFAFA', color:'#111827', fontSize:14,

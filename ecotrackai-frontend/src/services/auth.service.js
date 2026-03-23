@@ -52,7 +52,15 @@ class AuthService {
   }
 
   async login(credentials) {
-    const response = await axios.post(`${API_URL}/login`, credentials);
+    const identifier = String(
+      credentials?.identifier ?? credentials?.email ?? credentials?.username ?? ''
+    ).trim();
+
+    const response = await axios.post(`${API_URL}/login`, {
+      identifier,
+      email: identifier, // Backward-compatible with older backend validators
+      password: credentials?.password ?? '',
+    });
     const normalized = this._normalizeResponse(response.data);
     this._persistSession(normalized.data);
     return normalized;

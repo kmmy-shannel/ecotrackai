@@ -51,6 +51,38 @@ const UserModel = {
     }
   },
 
+  async findByLoginIdentifier(identifier) {
+    if (this._isNil(identifier)) {
+      return { success: false, error: 'identifier is required' };
+    }
+
+    const normalized = String(identifier).trim();
+    if (!normalized) {
+      return { success: false, error: 'identifier is required' };
+    }
+
+    try {
+      const query = `
+        SELECT
+          u.*,
+          COALESCE(b.business_name, 'EcoTrackAI Platform') AS business_name
+        FROM users u
+        LEFT JOIN business_profiles b ON u.business_id = b.business_id
+        WHERE (LOWER(u.email) = LOWER($1) OR LOWER(u.username) = LOWER($1))
+          AND u.is_active = true
+        ORDER BY CASE WHEN LOWER(u.email) = LOWER($1) THEN 0 ELSE 1 END
+        LIMIT 1
+      `;
+      const { rows } = await pool.query(query, [normalized]);
+      return { success: true, data: rows[0] || null };
+    } catch (error) {
+      return {
+        success: false,
+        error: this._handleDbError('findByLoginIdentifier', error)
+      };
+    }
+  },
+
   async findByEmailBasic(email) {
     if (this._isNil(email)) {
       return { success: false, error: 'email is required' };

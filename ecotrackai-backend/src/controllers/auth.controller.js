@@ -78,8 +78,12 @@ const resetPassword = async (req, res) => {
 const login = async (req, res) => {
   try {
     console.log('Request Body:', JSON.stringify(req.body, null, 2));
+    const identifier = String(
+      req.body?.identifier ?? req.body?.email ?? req.body?.username ?? ''
+    ).trim();
+
     const result = await AuthService.login(
-      req.body.email,
+      identifier,
       req.body.password,
       req.ip,
       req.get('user-agent')
@@ -87,7 +91,11 @@ const login = async (req, res) => {
 
     if (!result?.success) {
       const errorMessage = result?.error || 'Login failed';
-      const statusCode = errorMessage === 'Invalid credentials' ? 401 : 400;
+      const statusCode = errorMessage === 'Invalid credentials'
+        ? 401
+        : /required/i.test(errorMessage)
+          ? 400
+          : 500;
       return sendError(res, statusCode, errorMessage);
     }
 
@@ -156,6 +164,30 @@ const changePassword = async (req, res) => {
     sendError(res, error.status || 500, error.message || 'Failed to change password');
   }
 };
+const sendChangePasswordOTP = async (req, res) => {
+ try {
+   await AuthService.sendChangePasswordOTP(req.body.email);
+   sendSuccess(res, 200, 'Verification code sent to your email');
+ } catch (error) {
+   console.error('Send change-password OTP error:', error.message);
+   sendError(res, error.status || 500, error.message || 'Failed to send verification code');
+ }
+};
+ 
+// Verify OTP for change-password
+const verifyChangePasswordOTP = async (req, res) => {
+ try {
+   const result = await AuthService.verifyChangePasswordOTP(
+     req.body.email,
+     req.body.otp
+   );
+   sendSuccess(res, 200, 'Code verified successfully', result);
+ } catch (error) {
+   console.error('Verify change-password OTP error:', error.message);
+   sendError(res, error.status || 500, error.message || 'Verification failed');
+ }
+};
+
 
 module.exports = {
   register,
@@ -167,5 +199,5 @@ module.exports = {
   sendOTP,
   verifyOTP,
   forgotPassword,
-  resetPassword
+  resetPassword, sendChangePasswordOTP, verifyChangePasswordOTP
 };

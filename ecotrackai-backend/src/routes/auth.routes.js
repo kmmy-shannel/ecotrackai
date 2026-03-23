@@ -9,7 +9,7 @@ const {
   sendOTP,
   verifyOTP,
   forgotPassword,
-  resetPassword
+  resetPassword,sendChangePasswordOTP, verifyChangePasswordOTP
 } = require('../controllers/auth.controller');
 const RegistrationController = require('../controllers/registration.controller');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -61,12 +61,28 @@ const registerValidation = [
 ];
 
 const loginValidation = [
+  body('identifier')
+    .optional()
+    .isString().withMessage('Email or username must be a valid string')
+    .trim(),
   body('email')
-    .trim()
-    .notEmpty().withMessage('Email is required')
-    .isEmail().normalizeEmail().withMessage('Please enter a valid email'),
+    .optional()
+    .isString().withMessage('Email must be a valid string')
+    .trim(),
+  body('username')
+    .optional()
+    .isString().withMessage('Username must be a valid string')
+    .trim(),
+  body()
+    .custom((_value, { req }) => {
+      const identifier = req.body?.identifier ?? req.body?.email ?? req.body?.username;
+      if (!identifier || !String(identifier).trim()) {
+        throw new Error('Email or username is required');
+      }
+      return true;
+    }),
   body('password')
-    .trim()
+    .isString().withMessage('Password is required')
     .notEmpty().withMessage('Password is required')
 ];
 
@@ -114,6 +130,25 @@ const changePasswordValidation = [
     .isLength({ min: 8, max: 16 }).withMessage('New password must be 8-16 characters')
     .matches(/^(?=.*[a-zA-Z])(?=.*[0-9])/).withMessage('Password must contain both letters and numbers')
 ];
+const sendChangePasswordOTPValidation = [
+ body('email')
+   .trim()
+   .notEmpty().withMessage('Email is required')
+   .isEmail().normalizeEmail().withMessage('Please enter a valid email')
+];
+ 
+const verifyChangePasswordOTPValidation = [
+ body('email')
+   .trim()
+   .notEmpty().withMessage('Email is required')
+   .isEmail().normalizeEmail().withMessage('Please enter a valid email'),
+ body('otp')
+   .trim()
+   .notEmpty().withMessage('OTP is required')
+   .isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+   .isNumeric().withMessage('OTP must contain only numbers')
+];
+
 
 const businessRegistrationValidation = [
   body('businessName')
@@ -170,5 +205,7 @@ router.post('/reset-password/:token', resetPasswordValidation, validateRequest, 
 router.get('/profile', authenticate, getProfile);
 router.put('/profile', authenticate, updateProfile);
 router.post('/change-password', authenticate, changePasswordValidation, validateRequest, changePassword);
+router.post('/send-change-password-otp', sendChangePasswordOTPValidation, validateRequest, sendChangePasswordOTP);
+router.post('/verify-change-password-otp', verifyChangePasswordOTPValidation, validateRequest, verifyChangePasswordOTP);
 
 module.exports = router;
