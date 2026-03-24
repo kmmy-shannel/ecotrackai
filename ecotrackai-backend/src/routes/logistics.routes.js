@@ -5,6 +5,7 @@ const express = require('express');
 const router  = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const {
+  getLogisticsDashboard,
   getPendingRoutes, getRouteHistory,
   approveRoute, declineRoute,
   getDriverMonitor, getLogisticsStats
@@ -12,6 +13,7 @@ const {
 
 router.use(authenticate, authorize('logistics_manager', 'admin'));
 
+router.get('/dashboard',      getLogisticsDashboard);
 router.get('/pending',        getPendingRoutes);
 router.get('/history',        getRouteHistory);
 router.get('/stats',          getLogisticsStats);

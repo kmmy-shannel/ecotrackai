@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, AlertCircle, Leaf } from 'lucide-react';
 
 const EcoTrustConfig = ({ config = [], onUpdate, onLoad }) => {
   const [editing, setEditing] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-
+  useEffect(() => {
+    if (config.length === 0) {
+      onLoad?.();
+    }
+  }, []);
   const handleEdit = (action) => {
     setEditing({ ...action });
   };

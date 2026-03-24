@@ -139,8 +139,7 @@ const BusinessRegistry = ({
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="suspended">Suspended</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
+
             </select>
             <span className="text-xs text-gray-400 font-medium">{filtered.length} shown</span>
           </div>

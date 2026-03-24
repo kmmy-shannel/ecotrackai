@@ -517,21 +517,22 @@ const SuperAdminService = {
       }
 
       // Approval rates — FROM business_profiles (not businesses)
-      const { rows: approvalRows } = await pool.query(
-        `SELECT
-           bp.business_id,
-           bp.business_name,
-           COUNT(CASE WHEN ma.status = 'approved'  THEN 1 END)::int AS approved_count,
-           COUNT(CASE WHEN ma.status = 'rejected'  THEN 1 END)::int AS rejected_count,
-           COUNT(*)::int                                             AS total_approvals
-         FROM business_profiles bp
-         LEFT JOIN manager_approvals ma
-                ON bp.business_id = ma.business_id
-               AND ma.created_at >= NOW() - ($1::text || ' days')::interval
-         GROUP BY bp.business_id, bp.business_name
-         ORDER BY total_approvals DESC`,
-        [safeRange]
-      );
+     // Approval rates — FROM business_profiles (not businesses)
+const { rows: approvalRows } = await pool.query(
+  `SELECT
+     bp.business_id,
+     bp.business_name,
+     COUNT(ma.approval_id) FILTER (WHERE ma.status = 'approved')::int AS approved_count,
+     COUNT(ma.approval_id) FILTER (WHERE ma.status = 'rejected')::int AS rejected_count,
+     COUNT(ma.approval_id)::int                                        AS total_approvals
+   FROM business_profiles bp
+   LEFT JOIN manager_approvals ma
+          ON bp.business_id = ma.business_id
+         AND ma.created_at >= NOW() - ($1::text || ' days')::interval
+   GROUP BY bp.business_id, bp.business_name
+   ORDER BY total_approvals DESC`,
+  [safeRange]
+);
 
       // EcoTrust leaderboard
       // FIXED: current_score (not total_points — column does not exist)

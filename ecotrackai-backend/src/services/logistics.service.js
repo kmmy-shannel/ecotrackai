@@ -2,10 +2,325 @@
 // FILE: ecotrackai-backend/src/services/logistics.service.js
 // ============================================================
 const pool = require('../config/database');
+const DeliveryModel = require('../models/delivery.model');
+
+const parseMaybeJson = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+const toNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeLocation = (location, fallback = {}) => {
+  const parsed = parseMaybeJson(location);
+  const source =
+    parsed && typeof parsed === 'object'
+      ? parsed
+      : typeof parsed === 'string'
+        ? { address: parsed }
+        : {};
+
+  const lat = toNumber(
+    source.lat ??
+      source.latitude ??
+      fallback.lat ??
+      fallback.latitude
+  );
+  const lng = toNumber(
+    source.lng ??
+      source.longitude ??
+      source.lon ??
+      fallback.lng ??
+      fallback.longitude ??
+      fallback.lon
+  );
+  const address =
+    source.address ||
+    source.location_name ||
+    source.stop_name ||
+    fallback.address ||
+    fallback.location_name ||
+    fallback.stop_name ||
+    '';
+
+  return {
+    ...source,
+    lat,
+    lng,
+    latitude: lat,
+    longitude: lng,
+    address,
+  };
+};
+
+const normalizeStopType = (rawType, index, totalStops) => {
+  const type = String(rawType || '').trim().toLowerCase();
+  if (['origin', 'start', 'pickup'].includes(type)) return 'origin';
+  if (['destination', 'end', 'dropoff'].includes(type)) return 'destination';
+  if (index === 0) return 'origin';
+  if (index === totalStops - 1) return 'destination';
+  return 'stop';
+};
+
+const normalizeStops = (stops = []) => {
+  if (!Array.isArray(stops)) return [];
+
+  return stops
+    .map((stop, index, allStops) => {
+      const location = normalizeLocation(
+        stop?.location || stop?.location_json || stop?.locationJson,
+        stop || {}
+      );
+      const lat = toNumber(location.lat ?? stop?.lat ?? stop?.latitude);
+      const lng = toNumber(location.lng ?? stop?.lng ?? stop?.longitude ?? stop?.lon);
+      const stopType = normalizeStopType(
+        stop?.stop_type || stop?.type,
+        index,
+        allStops.length
+      );
+      const stopSequence = Number(
+        stop?.stop_sequence ??
+          stop?.sequence_no ??
+          stop?.sequence ??
+          stop?.stop_order ??
+          index + 1
+      );
+      const name =
+        stop?.location_name ||
+        stop?.stop_name ||
+        stop?.stopName ||
+        location.address ||
+        location.name ||
+        `Stop ${index + 1}`;
+
+      return {
+        ...stop,
+        location: {
+          ...location,
+          lat,
+          lng,
+          latitude: lat,
+          longitude: lng,
+          address: location.address || name,
+        },
+        location_name: name,
+        stop_name: stop?.stop_name || stop?.stopName || name,
+        stop_sequence: stopSequence,
+        stop_type: stopType,
+        type: stopType,
+        address: location.address || name,
+        lat,
+        lng,
+        latitude: lat,
+        longitude: lng,
+      };
+    })
+    .sort((a, b) => Number(a.stop_sequence || 0) - Number(b.stop_sequence || 0));
+};
+
+const buildFallbackStops = (originLocation, destinationLocation) => {
+  const origin = normalizeLocation(originLocation);
+  const destination = normalizeLocation(destinationLocation);
+  const fallbackStops = [];
+
+  if (origin.lat !== null && origin.lng !== null) {
+    fallbackStops.push({
+      stop_sequence: 1,
+      stop_type: 'origin',
+      type: 'origin',
+      location_name: origin.address || 'Origin',
+      stop_name: origin.address || 'Origin',
+      address: origin.address || 'Origin',
+      location: origin,
+      lat: origin.lat,
+      lng: origin.lng,
+      latitude: origin.lat,
+      longitude: origin.lng,
+    });
+  }
+
+  if (destination.lat !== null && destination.lng !== null) {
+    fallbackStops.push({
+      stop_sequence: fallbackStops.length + 1,
+      stop_type: 'destination',
+      type: 'destination',
+      location_name: destination.address || 'Destination',
+      stop_name: destination.address || 'Destination',
+      address: destination.address || 'Destination',
+      location: destination,
+      lat: destination.lat,
+      lng: destination.lng,
+      latitude: destination.lat,
+      longitude: destination.lng,
+    });
+  }
+
+  return fallbackStops;
+};
+
+const buildRoutePath = (stops = []) =>
+  stops
+    .filter((stop) => stop?.latitude !== null && stop?.longitude !== null)
+    .map((stop) => ({
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+    }));
 
 const LogisticsService = {
   _ok:   (data) => ({ success: true, data }),
   _fail: (msg)  => ({ success: false, error: msg }),
+
+  async _enrichApprovalRoute(row) {
+    const parsedExtra =
+      parseMaybeJson(row.extra_data || row.extraData) || {};
+    const extraRoute =
+      parsedExtra.route && typeof parsedExtra.route === 'object'
+        ? parsedExtra.route
+        : {};
+    const routeId =
+      row.delivery_id ||
+      row.route_id ||
+      extraRoute.route_id ||
+      extraRoute.routeId ||
+      null;
+
+    let stops = normalizeStops(
+      row.stops ||
+        row.original_stops ||
+        extraRoute.stops ||
+        extraRoute.original_stops ||
+        extraRoute.originalStops ||
+        []
+    );
+
+    if (routeId) {
+      try {
+        const stopsResult = await DeliveryModel.getStops(routeId);
+        if (stopsResult?.success && Array.isArray(stopsResult.data) && stopsResult.data.length > 0) {
+          stops = normalizeStops(stopsResult.data);
+        }
+      } catch (error) {
+        console.warn('[LogisticsService._enrichApprovalRoute][getStops]', error.message);
+      }
+    }
+
+    if (stops.length === 0) {
+      stops = buildFallbackStops(
+        row.origin_location || extraRoute.origin_location || row.location,
+        row.destination_location || extraRoute.destination_location
+      );
+    }
+
+    const originLocation = normalizeLocation(
+      extraRoute.origin_location || row.origin_location || row.location,
+      stops[0] || {}
+    );
+    const destinationLocation = normalizeLocation(
+      extraRoute.destination_location || row.destination_location,
+      stops[stops.length - 1] || {}
+    );
+    const routePath =
+      extraRoute.route_path ||
+      extraRoute.routePath ||
+      row.route_path ||
+      row.routePath ||
+      buildRoutePath(stops);
+    const optimization =
+      parsedExtra.optimization && typeof parsedExtra.optimization === 'object'
+        ? {
+            ...parsedExtra.optimization,
+            stops:
+              normalizeStops(
+                parsedExtra.optimization.stops ||
+                  parsedExtra.optimization.optimized_stops ||
+                  parsedExtra.optimization.optimizedStops ||
+                  []
+              ) || [],
+            route_path:
+              parsedExtra.optimization.route_path ||
+              parsedExtra.optimization.routePath ||
+              routePath,
+          }
+        : parsedExtra.optimization || null;
+    const normalizedOptimization =
+      optimization && Array.isArray(optimization.stops) && optimization.stops.length > 0
+        ? optimization
+        : optimization
+          ? { ...optimization, stops, route_path: optimization.route_path || routePath }
+          : null;
+    const normalizedRoute = {
+      ...extraRoute,
+      route_id: extraRoute.route_id || extraRoute.routeId || routeId,
+      route_name: extraRoute.route_name || extraRoute.routeName || row.route_name || row.product_name || null,
+      route_type: extraRoute.route_type || extraRoute.routeType || 'multi-stop',
+      driver_name: extraRoute.driver_name || row.driver_name || row.driver_full_name || 'Driver Not Assigned',
+      vehicle_type: extraRoute.vehicle_type || row.vehicle_type || null,
+      origin_location: originLocation,
+      destination_location: destinationLocation,
+      stops,
+      original_stops: stops,
+      route_path: routePath,
+    };
+
+    return {
+      ...row,
+      route_name: normalizedRoute.route_name,
+      location: JSON.stringify(originLocation),
+      quantity: `${stops.length} stop${stops.length === 1 ? '' : 's'}`,
+      origin_location: originLocation,
+      destination_location: destinationLocation,
+      stops,
+      original_stops: stops,
+      optimized_stops:
+        normalizedOptimization?.stops && normalizedOptimization.stops.length > 0
+          ? normalizedOptimization.stops
+          : stops,
+      route_path: routePath,
+      routePath: routePath,
+      extra_data: {
+        ...parsedExtra,
+        route: normalizedRoute,
+        optimization: normalizedOptimization,
+      },
+      extraData: {
+        ...parsedExtra,
+        route: normalizedRoute,
+        optimization: normalizedOptimization,
+      },
+    };
+  },
+
+  async getDashboard(user) {
+    try {
+      const [pendingResult, statsResult, driverResult] = await Promise.all([
+        this.getPendingRoutes(user),
+        this.getStats(user),
+        this.getDriverMonitor(user),
+      ]);
+
+      if (!pendingResult.success) return this._fail(pendingResult.error);
+      if (!statsResult.success) return this._fail(statsResult.error);
+      if (!driverResult.success) return this._fail(driverResult.error);
+
+      return this._ok({
+        summary: statsResult.data || {},
+        pendingRoutes: Array.isArray(pendingResult.data) ? pendingResult.data : [],
+        driverMonitor: Array.isArray(driverResult.data) ? driverResult.data : [],
+      });
+    } catch (e) {
+      console.error('[LogisticsService.getDashboard]', e);
+      return this._fail(e.message);
+    }
+  },
 
   // ── Pending approval cards ───────────────────────────────
   async getPendingRoutes(user) {
@@ -13,8 +328,11 @@ const LogisticsService = {
       const { rows } = await pool.query(`
         SELECT
           ma.*,
+          dr.route_name,
           dr.status        AS route_status,
           dr.vehicle_type,
+          dr.origin_location,
+          dr.destination_location,
           drv.full_name    AS driver_full_name,
           dr.total_distance_km,
           dr.estimated_fuel_consumption_liters,
@@ -39,7 +357,10 @@ const LogisticsService = {
           AND ma.status        = 'pending'
         ORDER BY ma.created_at DESC
       `, [user.businessId]);
-      return this._ok(rows);
+      const enrichedRows = await Promise.all(
+        rows.map((row) => this._enrichApprovalRoute(row))
+      );
+      return this._ok(enrichedRows);
     } catch (e) {
       console.error('[LogisticsService.getPendingRoutes]', e);
       return this._fail(e.message);
@@ -52,6 +373,9 @@ const LogisticsService = {
        const { rows } = await pool.query(`
         SELECT
           ma.*,
+          dr.route_name,
+          dr.origin_location,
+          dr.destination_location,
           dr.vehicle_type,
           drv.full_name    AS driver_full_name,
           dl.actual_distance_km,
@@ -327,7 +651,10 @@ const LogisticsService = {
           COUNT(*) FILTER (WHERE ma.status='approved') AS approved_count,
           COUNT(*) FILTER (WHERE ma.status='rejected') AS declined_count,
           ROUND(AVG(ro.savings_co2)::numeric, 2)       AS avg_co2_saved,
-          ROUND(AVG(ro.savings_fuel)::numeric, 2)      AS avg_fuel_saved
+          ROUND(AVG(ro.savings_fuel)::numeric, 2)      AS avg_fuel_saved,
+          ROUND(AVG(ro.savings_km)::numeric, 2)        AS avg_km_saved,
+          ROUND(COALESCE(SUM(ro.savings_co2), 0)::numeric, 2) AS total_co2_reduced,
+          ROUND(COALESCE(SUM(ro.savings_km), 0)::numeric, 2)  AS total_km_saved
         FROM manager_approvals ma
         LEFT JOIN route_optimizations ro ON ro.route_id = ma.delivery_id
         WHERE ma.business_id=$1 AND ma.approval_type='route_optimization'

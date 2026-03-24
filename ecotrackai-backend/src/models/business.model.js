@@ -81,20 +81,24 @@ const BusinessModel = {
       const query = `
         SELECT 
           b.*,
-          COUNT(u.user_id) as total_users,
-          COUNT(CASE WHEN u.role = 'admin' THEN 1 END) as admin_count
+          COALESCE(es.current_score, 0)   AS ecotrust_points,
+          COALESCE(es.level, 'Newcomer')  AS ecotrust_level,
+          COUNT(DISTINCT u.user_id)::int  AS user_count,
+          COUNT(DISTINCT CASE WHEN u.role = 'admin' THEN u.user_id END)::int AS admin_count
         FROM business_profiles b
-        LEFT JOIN users u ON b.business_id = u.business_id AND u.is_active = true
-        GROUP BY b.business_id
+        LEFT JOIN ecotrust_scores es ON es.business_id = b.business_id
+        LEFT JOIN users           u  ON u.business_id  = b.business_id
+                                    AND u.is_active    = true
+        GROUP BY b.business_id, es.current_score, es.level
         ORDER BY b.created_at DESC
         LIMIT $1 OFFSET $2
       `;
       const { rows } = await pool.query(query, [limit, offset]);
-      
+  
       const countQuery = 'SELECT COUNT(*) as total FROM business_profiles';
       const countResult = await pool.query(countQuery);
       const total = parseInt(countResult.rows[0].total);
-
+  
       return { success: true, data: { businesses: rows, total, limit, offset } };
     } catch (error) {
       return { success: false, error: this._handleDbError('findAll', error) };

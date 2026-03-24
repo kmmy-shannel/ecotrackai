@@ -9,15 +9,17 @@ import { getDashboardRoute } from '../utils/rolePermissions';
 import api from '../services/api';
 
 // ─── EcoTrust level helpers ───────────────────────────────────────────────────
-const LEVELS     = ['Newcomer', 'Eco Warrior', 'Eco Champion', 'Eco Leader'];
-const THRESHOLDS = [0, 130, 500, 1000];
-const NEXT_AT    = [130, 500, 1000, null];
+// SYNCED to ecotrust.service.js (backend) and useEcoTrust.js TRUST_LEVELS
+const LEVELS     = ['Newcomer', 'Eco Warrior', 'Eco Champion', 'Eco Leader', 'Eco Legend'];
+const THRESHOLDS = [0, 500, 1000, 2000, 4000];
+const NEXT_AT    = [500, 1000, 2000, 4000, null];
 
 const LEVEL_META = {
   'Newcomer':     { pill: '#ECFDF5', pillText: '#065F46', bar: '#6EE7B7', border: '#A7F3D0' },
   'Eco Warrior':  { pill: '#D1FAE5', pillText: '#065F46', bar: '#34D399', border: '#6EE7B7' },
   'Eco Champion': { pill: '#A7F3D0', pillText: '#065F46', bar: '#10B981', border: '#34D399' },
   'Eco Leader':   { pill: '#065F46', pillText: '#ECFDF5', bar: '#059669', border: '#047857' },
+  'Eco Legend':   { pill: '#1a3d2b', pillText: '#86efac', bar: '#059669', border: '#065F46' },
 };
 
 const AVATARS = [
@@ -29,9 +31,10 @@ const AVATARS = [
 ];
 
 function levelOf(s) {
-  if (s >= 1000) return 'Eco Leader';
-  if (s >= 500)  return 'Eco Champion';
-  if (s >= 130)  return 'Eco Warrior';
+  if (s >= 4000) return 'Eco Legend';
+  if (s >= 2000) return 'Eco Leader';
+  if (s >= 1000) return 'Eco Champion';
+  if (s >= 500)  return 'Eco Warrior';
   return 'Newcomer';
 }
 function progressTo(s) {
@@ -44,21 +47,33 @@ function ini(n) {
   return (n || '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
-// ─── Detail Modal (unchanged from original) ───────────────────────────────────
+// ─── Detail Modal ─────────────────────────────────────────────────────────────
 const DetailModal = ({ biz, onClose }) => {
   if (!biz) return null;
   const lv   = levelOf(biz.score);
-  const meta = LEVEL_META[lv];
+  const meta = LEVEL_META[lv] || LEVEL_META['Newcomer'];
   const av   = AVATARS[(biz.business_id || biz.id || 0) % 5];
   const prog = progressTo(biz.score);
   const next = NEXT_AT[LEVELS.indexOf(lv)];
 
-  // Map API field names → display rows
+  // ── Counts from API (how many times each action occurred) ──────────────────
+  const spoilageCount  = Number(biz.spoilage_actions)  || 0;
+  const routeCount     = Number(biz.route_actions)     || 0;
+  const carbonCount    = Number(biz.carbon_actions)    || 0;
+  const deliveryCount  = Number(biz.delivery_actions)  || 0;
+
+  // ── Actual points from API (SUM of real points_earned per category) ─────────
+  // Falls back to count × default only if the pts fields are absent (old API).
+  const spoilagePts    = Number(biz.spoilage_pts)  ?? (spoilageCount  * 25);
+  const routePts       = Number(biz.route_pts)     ?? (routeCount     * 30);
+  const carbonPts      = Number(biz.carbon_pts)    ?? (carbonCount    * 20);
+  const deliveryPts    = Number(biz.delivery_pts)  ?? (deliveryCount  * 10);
+
   const rows = [
-    { label: 'Spoilage prevention', n: biz.spoilage_actions  || biz.actions?.spoilage  || 0, pts: (biz.spoilage_actions  || biz.actions?.spoilage  || 0) * 25, Icon: Shield     },
-    { label: 'Optimised routes',    n: biz.route_actions     || biz.actions?.routes    || 0, pts: (biz.route_actions     || biz.actions?.routes    || 0) * 30, Icon: TrendingUp },
-    { label: 'Carbon verified',     n: biz.carbon_actions    || biz.actions?.carbon    || 0, pts: (biz.carbon_actions    || biz.actions?.carbon    || 0) * 20, Icon: BarChart2  },
-    { label: 'On-time deliveries',  n: biz.delivery_actions  || biz.actions?.delivery  || 0, pts: (biz.delivery_actions  || biz.actions?.delivery  || 0) * 10, Icon: Truck      },
+    { label: 'Spoilage prevention', n: spoilageCount,  pts: spoilagePts,  Icon: Shield     },
+    { label: 'Optimised routes',    n: routeCount,     pts: routePts,     Icon: TrendingUp },
+    { label: 'Carbon verified',     n: carbonCount,    pts: carbonPts,    Icon: BarChart2  },
+    { label: 'On-time deliveries',  n: deliveryCount,  pts: deliveryPts,  Icon: Truck      },
   ];
 
   return (
@@ -69,6 +84,8 @@ const DetailModal = ({ biz, onClose }) => {
     >
       <div style={{ background:'#fff', borderRadius:20, padding:'28px', width:400, maxWidth:'95vw',
                     maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.12)' }}>
+
+        {/* Header */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
           <div style={{ display:'flex', gap:12, alignItems:'center' }}>
             <div style={{ width:46, height:46, borderRadius:12, background:av.bg, color:av.fg,
@@ -77,9 +94,7 @@ const DetailModal = ({ biz, onClose }) => {
             </div>
             <div>
               <div style={{ fontSize:16, fontWeight:700, color:'#111827' }}>{biz.business_name || biz.name}</div>
-              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>
-                {biz.business_type || biz.type} · Rank #{biz.rank}
-              </div>
+              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>Rank #{biz.rank}</div>
             </div>
           </div>
           <button onClick={onClose} style={{ width:32, height:32, borderRadius:8, border:'1px solid #E5E7EB',
@@ -88,17 +103,19 @@ const DetailModal = ({ biz, onClose }) => {
           </button>
         </div>
 
+        {/* Level pill */}
         <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 12px',
           borderRadius:100, background:meta.pill, color:meta.pillText, fontSize:12, fontWeight:600, marginBottom:18 }}>
           <Leaf size={12} />{lv}
         </span>
 
+        {/* Stats grid */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:16 }}>
           {[
             { k:'EcoScore',         v: Number(biz.score).toLocaleString() },
             { k:'Platform rank',    v: `#${biz.rank}` },
-            { k:'Spoilage actions', v: biz.spoilage_actions || biz.actions?.spoilage || 0 },
-            { k:'Deliveries',       v: biz.delivery_actions || biz.actions?.delivery || 0 },
+            { k:'Spoilage actions', v: spoilageCount },
+            { k:'Deliveries',       v: deliveryCount },
           ].map(s => (
             <div key={s.k} style={{ background:'#F9FAFB', border:'1px solid #F3F4F6', borderRadius:12, padding:'12px 14px' }}>
               <div style={{ fontSize:22, fontWeight:800, color:'#111827' }}>{s.v}</div>
@@ -107,10 +124,11 @@ const DetailModal = ({ biz, onClose }) => {
           ))}
         </div>
 
+        {/* Progress bar */}
         <div style={{ marginBottom:18 }}>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#6B7280', marginBottom:8 }}>
             <span>Progress to {next ? LEVELS[LEVELS.indexOf(lv)+1] : 'Max level'}</span>
-            <span style={{ fontWeight:700, color:'#059669' }}>{prog}%</span>
+            <span style={{ fontWeight:700, color:'#2d6a4f' }}>{prog}%</span>
           </div>
           <div style={{ height:6, background:'#F3F4F6', borderRadius:3, overflow:'hidden' }}>
             <div style={{ height:'100%', width:`${prog}%`, background:meta.bar, borderRadius:3, transition:'width 0.5s ease' }} />
@@ -120,6 +138,7 @@ const DetailModal = ({ biz, onClose }) => {
           </div>
         </div>
 
+        {/* Points breakdown — uses real pts from API */}
         <div style={{ borderTop:'1px solid #F3F4F6', paddingTop:16 }}>
           <div style={{ fontSize:11, fontWeight:700, color:'#9CA3AF', letterSpacing:'0.7px', textTransform:'uppercase', marginBottom:10 }}>
             Points breakdown
@@ -128,10 +147,12 @@ const DetailModal = ({ biz, onClose }) => {
             <div key={r.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
               padding:'9px 0', borderBottom:'1px solid #F9FAFB' }}>
               <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                <r.Icon size={13} color="#10B981" />
-                <span style={{ fontSize:13, color:'#374151' }}>{r.label} <span style={{ color:'#D1D5DB' }}>×{r.n}</span></span>
+                <r.Icon size={13} color="#40916c" />
+                <span style={{ fontSize:13, color:'#374151' }}>
+                  {r.label} <span style={{ color:'#D1D5DB' }}>×{r.n}</span>
+                </span>
               </div>
-              <span style={{ fontSize:13, fontWeight:700, color:'#059669' }}>+{r.pts.toLocaleString()}</span>
+              <span style={{ fontSize:13, fontWeight:700, color:'#2d6a4f' }}>+{r.pts.toLocaleString()}</span>
             </div>
           ))}
         </div>
@@ -145,34 +166,31 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [formData,   setFormData]   = useState({ identifier: '', password: '' });
-  const [error,      setError]      = useState('');
-  const [loading,    setLoading]    = useState(false);
-  const [showPass,   setShowPass]   = useState(false);
-  const [logoErr,    setLogoErr]    = useState(false);
-  const [search,     setSearch]     = useState('');
-  const [filter,     setFilter]     = useState('all');
-  const [selected,   setSelected]   = useState(null);
+  const [formData,  setFormData]  = useState({ identifier: '', password: '' });
+  const [error,     setError]     = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const [showPass,  setShowPass]  = useState(false);
+  const [logoErr,   setLogoErr]   = useState(false);
+  const [search,    setSearch]    = useState('');
+  const [filter,    setFilter]    = useState('all');
+  const [selected,  setSelected]  = useState(null);
 
-  // ── Real leaderboard data ─────────────────────────────────
-  const [businesses,   setBusinesses]   = useState([]);
-  const [bizLoading,   setBizLoading]   = useState(true);
-  const [bizError,     setBizError]     = useState('');
+  const [businesses, setBusinesses] = useState([]);
+  const [bizLoading, setBizLoading] = useState(true);
+  const [bizError,   setBizError]   = useState('');
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
       setBizLoading(true);
       setBizError('');
       try {
-        // Public endpoint — no auth token needed
-        const res = await api.get('/ecotrust/public-leaderboard?limit=20');
+        const res  = await api.get('/ecotrust/public-leaderboard?limit=20');
         const data = res.data?.data || res.data || [];
-        // Normalise: API returns business_name, score — map to what the UI expects
+        // Spread all fields — preserves spoilage_pts, route_pts, carbon_pts, delivery_pts
         const normalised = (Array.isArray(data) ? data : []).map((b, i) => ({
           ...b,
           id:    b.business_id || i,
           name:  b.business_name,
-          type:  b.business_type || 'Business',
           score: parseInt(b.score) || 0,
           rank:  b.rank || i + 1,
         }));
@@ -188,21 +206,18 @@ const LoginPage = () => {
     fetchLeaderboard();
   }, []);
 
-  // Sort by score descending (API already does this, but ensure it)
-  const SORTED = [...businesses].sort((a, b) => b.score - a.score).map((b, i) => ({ ...b, rank: i + 1 }));
+  const SORTED   = [...businesses].sort((a, b) => b.score - a.score).map((b, i) => ({ ...b, rank: i + 1 }));
   const maxScore = SORTED[0]?.score || 1;
 
   const visible = SORTED.filter(b => {
     const q = search.toLowerCase();
-    return (!q || (b.name || '').toLowerCase().includes(q) || (b.type || '').toLowerCase().includes(q))
+    return (!q || (b.name || '').toLowerCase().includes(q))
         && (filter === 'all' || levelOf(b.score) === filter);
   });
 
-  const totalPts   = businesses.reduce((s, b) => s + (parseInt(b.score) || 0), 0);
-  const ecoLeaders = businesses.filter(b => levelOf(b.score) === 'Eco Leader').length;
-  const FILTERS    = ['all', 'Eco Leader', 'Eco Champion', 'Eco Warrior', 'Newcomer'];
+  const totalPts = businesses.reduce((s, b) => s + (parseInt(b.score) || 0), 0);
+  const FILTERS  = ['all', 'Eco Legend', 'Eco Leader', 'Eco Champion', 'Eco Warrior', 'Newcomer'];
 
-  // ── Login form ────────────────────────────────────────────
   const handleChange = e => {
     const { name, value } = e.target;
     setFormData(p => ({ ...p, [name]: value }));
@@ -224,38 +239,57 @@ const LoginPage = () => {
   };
 
   return (
-    <div style={{ minHeight:'100vh', background:'#F8FAF9', fontFamily:"'Inter','Helvetica Neue',sans-serif" }}>
+    <div style={{ minHeight:'100vh', background:'#F8FAF9', fontFamily:"'Poppins','Inter','Helvetica Neue',sans-serif" }}>
 
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        .inp-field:focus { border-color: #10B981 !important; box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important; outline: none; }
-        .sign-btn:hover:not(:disabled) { background: #047857 !important; }
+        .inp-field:focus {
+          border-color: #40916c !important;
+          box-shadow: 0 0 0 3px rgba(45,106,79,0.12) !important;
+          outline: none;
+        }
+        .sign-btn:hover:not(:disabled) { background: #1a3d2b !important; }
         .sign-btn:active:not(:disabled) { transform: scale(0.99); }
-        .biz-row:hover { background: #F0FDF4 !important; border-color: #A7F3D0 !important; }
-        .filter-chip:hover { border-color: #A7F3D0 !important; color: #065F46 !important; background: #ECFDF5 !important; }
+        .biz-row:hover { background: #d8f3dc !important; border-color: #95d5b2 !important; }
+        .filter-chip:hover {
+          border-color: #95d5b2 !important;
+          color: #1a3d2b !important;
+          background: #d8f3dc !important;
+        }
         ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #D1FAE5; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #b7e4c7; border-radius: 4px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       {/* ══ Navbar ══ */}
-      <nav style={{ background:'#fff', borderBottom:'1px solid #F0F0F0', padding:'0 40px',
-                    display:'flex', alignItems:'center', justifyContent:'space-between', height:60, position:'sticky', top:0, zIndex:100 }}>
+      <nav style={{
+        background: 'linear-gradient(130deg,#0f2419 0%,#1a3d2b 50%,#2d6a4f 100%)',
+        borderBottom: '1px solid rgba(82,183,136,0.18)',
+        padding: '0 40px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        height: 60, position: 'sticky', top: 0, zIndex: 100,
+        boxShadow: '0 2px 12px rgba(26,61,43,0.18)',
+      }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           {logoErr
-            ? <div style={{ width:34, height:34, borderRadius:9, background:'#ECFDF5', border:'1px solid #A7F3D0',
+            ? <div style={{ width:34, height:34, borderRadius:9,
+                            background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.18)',
                             display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Leaf size={17} color="#059669" />
+                <Leaf size={17} color="#86efac" />
               </div>
             : <img src="/logo.jpg" alt="EcoTrackAI" onError={() => setLogoErr(true)}
-                style={{ width:34, height:34, borderRadius:9, objectFit:'cover', border:'1px solid #E5E7EB' }} />
+                style={{ width:34, height:34, borderRadius:9, objectFit:'cover', border:'1px solid rgba(255,255,255,0.18)' }} />
           }
-          <span style={{ fontSize:15, fontWeight:700, color:'#111827', letterSpacing:'-0.2px' }}>EcoTrackAI</span>
+          <span style={{ fontSize:15, fontWeight:700, color:'#fff', letterSpacing:'-0.2px' }}>EcoTrackAI</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <span style={{ width:7, height:7, borderRadius:'50%', background:'#10B981',
-                         boxShadow:'0 0 0 3px rgba(16,185,129,0.2)', display:'inline-block' }} />
-          <span style={{ fontSize:12, color:'#6B7280', fontWeight:500 }}>Live rankings</span>
+          <span style={{
+            width:7, height:7, borderRadius:'50%', background:'#4ade80',
+            boxShadow:'0 0 0 3px rgba(74,222,128,0.2)', display:'inline-block',
+          }} />
+          <span style={{ fontSize:12, color:'rgba(255,255,255,0.65)', fontWeight:500 }}>Live rankings</span>
         </div>
       </nav>
 
@@ -265,10 +299,13 @@ const LoginPage = () => {
 
         {/* left copy */}
         <div>
-          <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#ECFDF5',
-                        border:'1px solid #A7F3D0', borderRadius:100, padding:'5px 12px', marginBottom:22 }}>
-            <Leaf size={11} color="#059669" />
-            <span style={{ fontSize:11, fontWeight:600, color:'#059669', letterSpacing:'0.4px' }}>
+          <div style={{
+            display:'inline-flex', alignItems:'center', gap:6,
+            background:'#d8f3dc', border:'1px solid #95d5b2',
+            borderRadius:100, padding:'5px 12px', marginBottom:22,
+          }}>
+            <Leaf size={11} color="#2d6a4f" />
+            <span style={{ fontSize:11, fontWeight:600, color:'#2d6a4f', letterSpacing:'0.4px' }}>
               Environmental Intelligence Platform
             </span>
           </div>
@@ -276,28 +313,33 @@ const LoginPage = () => {
           <h1 style={{ fontSize:42, fontWeight:800, color:'#111827', lineHeight:1.1,
                        letterSpacing:'-1px', marginBottom:18 }}>
             Every green action<br />
-            <span style={{ color:'#059669' }}>counts.</span>
+            <span style={{ color:'#2d6a4f' }}>counts.</span>
           </h1>
 
           <p style={{ fontSize:15, color:'#6B7280', lineHeight:1.7, maxWidth:440, marginBottom:32 }}>
             EcoTrackAI tracks spoilage prevention, optimised deliveries, and verified carbon records — turning real operational decisions into an environmental trust score.
           </p>
 
-          {/* summary stats — now from real data */}
           <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
             {[
-              { Icon:Users, val: bizLoading ? '…' : businesses.length,                                         lbl:'Businesses on platform' },
-              { Icon:Award, val: bizLoading ? '…' : totalPts >= 1000 ? `${(totalPts/1000).toFixed(1)}k` : totalPts, lbl:'Total EcoTrust pts' },
-              { Icon:Leaf,  val: bizLoading ? '…' : ecoLeaders,                                                lbl:'Eco Leader businesses'  },
+              { Icon:Users, val: bizLoading ? '…' : businesses.length,                                              lbl:'Businesses on platform' },
+              { Icon:Award, val: bizLoading ? '…' : totalPts >= 1000 ? `${(totalPts/1000).toFixed(1)}k` : totalPts, lbl:'Total EcoTrust pts'      },
             ].map(c => (
-              <div key={c.lbl} style={{ display:'flex', alignItems:'center', gap:10, background:'#fff',
-                border:'1px solid #E5E7EB', borderRadius:12, padding:'12px 16px', minWidth:160 }}>
-                <div style={{ width:32, height:32, borderRadius:8, background:'#ECFDF5', border:'1px solid #A7F3D0',
-                              display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <c.Icon size={14} color="#059669" />
+              <div key={c.lbl} style={{
+                display:'flex', alignItems:'center', gap:10, background:'#fff',
+                border:'1px solid rgba(82,183,136,0.2)', borderRadius:14,
+                padding:'14px 18px', minWidth:170,
+                boxShadow:'0 2px 10px rgba(26,61,43,0.07)',
+              }}>
+                <div style={{
+                  width:34, height:34, borderRadius:9,
+                  background:'linear-gradient(145deg,#1a3d2b,#2d6a4f)',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                }}>
+                  <c.Icon size={15} color="#86efac" />
                 </div>
                 <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#111827', lineHeight:1 }}>{c.val}</div>
+                  <div style={{ fontSize:20, fontWeight:900, color:'#111827', lineHeight:1, letterSpacing:'-0.5px' }}>{c.val}</div>
                   <div style={{ fontSize:11, color:'#9CA3AF', marginTop:3 }}>{c.lbl}</div>
                 </div>
               </div>
@@ -305,10 +347,17 @@ const LoginPage = () => {
           </div>
         </div>
 
-        {/* right — login card (unchanged) */}
-        <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:20,
-                      padding:'32px', boxShadow:'0 2px 20px rgba(0,0,0,0.06)' }}>
+        {/* right — login card */}
+        <div style={{
+          background:'#fff', border:'1px solid rgba(82,183,136,0.18)', borderRadius:20,
+          padding:'32px', boxShadow:'0 4px 24px rgba(26,61,43,0.1)',
+        }}>
           <div style={{ marginBottom:24 }}>
+            <div style={{
+              height:4, width:48, borderRadius:4,
+              background:'linear-gradient(90deg,#1a3d2b,#40916c)',
+              marginBottom:16,
+            }} />
             <h2 style={{ fontSize:20, fontWeight:800, color:'#111827', letterSpacing:'-0.4px' }}>Welcome back</h2>
             <p style={{ fontSize:13, color:'#9CA3AF', marginTop:4 }}>Sign in to your operations dashboard</p>
           </div>
@@ -355,16 +404,22 @@ const LoginPage = () => {
 
             <div style={{ textAlign:'right', marginTop:-6 }}>
               <button type="button" onClick={() => navigate('/forgot-password')}
-                style={{ background:'none', border:'none', fontSize:12, color:'#059669', cursor:'pointer', fontWeight:600 }}>
+                style={{ background:'none', border:'none', fontSize:12, color:'#2d6a4f', cursor:'pointer', fontWeight:600 }}>
                 Forgot password?
               </button>
             </div>
 
             <button type="submit" disabled={loading} className="sign-btn"
-              style={{ width:'100%', height:46, background:'#059669', border:'none', borderRadius:10,
-                color:'#fff', fontSize:14, fontWeight:700, cursor: loading ? 'not-allowed' : 'pointer',
+              style={{
+                width:'100%', height:46,
+                background:'linear-gradient(135deg,#1a3d2b,#2d6a4f)',
+                border:'none', borderRadius:10,
+                color:'#fff', fontSize:14, fontWeight:700,
+                cursor: loading ? 'not-allowed' : 'pointer',
                 opacity: loading ? 0.7 : 1, fontFamily:'inherit',
-                transition:'background 0.15s, transform 0.1s, opacity 0.15s' }}>
+                boxShadow:'0 2px 10px rgba(26,61,43,0.22)',
+                transition:'background 0.15s, transform 0.1s, opacity 0.15s',
+              }}>
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
@@ -372,7 +427,7 @@ const LoginPage = () => {
           <p style={{ textAlign:'center', marginTop:18, fontSize:13, color:'#9CA3AF' }}>
             New to EcoTrackAI?{' '}
             <button type="button" onClick={() => navigate('/register')}
-              style={{ background:'none', border:'none', color:'#059669', fontWeight:700, cursor:'pointer', fontSize:13 }}>
+              style={{ background:'none', border:'none', color:'#2d6a4f', fontWeight:700, cursor:'pointer', fontSize:13 }}>
               Register your business
             </button>
           </p>
@@ -383,7 +438,7 @@ const LoginPage = () => {
       <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 24px 80px' }}>
 
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                      borderTop:'1px solid #E5E7EB', paddingTop:40, marginBottom:28 }}>
+                      borderTop:'1px solid rgba(82,183,136,0.18)', paddingTop:40, marginBottom:28 }}>
           <div>
             <h2 style={{ fontSize:22, fontWeight:800, color:'#111827', letterSpacing:'-0.4px' }}>
               Environmental Leaderboard
@@ -392,11 +447,16 @@ const LoginPage = () => {
               All registered businesses ranked by EcoTrust score
             </p>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6, background:'#ECFDF5',
-                        border:'1px solid #A7F3D0', borderRadius:100, padding:'6px 14px' }}>
-            <span style={{ width:7, height:7, borderRadius:'50%', background:'#10B981',
-                           boxShadow:'0 0 0 3px rgba(16,185,129,0.2)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'#059669', fontWeight:600 }}>Live data</span>
+          <div style={{
+            display:'flex', alignItems:'center', gap:6,
+            background:'#d8f3dc', border:'1px solid #95d5b2',
+            borderRadius:100, padding:'6px 14px',
+          }}>
+            <span style={{
+              width:7, height:7, borderRadius:'50%', background:'#40916c',
+              boxShadow:'0 0 0 3px rgba(64,145,108,0.2)', display:'inline-block',
+            }} />
+            <span style={{ fontSize:12, color:'#2d6a4f', fontWeight:600 }}>Live data</span>
           </div>
         </div>
 
@@ -417,11 +477,12 @@ const LoginPage = () => {
                 onClick={() => setFilter(f)}
                 style={{
                   height:36, padding:'0 14px', borderRadius:100,
-                  border: filter===f ? '1.5px solid #059669' : '1.5px solid #E5E7EB',
-                  background: filter===f ? '#059669' : '#fff',
+                  border: filter===f ? '1.5px solid #2d6a4f' : '1.5px solid #E5E7EB',
+                  background: filter===f ? 'linear-gradient(135deg,#1a3d2b,#2d6a4f)' : '#fff',
                   color: filter===f ? '#fff' : '#6B7280',
                   fontSize:12, fontWeight:600, cursor:'pointer',
                   fontFamily:'inherit', transition:'all 0.12s',
+                  boxShadow: filter===f ? '0 2px 8px rgba(26,61,43,0.18)' : 'none',
                 }}>
                 {f === 'all' ? 'All levels' : f}
               </button>
@@ -429,12 +490,10 @@ const LoginPage = () => {
           </div>
         </div>
 
-        {/* Loading / Error states */}
         {bizLoading && (
           <div style={{ textAlign:'center', padding:'3rem', color:'#9CA3AF' }}>
-            <RefreshCw size={20} style={{ animation:'spin 0.8s linear infinite', margin:'0 auto 8px', display:'block' }} />
+            <RefreshCw size={20} style={{ animation:'spin 0.8s linear infinite', margin:'0 auto 8px', display:'block', color:'#2d6a4f' }} />
             <p style={{ fontSize:13 }}>Loading leaderboard…</p>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
         {!bizLoading && bizError && (
@@ -443,21 +502,25 @@ const LoginPage = () => {
           </div>
         )}
 
-        {/* table header */}
+        {/* Table header — Type column removed */}
         {!bizLoading && !bizError && (
           <>
-            <div style={{ display:'grid', gridTemplateColumns:'44px 1fr 140px 120px 130px 32px',
-                          gap:12, padding:'0 16px', marginBottom:8 }}>
-              {['#', 'Business', 'Type', 'Score', 'Level', ''].map((h, i) => (
-                <div key={i} style={{ fontSize:11, fontWeight:700, color:'#9CA3AF',
-                                      letterSpacing:'0.5px', textTransform:'uppercase',
-                                      textAlign: i >= 3 ? 'right' : 'left' }}>
+            <div style={{
+              display:'grid',
+              gridTemplateColumns:'44px 1fr 120px 130px 32px',
+              gap:12, padding:'0 16px', marginBottom:8,
+            }}>
+              {['#', 'Business', 'Score', 'Level', ''].map((h, i) => (
+                <div key={i} style={{
+                  fontSize:11, fontWeight:700, color:'#9CA3AF',
+                  letterSpacing:'0.5px', textTransform:'uppercase',
+                  textAlign: i >= 2 ? 'right' : 'left',
+                }}>
                   {h}
                 </div>
               ))}
             </div>
 
-            {/* rows */}
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
               {visible.length === 0 && (
                 <div style={{ textAlign:'center', padding:'3rem', color:'#D1D5DB', fontSize:14 }}>
@@ -466,7 +529,7 @@ const LoginPage = () => {
               )}
               {visible.map(b => {
                 const lv   = levelOf(b.score);
-                const meta = LEVEL_META[lv];
+                const meta = LEVEL_META[lv] || LEVEL_META['Newcomer'];
                 const av   = AVATARS[(b.id || 0) % 5];
                 const bar  = Math.round((b.score / maxScore) * 100);
                 const rs   = b.rank === 1
@@ -479,10 +542,15 @@ const LoginPage = () => {
 
                 return (
                   <div key={b.id} className="biz-row" onClick={() => setSelected(b)}
-                    style={{ display:'grid', gridTemplateColumns:'44px 1fr 140px 120px 130px 32px',
-                      gap:12, alignItems:'center', background:rs.bg, border:'1px solid #F3F4F6',
-                      borderRadius:12, padding:'12px 16px', cursor:'pointer',
-                      transition:'background 0.12s, border-color 0.12s' }}>
+                    style={{
+                      display:'grid',
+                      gridTemplateColumns:'44px 1fr 120px 130px 32px',
+                      gap:12, alignItems:'center', background:rs.bg,
+                      border:'1px solid rgba(82,183,136,0.13)',
+                      borderRadius:14, padding:'12px 16px', cursor:'pointer',
+                      boxShadow:'0 1px 4px rgba(26,61,43,0.05)',
+                      transition:'background 0.12s, border-color 0.12s',
+                    }}>
 
                     <div style={{ width:26, height:26, borderRadius:'50%', background:rs.numBg,
                                   border:`1px solid ${rs.numBorder}`, display:'flex', alignItems:'center',
@@ -507,8 +575,6 @@ const LoginPage = () => {
                       </div>
                     </div>
 
-                    <div style={{ fontSize:13, color:'#6B7280' }}>{b.type}</div>
-
                     <div style={{ fontSize:15, fontWeight:800, color:'#111827', textAlign:'right' }}>
                       {Number(b.score).toLocaleString()}
                     </div>
@@ -522,7 +588,7 @@ const LoginPage = () => {
                     </div>
 
                     <div style={{ display:'flex', justifyContent:'center' }}>
-                      <ChevronRight size={14} color="#D1D5DB" />
+                      <ChevronRight size={14} color="#95d5b2" />
                     </div>
                   </div>
                 );
@@ -532,11 +598,19 @@ const LoginPage = () => {
         )}
 
         {/* footer note */}
-        <div style={{ marginTop:32, padding:'16px 20px', background:'#ECFDF5',
-                      border:'1px solid #A7F3D0', borderRadius:12,
-                      display:'flex', alignItems:'center', gap:10 }}>
-          <Leaf size={14} color="#059669" />
-          <p style={{ fontSize:12, color:'#065F46', lineHeight:1.6 }}>
+        <div style={{
+          marginTop:32, padding:'16px 20px',
+          background:'linear-gradient(to bottom,#d8f3dc,#f0fdf4)',
+          border:'1px solid #95d5b2', borderRadius:14,
+          display:'flex', alignItems:'center', gap:10,
+          boxShadow:'0 1px 6px rgba(26,61,43,0.06)',
+        }}>
+          <div style={{ width:28, height:28, borderRadius:8,
+                        background:'linear-gradient(135deg,#1a3d2b,#2d6a4f)',
+                        display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Leaf size={13} color="#86efac" />
+          </div>
+          <p style={{ fontSize:12, color:'#1a3d2b', lineHeight:1.6 }}>
             EcoTrust scores are calculated from verified spoilage prevention actions, optimised delivery routes, carbon record approvals, and on-time delivery completions. Scores update in real time.
           </p>
         </div>

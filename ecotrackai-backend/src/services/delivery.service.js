@@ -24,6 +24,75 @@ const CO2_PER_LITRE = 2.31;
 const FUEL_PER_KM   = 0.10;
 const FUEL_RATES    = { van: 0.10, refrigerated_truck: 0.18, truck: 0.14, motorcycle: 0.04 };
 
+const parseLocationPayload = (value) => {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return {};
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { address: value };
+  }
+};
+
+const toCoordinate = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeApprovalStop = (stop, index, totalStops) => {
+  const location = parseLocationPayload(stop?.location || stop?.location_json || stop?.locationJson);
+  const lat = toCoordinate(location.lat ?? location.latitude ?? stop?.lat ?? stop?.latitude);
+  const lng = toCoordinate(location.lng ?? location.longitude ?? location.lon ?? stop?.lng ?? stop?.longitude ?? stop?.lon);
+  const stopType =
+    stop?.stop_type ||
+    stop?.type ||
+    (index === 0 ? 'origin' : index === totalStops - 1 ? 'destination' : 'stop');
+  const name =
+    stop?.location_name ||
+    stop?.stop_name ||
+    stop?.stopName ||
+    location.address ||
+    location.name ||
+    `Stop ${index + 1}`;
+
+  return {
+    ...stop,
+    stop_sequence: Number(
+      stop?.stop_sequence ??
+      stop?.sequence ??
+      stop?.sequence_no ??
+      stop?.stop_order ??
+      index + 1
+    ),
+    stop_type: stopType,
+    type: stopType,
+    location_name: name,
+    stop_name: stop?.stop_name || stop?.stopName || name,
+    address: location.address || name,
+    location: {
+      ...location,
+      lat,
+      lng,
+      latitude: lat,
+      longitude: lng,
+      address: location.address || name,
+    },
+    lat,
+    lng,
+    latitude: lat,
+    longitude: lng,
+  };
+};
+
+const buildApprovalRoutePath = (stops = []) =>
+  stops
+    .filter((stop) => stop?.latitude !== null && stop?.longitude !== null)
+    .map((stop) => ({
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+    }));
+
 // ── Real Groq AI call ─────────────────────────────────────
 async function callGroqAI(prompt) {
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -775,8 +844,27 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
     if (!submittableStatuses.includes(route.status))
       return this._fail(`Route must be "planned", "optimized", or "declined" to submit (current: ${route.status})`);
 
+    const stopsResult = await DeliveryModel.getStops(routeId);
+    const routeStops = Array.isArray(stopsResult.data)
+      ? stopsResult.data.map((stop, index, allStops) => normalizeApprovalStop(stop, index, allStops.length))
+      : [];
+    const routePath = buildApprovalRoutePath(routeStops);
+    const routeForApproval = {
+      ...route,
+      stop_count: route.stop_count || routeStops.length,
+      stops: routeStops,
+      original_stops: routeStops,
+      route_path: routePath,
+    };
     const optResult = await DeliveryModel.getOptimization(routeId);
     const opt       = optResult.data;
+    const optimizationForApproval = opt
+      ? {
+          ...opt,
+          stops: routeStops,
+          route_path: routePath,
+        }
+      : null;
 
     await pool.query(
       `UPDATE manager_approvals SET status = 'superseded'
@@ -809,8 +897,8 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
         extra_data, created_at
       ) VALUES ($1,$2,$3,$4,$5,'MEDIUM','logistics_manager','route_optimization',$6,'pending',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
     `, [
-      user.businessId, route.route_name, `${route.stop_count || 0} stops`,
-      JSON.stringify(route.origin_location),
+      user.businessId, route.route_name, `${routeStops.length || route.stop_count || 0} stops`,
+      JSON.stringify(routeForApproval.origin_location),
       opt?.ai_recommendation || 'Please review the delivery route.',
       user.userId, routeId,
       opt?.optimized_distance_km || null, opt?.optimized_fuel_liters || null, opt?.optimized_carbon_kg || null,
@@ -818,7 +906,7 @@ Return improvement_pct as an integer (realistic 10–30% range based on the actu
       opt?.ai_recommendation || null,
       route.total_distance_km, route.estimated_fuel_consumption_liters, route.estimated_carbon_kg,
       route.driver_full_name || route.driver_name || null, route.vehicle_type || null,
-      JSON.stringify({ route, optimization: opt }),
+      JSON.stringify({ route: routeForApproval, optimization: optimizationForApproval }),
     ]);
 
     await DeliveryModel.updateStatus(routeId, user.businessId, 'awaiting_approval');

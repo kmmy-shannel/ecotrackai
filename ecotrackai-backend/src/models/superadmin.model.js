@@ -23,14 +23,14 @@ const SuperAdminModel = {
          b.contact_phone,
          b.status,
          b.created_at,
-         COALESCE(es.total_points, 0)  AS ecotrust_points,
+         COALESCE(es.current_score, 0)  AS ecotrust_points,
          COALESCE(es.level, 'Newcomer') AS ecotrust_level,
          COUNT(DISTINCT u.user_id)::int AS user_count
-       FROM businesses b
-       LEFT JOIN ecotrust_scores   es ON es.business_id = b.business_id
-       LEFT JOIN users             u  ON u.business_id  = b.business_id
-                                     AND u.is_active    = true
-       GROUP BY b.business_id, es.total_points, es.level
+       FROM business_profiles b
+       LEFT JOIN ecotrust_scores es ON es.business_id = b.business_id
+       LEFT JOIN users           u  ON u.business_id  = b.business_id
+                                   AND u.is_active    = true
+       GROUP BY b.business_id, es.current_score, es.level
        ORDER BY b.created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
@@ -42,9 +42,9 @@ const SuperAdminModel = {
     const { rows } = await pool.query(
       `SELECT
          b.*,
-         COALESCE(es.total_points, 0)   AS ecotrust_points,
+         COALESCE(es.current_score, 0)  AS ecotrust_points,
          COALESCE(es.level, 'Newcomer') AS ecotrust_level
-       FROM businesses b
+       FROM business_profiles b
        LEFT JOIN ecotrust_scores es ON es.business_id = b.business_id
        WHERE b.business_id = $1`,
       [businessId]
@@ -320,7 +320,26 @@ const SuperAdminModel = {
       alertSummary:        alertRows.rows
     };
   },
+// ─── APPROVAL RATES ──────────────────────────────────────
 
+async getApprovalRates(days = 30) {
+  const { rows } = await pool.query(
+    `SELECT
+       b.business_id,
+       b.business_name,
+       COUNT(ma.approval_id) FILTER (WHERE ma.status = 'approved')::int  AS approved_count,
+       COUNT(ma.approval_id) FILTER (WHERE ma.status = 'rejected')::int  AS rejected_count,
+       COUNT(ma.approval_id)::int                                         AS total_approvals
+     FROM businesses b
+     LEFT JOIN manager_approvals ma
+            ON ma.business_id = b.business_id
+           AND ma.created_at >= NOW() - ($1 || ' days')::interval
+     GROUP BY b.business_id, b.business_name
+     ORDER BY total_approvals DESC`,
+    [days]
+  );
+  return rows;
+},
   // ─── ECOTRUST CONFIG ──────────────────────────────────────
 
   async getEcoTrustConfig() {
