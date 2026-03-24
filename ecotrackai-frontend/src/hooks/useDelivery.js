@@ -438,27 +438,29 @@ export default function useDelivery() {
     };
     fetchMetrics();
   }, [deliveries]);
+  const deliveredRoutes = deliveries.filter(d => d.status === 'delivered');
 
   const derivedTotals = {
     deliveries: deliveries.length,
-    distance: deliveries.reduce((s, d) => s + parseFloat(d.totalDistance || 0), 0).toFixed(1),
+    distance:   deliveredRoutes.reduce((s, d) => s + parseFloat(d.totalDistance   || 0), 0).toFixed(1),
+    fuelSaved:  deliveredRoutes.reduce((s, d) => s + parseFloat(d.fuelConsumption || 0), 0).toFixed(2),
+    co2Reduced: deliveredRoutes.reduce((s, d) => s + parseFloat(d.carbonEmissions || 0), 0).toFixed(2),
     inProgress: deliveries.filter(d => d.status === 'in_transit').length,
   };
 
   const summaryStats = metricsLoading ? {
     totalDeliveries: derivedTotals.deliveries,
-    totalDistance: derivedTotals.distance,
-    fuelSaved: '0.0',
-    co2Reduced: '0.00',
-    inProgress: derivedTotals.inProgress,
+    totalDistance:   derivedTotals.distance,
+    fuelSaved:       derivedTotals.fuelSaved,
+    co2Reduced:      derivedTotals.co2Reduced,
+    inProgress:      derivedTotals.inProgress,
   } : {
     totalDeliveries: derivedTotals.deliveries,
-    totalDistance: metricsSummary.totalDistance ?? derivedTotals.distance,
-    fuelSaved: metricsSummary.total_fuel_saved || metricsSummary.fuelSaved || '0.0',
-    co2Reduced: metricsSummary.total_co2_saved || metricsSummary.co2Reduced || '0.00',
-    inProgress: metricsSummary.inProgress ?? derivedTotals.inProgress,
+    totalDistance:   metricsSummary.totalDistance   ?? derivedTotals.distance,
+    fuelSaved:       metricsSummary.total_fuel_saved || metricsSummary.fuelSaved  || derivedTotals.fuelSaved,
+    co2Reduced:      metricsSummary.total_co2_saved  || metricsSummary.co2Reduced || derivedTotals.co2Reduced,
+    inProgress:      metricsSummary.inProgress       ?? derivedTotals.inProgress,
   };
-
   const filtered = deliveries.filter(d => {
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();

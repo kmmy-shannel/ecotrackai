@@ -153,7 +153,7 @@ const BusinessRegistry = ({
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="text-left py-3 px-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Business</th>
-                <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
+
                 <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Registration</th>
                 <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">EcoTrust</th>
                 <th className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Users</th>
@@ -164,7 +164,7 @@ const BusinessRegistry = ({
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-16 text-center">
+                  <td colSpan="6" className="py-16 text-center">
                     <Building2 size={32} className="mx-auto mb-3 text-gray-200" />
                     <p className="text-gray-400 text-sm">No businesses found</p>
                   </td>
@@ -184,7 +184,7 @@ const BusinessRegistry = ({
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-4 text-gray-600 text-sm capitalize">{b.business_type || '—'}</td>
+                   
                     <td className="py-4 px-4">
                       <span className="font-mono text-gray-500 text-xs bg-gray-100 px-2 py-1 rounded-lg">
                         {b.registration_number || '—'}

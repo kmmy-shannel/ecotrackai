@@ -677,12 +677,7 @@ const ManagerPage = () => {
         </div>
 
         {/* ── Stat Cards ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
-    <StatCard dark  label="Total Pending"   value={totalPending}                sub="Awaiting review"   icon={Activity}  delay={0.04} />
-    <StatCard       label="Logistics"        value={logistics.pending.length}    sub="Route approvals"   icon={Truck}     delay={0.08} />
-    <StatCard dark  label="Inventory"        value={inventory.pending.length}    sub="Stock approvals"   icon={Package}   delay={0.12} />
-    <StatCard       label="Sustainability"   value={0}                           sub="Carbon approvals"  icon={Leaf}      delay={0.16} />
-  </div>
+   
 
         {/* ── Main Grid ── */}
         <div style={{ display:'grid', gridTemplateColumns:'300px 1fr', gap:14, alignItems:'start' }}>

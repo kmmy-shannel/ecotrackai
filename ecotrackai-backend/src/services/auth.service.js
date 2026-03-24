@@ -268,6 +268,7 @@ const AuthService = {
     }
   },
 
+  // ─── CHANGED: login() — added email verification, role gate, active check ──
   async login(identifier, password, ip, userAgent) {
     try {
       if (!identifier || !password) {
@@ -282,11 +283,35 @@ const AuthService = {
       const userResult = await UserModel.findByLoginIdentifier(cleanIdentifier);
       if (!userResult.success) return userResult;
       const user = userResult.data;
+
+      // 1. Generic credential check (prevents user-enumeration)
       if (!user) return this._fail('Invalid credentials');
 
       const isPasswordValid = await comparePassword(password, user.password_hash);
       if (!isPasswordValid) return this._fail('Invalid credentials');
 
+      // 3. Only web-portal roles allowed — drivers must use the mobile app ───
+      const WEB_ROLES = [
+        'super_admin',
+        'admin',
+        'logistics_manager',
+        'inventory_manager',
+        'sustainability_manager',
+      ];
+      if (!WEB_ROLES.includes(user.role)) {
+        const err = new Error('This account does not have access to the web portal. Please use the EcoTrackAI mobile app.');
+        err.status = 403;
+        throw err;
+      }
+
+      // 4. Account must be active ────────────────────────────────────────────
+      if (user.is_active === false || user.is_active === 0) {
+        const err = new Error('Your account has been deactivated. Please contact your administrator.');
+        err.status = 403;
+        throw err;
+      }
+
+      // Token + session (unchanged from original) ───────────────────────────
       const token = generateToken({
         userId: user.user_id,
         businessId: user.business_id,
@@ -323,10 +348,14 @@ const AuthService = {
         token
       });
     } catch (error) {
+      // Re-throw the shaped 403 errors so the controller sends the exact message
+      if (error.status) throw error;
+
       console.error('[AuthService.login]', error);
       return this._fail('Login failed');
     }
   },
+  // ─── END CHANGED ──────────────────────────────────────────────────────────
 
   async logout(token, user = null) {
     try {
@@ -514,54 +543,53 @@ const AuthService = {
       return this._fail('Failed to change password');
     }
   },
+
   async sendChangePasswordOTP(email) {
- try {
-   if (!email) return this._fail('Email is required');
- 
-   // Find user regardless of email_verified status
-   const userResult = await UserModel.findByEmailBasic(email);
-   if (!userResult.success) return userResult;
-   const user = userResult.data;
-   if (!user) return this._fail('User not found');
- 
-   const otp = generateOTP();
-   const otpExpires = new Date();
-   otpExpires.setMinutes(otpExpires.getMinutes() + 10);
- 
-   const otpResult = await UserModel.updateOTP(user.user_id, otp, otpExpires);
-   if (!otpResult.success) return otpResult;
- 
-   await emailService.sendVerificationEmail(email, otp, user.full_name || user.username);
-   return this._ok({ sent: true });
- } catch (error) {
-   console.error('[AuthService.sendChangePasswordOTP]', error);
-   return this._fail('Failed to send verification code');
- }
- },
- 
- async verifyChangePasswordOTP(email, otp) {
- try {
-   if (!email || !otp) return this._fail('Email and OTP are required');
- 
-   const userResult = await UserModel.findByEmailWithBusiness(email);
-   if (!userResult.success) return userResult;
-   const user = userResult.data;
- 
-   if (!user) return this._fail('User not found');
-   if (user.verification_code !== otp) return this._fail('Invalid verification code');
-   if (new Date() > new Date(user.verification_code_expires)) {
-     return this._fail('Verification code has expired. Please request a new one.');
-   }
- 
-   // Clear the OTP after successful verification (security hygiene)
-   await UserModel.updateOTP(user.user_id, null, new Date());
- 
-   return this._ok({ verified: true });
- } catch (error) {
-   console.error('[AuthService.verifyChangePasswordOTP]', error);
-   return this._fail('Verification failed');
- }
- },
+    try {
+      if (!email) return this._fail('Email is required');
+
+      const userResult = await UserModel.findByEmailBasic(email);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
+      if (!user) return this._fail('User not found');
+
+      const otp = generateOTP();
+      const otpExpires = new Date();
+      otpExpires.setMinutes(otpExpires.getMinutes() + 10);
+
+      const otpResult = await UserModel.updateOTP(user.user_id, otp, otpExpires);
+      if (!otpResult.success) return otpResult;
+
+      await emailService.sendVerificationEmail(email, otp, user.full_name || user.username);
+      return this._ok({ sent: true });
+    } catch (error) {
+      console.error('[AuthService.sendChangePasswordOTP]', error);
+      return this._fail('Failed to send verification code');
+    }
+  },
+
+  async verifyChangePasswordOTP(email, otp) {
+    try {
+      if (!email || !otp) return this._fail('Email and OTP are required');
+
+      const userResult = await UserModel.findByEmailWithBusiness(email);
+      if (!userResult.success) return userResult;
+      const user = userResult.data;
+
+      if (!user) return this._fail('User not found');
+      if (user.verification_code !== otp) return this._fail('Invalid verification code');
+      if (new Date() > new Date(user.verification_code_expires)) {
+        return this._fail('Verification code has expired. Please request a new one.');
+      }
+
+      await UserModel.updateOTP(user.user_id, null, new Date());
+
+      return this._ok({ verified: true });
+    } catch (error) {
+      console.error('[AuthService.verifyChangePasswordOTP]', error);
+      return this._fail('Verification failed');
+    }
+  },
 
 };
 

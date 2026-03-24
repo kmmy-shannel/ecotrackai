@@ -167,7 +167,8 @@ const LoginPage = () => {
   const { login } = useAuth();
 
   const [formData,  setFormData]  = useState({ identifier: '', password: '' });
-  const [error,     setError]     = useState('');
+  const [error,      setError]      = useState(null);   // { message, type, hint }
+  const [fieldError, setFieldError] = useState('');     // 'identifier' | 'password' | ''
   const [loading,   setLoading]   = useState(false);
   const [showPass,  setShowPass]  = useState(false);
   const [logoErr,   setLogoErr]   = useState(false);
@@ -221,18 +222,75 @@ const LoginPage = () => {
   const handleChange = e => {
     const { name, value } = e.target;
     setFormData(p => ({ ...p, [name]: value }));
-    setError('');
+    setError(null);
+    setFieldError('');
   };
-
   const handleSubmit = async e => {
     e.preventDefault();
+   
+    // Basic client-side guard
+    if (!formData.identifier.trim()) {
+      setError({ message: 'Please enter your email or username.', type: 'warn' });
+      setFieldError('identifier');
+      return;
+    }
+    if (!formData.password) {
+      setError({ message: 'Please enter your password.', type: 'warn' });
+      setFieldError('password');
+      return;
+    }
+   
     setLoading(true);
-    setError('');
+    setError(null);
+    setFieldError('');
+   
     try {
       const result = await login({ identifier: formData.identifier.trim(), password: formData.password });
       navigate(getDashboardRoute(result?.data?.user?.role), { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Login failed. Please try again.');
+      const status  = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || '';
+   
+      // Map known cases to helpful copy ─────────────────────────────────────────
+      if (status === 401 || /invalid credentials/i.test(message)) {
+        setError({
+          message: 'Incorrect email/username or password. Please try again.',
+          type: 'error',
+        });
+        setFieldError('password');
+   
+      } else if (status === 403 && /not been verified/i.test(message)) {
+        setError({
+          message: 'Your email has not been verified yet.',
+          type: 'warn',
+          hint: 'Please check your inbox for the verification code.',
+          action: { label: 'Resend code', path: '/verify-otp' },
+        });
+   
+      } else if (status === 403 && /web portal/i.test(message)) {
+        setError({
+          message: 'This account type cannot log in here.',
+          type: 'info',
+          hint: 'Driver accounts must use the EcoTrackAI mobile app.',
+        });
+   
+      } else if (status === 403 && /deactivated/i.test(message)) {
+        setError({
+          message: 'Your account has been deactivated.',
+          type: 'error',
+          hint: 'Please contact your business administrator.',
+        });
+   
+      } else if (!message || /login failed/i.test(message)) {
+        setError({
+          message: 'Unable to sign in right now. Please try again in a moment.',
+          type: 'error',
+        });
+   
+      } else {
+        // Pass through any other backend message verbatim
+        setError({ message, type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
@@ -362,12 +420,50 @@ const LoginPage = () => {
             <p style={{ fontSize:13, color:'#9CA3AF', marginTop:4 }}>Sign in to your operations dashboard</p>
           </div>
 
-          {error && (
-            <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
-                          padding:'10px 14px', fontSize:13, color:'#B91C1C', marginBottom:16 }}>
-              {error}
-            </div>
+          {error && (() => {
+  const palette = {
+    error: { bg: '#FEF2F2', border: '#FECACA', icon: '✕',  iconColor: '#DC2626', text: '#B91C1C' },
+    warn:  { bg: '#FFFBEB', border: '#FDE68A', icon: '⚠',  iconColor: '#D97706', text: '#92400E' },
+    info:  { bg: '#EFF6FF', border: '#BFDBFE', icon: 'ℹ',  iconColor: '#2563EB', text: '#1E40AF' },
+  };
+  const p = palette[error.type] || palette.error;
+  return (
+    <div style={{
+      background: p.bg, border: `1px solid ${p.border}`, borderRadius: 10,
+      padding: '10px 14px', marginBottom: 16,
+    }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 14, color: p.iconColor, lineHeight: 1.4, flexShrink: 0 }}>
+          {p.icon}
+        </span>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 13, color: p.text, fontWeight: 600, margin: 0 }}>
+            {error.message}
+          </p>
+          {error.hint && (
+            <p style={{ fontSize: 12, color: p.text, opacity: 0.8, margin: '3px 0 0' }}>
+              {error.hint}
+            </p>
           )}
+          {error.action && (
+            <button
+              type="button"
+              onClick={() => navigate(error.action.path)}
+              style={{
+                marginTop: 6, background: 'none', border: 'none', padding: 0,
+                fontSize: 12, fontWeight: 700, color: p.iconColor,
+                cursor: 'pointer', textDecoration: 'underline',
+              }}
+            >
+              {error.action.label} →
+            </button>
+          )}
+        </div>
+        
+      </div>
+    </div>
+  );
+})()}
 
           <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <div>
@@ -377,7 +473,7 @@ const LoginPage = () => {
               <input id="identifier" type="text" name="identifier" value={formData.identifier}
                 onChange={handleChange} required autoComplete="username" placeholder="you@company.com or admin_user"
                 className="inp-field"
-                style={{ width:'100%', height:44, padding:'0 14px', border:'1.5px solid #E5E7EB',
+                style={{ width:'100%', height:44, padding:'0 14px', borderColor: fieldError === 'identifier' ? '#EF4444' : '#E5E7EB',
                   borderRadius:10, background:'#FAFAFA', color:'#111827', fontSize:14,
                   fontFamily:'inherit', boxSizing:'border-box', transition:'border-color 0.15s, box-shadow 0.15s' }} />
             </div>
@@ -390,7 +486,7 @@ const LoginPage = () => {
                 <input id="password" type={showPass ? 'text' : 'password'} name="password"
                   value={formData.password} onChange={handleChange} required
                   placeholder="Enter your password" className="inp-field"
-                  style={{ width:'100%', height:44, padding:'0 44px 0 14px', border:'1.5px solid #E5E7EB',
+                  style={{ width:'100%', height:44, padding:'0 44px 0 14px', borderColor: fieldError === 'password'   ? '#EF4444' : '#E5E7EB',
                     borderRadius:10, background:'#FAFAFA', color:'#111827', fontSize:14,
                     fontFamily:'inherit', boxSizing:'border-box', transition:'border-color 0.15s, box-shadow 0.15s' }} />
                 <button type="button" onClick={() => setShowPass(p => !p)}
