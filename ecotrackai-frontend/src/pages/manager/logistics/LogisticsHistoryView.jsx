@@ -126,9 +126,19 @@ const LogisticsHistoryView = ({ history, onBack }) => {
             <p className="lh-date-label">{dateLabel}</p>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {items.map((item, i) => {
-                const extra   = (() => { try { return JSON.parse(item.extra_data || '{}'); } catch { return {}; } })();
+                const extra = (() => {
+                  if (item.extra_data && typeof item.extra_data === 'object') return item.extra_data;
+                  try { return JSON.parse(item.extra_data || '{}'); } catch { return {}; }
+                })();
                 const savings = extra.savings || {};
                 const approved = item.status === 'approved';
+                const routeTitle = item.route_name || item.routeName || item.product_name || 'Route';
+                const routeSummary = item.to_location && item.to_location !== item.from_location
+                  ? `${item.from_location || 'Unknown'} -> ${item.to_location}`
+                  : item.location || item.from_location || 'Unknown';
+                const driverLabel = item.driver_name || item.driver || null;
+                const distanceSaved = Number(item.savings_km ?? savings.distance ?? 0);
+                const co2Saved = Number(item.savings_co2 ?? savings.emissions ?? 0);
                 return (
                   <div key={i} className={`lh-item ${approved ? 'lh-item-approved' : 'lh-item-declined'}`}>
                     <div className={`lh-item-icon ${approved ? 'lh-item-icon-approved' : 'lh-item-icon-declined'}`}>
@@ -143,15 +153,15 @@ const LogisticsHistoryView = ({ history, onBack }) => {
                         </span>
                       </div>
                       <p style={{ fontSize:13.5, fontWeight:700, color:'#111827', margin:'0 0 2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {item.product_name}
+                        {routeTitle}
                       </p>
                       <p style={{ fontSize:11, color:'#9ca3af', margin:'0 0 4px' }}>
-                        {item.quantity} · {item.location}
+                        {driverLabel ? `${driverLabel} · ` : ''}{routeSummary}
                       </p>
-                      {savings.distance && (
+                      {(distanceSaved > 0 || co2Saved > 0) && (
                         <div style={{ display:'flex', gap:14 }}>
-                          <span className="lh-saving"><Navigation size={10} /> -{savings.distance} km</span>
-                          <span className="lh-saving"><Leaf size={10} /> -{savings.emissions} kg CO₂</span>
+                          {distanceSaved > 0 && <span className="lh-saving"><Navigation size={10} /> -{distanceSaved.toFixed(1)} km</span>}
+                          {co2Saved > 0 && <span className="lh-saving"><Leaf size={10} /> -{co2Saved.toFixed(1)} kg CO₂</span>}
                         </div>
                       )}
                       {item.review_notes && (

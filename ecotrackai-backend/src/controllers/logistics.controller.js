@@ -4,6 +4,12 @@
 const LogisticsService = require('../services/logistics.service');
 const { sendSuccess, sendError } = require('../utils/response.utils');
 
+const getLogisticsDashboard = async (req, res) => {
+  const result = await LogisticsService.getDashboard(req.user);
+  result.success ? sendSuccess(res, 200, 'Dashboard retrieved', result.data)
+                 : sendError(res, 400, result.error);
+};
+
 const getPendingRoutes = async (req, res) => {
   const result = await LogisticsService.getPendingRoutes(req.user);
   result.success ? sendSuccess(res, 200, 'Pending routes retrieved', result.data)
@@ -40,4 +46,12 @@ const getLogisticsStats = async (req, res) => {
                  : sendError(res, 400, result.error);
 };
 
-module.exports = { getPendingRoutes, getRouteHistory, approveRoute, declineRoute, getDriverMonitor, getLogisticsStats };
+module.exports = {
+  getLogisticsDashboard,
+  getPendingRoutes,
+  getRouteHistory,
+  approveRoute,
+  declineRoute,
+  getDriverMonitor,
+  getLogisticsStats,
+};

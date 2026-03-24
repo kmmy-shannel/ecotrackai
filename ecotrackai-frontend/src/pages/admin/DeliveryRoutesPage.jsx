@@ -345,6 +345,13 @@ const RouteMap = ({ originalStops, optimizedStops }) => {
   }, [JSON.stringify(originalStops), JSON.stringify(optimizedStops)]);
 
   const getIcon = (t) => t==='origin'?originIcon:t==='destination'?destIcon:stopIcon;
+  const getIconByIndex = (arr, i) => {
+    const t = arr[i]?.type;
+    if (t === 'origin' || t === 'destination') return getIcon(t);
+    if (i === 0) return originIcon;
+    if (i === arr.length - 1) return destIcon;
+    return stopIcon;
+  };
 
   return (
     <div style={{ position:'relative',borderRadius:16,overflow:'hidden',border:'1px solid rgba(82,183,136,.18)',boxShadow:'0 3px 14px rgba(26,61,43,.08)',height:360 }}>
@@ -380,8 +387,8 @@ const RouteMap = ({ originalStops, optimizedStops }) => {
         <MapFitBounds positions={fitPos} />
         {(activeView==='both'||activeView==='original') && origRoad?.length>1 && <Polyline positions={origRoad} pathOptions={{ color:'#3b82f6',weight:4,dashArray:'10 6',opacity:.9 }} />}
         {(activeView==='both'||activeView==='optimized') && optRoad?.length>1  && <Polyline positions={optRoad}  pathOptions={{ color:'#2d6a4f',weight:5,opacity:.95 }} />}
-        {(activeView==='both'||activeView==='original') && validO.map((s,i) => <Marker key={`o-${i}`} position={[s.lat,s.lng]} icon={getIcon(s.type)}><Popup><div style={{ fontFamily:'Poppins,sans-serif',fontSize:12 }}><p style={{ fontWeight:700,margin:'0 0 3px',textTransform:'capitalize' }}>{s.type}</p><p style={{ color:'#6b7280',margin:0 }}>{s.location}</p></div></Popup></Marker>)}
-        {(activeView==='both'||activeView==='optimized') && validP.map((s,i) => <Marker key={`p-${i}`} position={[s.lat,s.lng]} icon={getIcon(s.type)}><Popup><div style={{ fontFamily:'Poppins,sans-serif',fontSize:12 }}><p style={{ fontWeight:700,margin:'0 0 3px',color:'#2d6a4f',textTransform:'capitalize' }}>[Opt] {s.type}</p><p style={{ color:'#6b7280',margin:0 }}>{s.location}</p></div></Popup></Marker>)}
+        {(activeView==='both'||activeView==='original') && validO.map((s,i) => <Marker key={`o-${i}`} position={[s.lat,s.lng]} icon={getIconByIndex(validO,i)}><Popup><div style={{ fontFamily:'Poppins,sans-serif',fontSize:12 }}><p style={{ fontWeight:700,margin:'0 0 3px',textTransform:'capitalize' }}>{i===0?'Origin':i===validO.length-1?'Destination':`Stop ${i}`}</p><p style={{ color:'#6b7280',margin:0 }}>{s.location}</p></div></Popup></Marker>)}
+        {(activeView==='both'||activeView==='optimized') && validP.map((s,i) => <Marker key={`p-${i}`} position={[s.lat,s.lng]} icon={getIconByIndex(validP,i)}><Popup><div style={{ fontFamily:'Poppins,sans-serif',fontSize:12 }}><p style={{ fontWeight:700,margin:'0 0 3px',color:'#2d6a4f',textTransform:'capitalize' }}>[Opt] {i===0?'Origin':i===validP.length-1?'Destination':`Stop ${i}`}</p><p style={{ color:'#6b7280',margin:0 }}>{s.location}</p></div></Popup></Marker>)}
       </MapContainer>
       <div style={{ position:'absolute',bottom:10,left:10,zIndex:1000,background:'#fff',borderRadius:10,padding:'7px 12px',boxShadow:'0 3px 12px rgba(0,0,0,.1)',border:'1px solid rgba(82,183,136,.18)',display:'flex',alignItems:'center',gap:12,fontFamily:'Poppins,sans-serif' }}>
         {[['Original',<svg key="o" width="24" height="8"><line x1="0" y1="4" x2="24" y2="4" stroke="#3b82f6" strokeWidth="2.5" strokeDasharray="7 4"/></svg>],['Optimized',<svg key="p" width="24" height="8"><line x1="0" y1="4" x2="24" y2="4" stroke="#2d6a4f" strokeWidth="3.5"/></svg>],['Origin',<div key="ori" style={{ width:9,height:9,borderRadius:'50%',background:'#16a34a' }} />],['Dest',<div key="dst" style={{ width:9,height:9,borderRadius:'50%',background:'#dc2626' }} />]].map(([label,el]) => (
