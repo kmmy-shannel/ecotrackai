@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Search, Download, Clock, Building2, User,
+  Search, Clock, Building2, User,
   CheckCircle, AlertCircle, XCircle, RefreshCw, Flag
 } from 'lucide-react';
 
@@ -299,13 +299,7 @@ const AuditViewer = ({ logs = [], onSearch, flaggedTransactions = [], flaggedLoa
               {logs.length} entries
             </span>
           </div>
-          <button
-            onClick={handleExport}
-            disabled={logs.length === 0}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-40"
-          >
-            <Download size={14} /> Export CSV
-          </button>
+        
         </div>
 
         <div className="overflow-x-auto">

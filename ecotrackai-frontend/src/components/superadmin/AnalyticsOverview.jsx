@@ -41,16 +41,13 @@ const AnalyticsOverview = ({ analytics, onLoad }) => {
     ? leaderboard[0].total_points
     : '—';
 
-  const avgEcoScore = leaderboard.length > 0
-    ? Math.round(leaderboard.reduce((s, b) => s + Number(b.total_points || 0), 0) / leaderboard.length)
-    : '—';
+  
 
-  const kpis = [
-    { label: 'Total CO₂ Emitted',    value: totalCO2 ? `${totalCO2.toFixed(1)}` : '—', unit: 'kg CO₂' },
-    { label: 'Total Approval Events', value: totalDeliveries || '—',                   unit: 'records'  },
-    { label: 'Top EcoTrust Score',    value: topEcoScore,                               unit: 'pts'      },
-    { label: 'Avg EcoTrust Score',    value: avgEcoScore,                               unit: 'pts'      },
-  ];
+    const kpis = [
+      { label: 'Total CO₂ Emitted',    value: totalCO2 ? `${totalCO2.toFixed(1)}` : '—', unit: 'kg CO₂' },
+      { label: 'Total Approval Events', value: totalDeliveries || '—',                   unit: 'records'  },
+      { label: 'Top EcoTrust Score',    value: topEcoScore,                               unit: 'pts'      },
+    ];
 
   const maxVal = (arr, key) => Math.max(...arr.map(d => Number(d[key] || 0)), 1);
 
@@ -108,7 +105,7 @@ const AnalyticsOverview = ({ analytics, onLoad }) => {
         <>
           {/* ── KPI Cards ──────────────────────────────────── */}
           {/* FIX: Values now computed from backend arrays, not missing flat fields */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             {kpis.map((k, i) => (
               <div key={k.label}
                 className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -165,42 +162,7 @@ const AnalyticsOverview = ({ analytics, onLoad }) => {
             </div>
           )}
 
-          {/* ── Alert Distribution ──────────────────────────── */}
-          {alertDist.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wide mb-5">
-                Alert Distribution
-              </h3>
-              <div className="space-y-3">
-                {alertDist.map((item, i) => {
-                  const val = Number(item.count || item.value || 0);
-                  const pct = Math.min((val / maxVal(alertDist, 'count')) * 100, 100);
-                  const colorMap = {
-                    HIGH:   'from-red-400 to-red-600',
-                    MEDIUM: 'from-orange-400 to-orange-500',
-                    LOW:    'from-green-400 to-green-600',
-                  };
-                  const barColor = colorMap[item.alert_type] || 'from-blue-400 to-blue-600';
-                  return (
-                    <div key={i} className="flex items-center gap-4">
-                      <span className="text-xs font-bold text-gray-600 w-16 flex-shrink-0">
-                        {item.alert_type || `Type ${i + 1}`}
-                      </span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2.5">
-                        <div
-                          className={`bg-gradient-to-r ${barColor} h-2.5 rounded-full transition-all`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-bold text-gray-700 w-10 text-right flex-shrink-0">
-                        {val}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+  
 
           {/* ── Two-column bottom section ─────────────────── */}
           <div className="grid grid-cols-2 gap-5">

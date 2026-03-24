@@ -63,7 +63,7 @@ if (typeof document !== 'undefined' && !document.getElementById('sa-styles')) {
 }
 
 const TABS = [
-  { key: 'registry',  label: 'Business Registry', icon: Building2    },
+  { key: 'registry',  label: 'All Businesses', icon: Building2    },
   { key: 'health',    label: 'System Health',      icon: Activity     },
   { key: 'catalog',   label: 'Product Catalog',    icon: BookOpen     },
   { key: 'ecotrust',  label: 'EcoTrust Config',    icon: Leaf         },
@@ -74,7 +74,13 @@ const TABS = [
 const SuperAdminDashboard = () => {
   const { user }   = useAuth();
   const navigate   = useNavigate();
-  const [activeTab,       setActiveTab]       = useState('registry');
+  const getInitialTab = () => {
+    const hash = window.location.hash.replace('#', '');
+    const validTabs = ['registry', 'health', 'catalog', 'ecotrust', 'audit', 'analytics'];
+    return validTabs.includes(hash) ? hash : 'registry';
+  };
+  
+  const [activeTab, setActiveTab] = useState(getInitialTab);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showProfileModal,setShowProfileModal]= useState(false);
   const vm = useSuperAdmin();
@@ -100,9 +106,10 @@ const SuperAdminDashboard = () => {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    window.location.hash = tab;
     if (tab === 'audit')     vm.loadAuditLogs();
     if (tab === 'analytics') vm.loadAnalytics();
-    if (tab === 'ecotrust')  vm.loadEcoConfig();
+    if (tab === 'ecotrust')  loadEcoTrustConfig();
   };
 
   const handleLogout = async () => {

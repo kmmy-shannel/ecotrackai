@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import {
   Activity, RefreshCw, ChevronRight,
   Users, AlertTriangle, CheckCircle,
-  Building2, Clock, Shield
+  Building2, Clock
 } from 'lucide-react';
 
 const SystemHealthPanel = ({ health, onRefresh }) => {
@@ -157,40 +157,7 @@ const SystemHealthPanel = ({ health, onRefresh }) => {
         </div>
       </div>
 
-      {/* ── Super Admin accounts panel ───────────────────────── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-8 h-8 rounded-xl bg-green-800 flex items-center justify-center">
-            <Shield size={15} className="text-white" />
-          </div>
-          <div>
-            <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wide">Super Admin Accounts</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Recommended: 1–3 super admins maximum</p>
-          </div>
-        </div>
-
-        {health ? (
-          <div className="flex items-end gap-4">
-            <div>
-              <p className="text-5xl font-bold text-green-800">
-                {health.super_admin_count ?? '—'}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">Current super admin accounts</p>
-            </div>
-            <div className={`mb-1 px-3 py-1.5 rounded-full text-xs font-bold ${
-              (health.super_admin_count ?? 0) <= 3
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
-            }`}>
-              {(health.super_admin_count ?? 0) <= 3 ? '✓ Within limit' : '⚠ Exceeds limit'}
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-6">
-            <p className="text-gray-400 text-sm">Click Refresh to load health data</p>
-          </div>
-        )}
-      </div>
+    
     </div>
   );
 };
