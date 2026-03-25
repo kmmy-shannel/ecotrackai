@@ -360,6 +360,7 @@ const normalizeHistoryEntry = (entry = {}) => {
     savings_fuel: savingsFuel,
     savings_co2: savingsCo2,
     ai_recommendation: aiRecommendation,
+    driver_name: entry.driver_full_name || entry.driver_name || entry.driver || null,
     extra_data: normalizedExtra,
     extraData: normalizedExtra,
   };

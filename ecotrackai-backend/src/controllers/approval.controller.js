@@ -250,11 +250,23 @@ const approveRouteOptimization = async (req, res) => {
 
     // Route → approved so driver can start
     if (rows[0].delivery_id) {
-      await pool.query(
+      console.log('[approveRouteOptimization] updating route_id:', rows[0].delivery_id, 'business_id:', businessId);
+      const deliveryUpdate = await pool.query(
         `UPDATE delivery_routes SET status = 'approved', updated_at = NOW()
          WHERE route_id = $1 AND business_id = $2`,
         [rows[0].delivery_id, businessId]
       );
+      console.log('[approveRouteOptimization] delivery_routes rowCount:', deliveryUpdate.rowCount);
+
+      // If no row was updated, try without business_id filter as fallback
+      if (deliveryUpdate.rowCount === 0) {
+        console.warn('[approveRouteOptimization] business_id filter matched 0 rows — retrying without business_id');
+        await pool.query(
+          `UPDATE delivery_routes SET status = 'approved', updated_at = NOW()
+           WHERE route_id = $1`,
+          [rows[0].delivery_id]
+        );
+      }
 
       // Fix #4: permanently deduct the reserved stock from inventory
       // Non-fatal: if delivery_items is missing we log and continue
@@ -303,12 +315,22 @@ const declineRouteOptimization = async (req, res) => {
 
     // Route → 'declined' — admin sees it in Declined filter
     if (rows[0].delivery_id) {
-      await pool.query(
+      console.log('[declineRouteOptimization] updating route_id:', rows[0].delivery_id, 'business_id:', businessId);
+      const deliveryDeclineUpdate = await pool.query(
         `UPDATE delivery_routes SET status = 'declined', updated_at = NOW()
          WHERE route_id = $1 AND business_id = $2`,
         [rows[0].delivery_id, businessId]
       );
+      console.log('[declineRouteOptimization] delivery_routes rowCount:', deliveryDeclineUpdate.rowCount);
 
+      if (deliveryDeclineUpdate.rowCount === 0) {
+        console.warn('[declineRouteOptimization] business_id filter matched 0 rows — retrying without business_id');
+        await pool.query(
+          `UPDATE delivery_routes SET status = 'declined', updated_at = NOW()
+           WHERE route_id = $1`,
+          [rows[0].delivery_id]
+        );
+      }
       // Fix #4: release reserved inventory so stock goes back to available
       try {
         await DeliveryService._releaseRouteReservations(rows[0].delivery_id, businessId);

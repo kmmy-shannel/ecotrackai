@@ -145,12 +145,21 @@ const ApprovalModel = {
     try {
       const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
       const query = `
-        SELECT *, approval_id AS id
-        FROM manager_approvals
-        WHERE business_id = $1
-          AND required_role = $2
-          AND status IN ('approved', 'rejected')
-        ORDER BY COALESCE(reviewed_at, decision_date, created_at) DESC NULLS LAST
+        SELECT
+          ma.*,
+          ma.approval_id AS id,
+          dr.route_name,
+          dr.status        AS route_status,
+          dr.origin_location,
+          dr.destination_location,
+          u.full_name      AS driver_name
+        FROM manager_approvals ma
+        LEFT JOIN delivery_routes dr ON dr.route_id   = ma.delivery_id
+        LEFT JOIN users           u  ON u.user_id     = dr.driver_user_id
+        WHERE ma.business_id   = $1
+          AND ma.required_role = $2
+          AND ma.status IN ('approved', 'rejected')
+        ORDER BY COALESCE(ma.reviewed_at, ma.decision_date, ma.created_at) DESC NULLS LAST
         LIMIT $3
       `;
 
