@@ -105,7 +105,7 @@ async function callGroqAI(prompt) {
       'Content-Type':  'application/json',
     },
     body: JSON.stringify({
-      model:       'llama3-8b-8192',
+      model:       process.env.GROQ_MODEL || 'llama-3.1-70b-versatile',
       temperature: 0.3,
       max_tokens:  600,
       messages: [

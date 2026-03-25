@@ -968,28 +968,42 @@ Return STRICT JSON with this exact structure:
 
     const prompt = `You are a delivery route optimizer for Dagupan City and Pangasinan province, Philippines.
 
-${DAGUPAN_CONTEXT}
-
-DELIVERY DETAILS:
-- Vehicle: ${vehicleType}
-- Planned departure: ${departureTime}
-
-CURRENT STOP ORDER (index: location, coordinates, type):
-${stopsList}
-
-TASK: Reorder ONLY the intermediate stops (index 0 = origin stays first, index ${stops.length - 1} = destination stays last).
-Apply Dagupan local knowledge: cluster nearby barangay stops, hit wet markets before 9AM, follow MacArthur Highway corridor where applicable.
-
-Return STRICT JSON only:
-{
-  "optimized_sequence": [0, 2, 3, 1, ${stops.length - 1}],
-  "reason": "one sentence explaining the key reordering logic using Dagupan street/market names where applicable"
-}`;
+    ${DAGUPAN_CONTEXT}
+    
+    DELIVERY DETAILS:
+    - Vehicle: ${vehicleType}
+    - Planned departure: ${departureTime}
+    
+    CURRENT STOPS (index: name, coordinates, type):
+    ${stopsList}
+    
+    TASK:
+    1. Reorder ONLY the intermediate stops. Index 0 stays first (origin). Index ${stops.length - 1} stays last (destination).
+    2. Use Dagupan local knowledge: follow MacArthur Highway or Arellano Street corridor, cluster nearby stops, arrive at wet markets before 9AM.
+    
+    YOUR RESPONSE MUST USE EXACTLY THIS JSON STRUCTURE — no other keys:
+    {
+      "optimized_sequence": [0, 1, 2, 3, ${stops.length - 1}],
+      "reasoning": "one sentence naming the actual stop streets explaining why this order is shorter or avoids congestion",
+      "local_tips": [
+        "tip naming actual stop streets and a Dagupan road or market — driver can act on this today",
+        "tip with a specific timing window relevant to Dagupan wet market hours",
+        "tip about fuel cost or congestion on this specific corridor"
+      ]
+    }
+    
+    STRICTLY FORBIDDEN — your response will be rejected if it contains:
+    - keys named "stop_order", "improvement_pct", or "recommendations"
+    - generic phrases like "reduce backtracking", "optimize delivery route", "vehicle routing optimization"
+    - any text outside the JSON object`;
 
     const responseText = await this._callGroq(prompt);
     const parsed = this._strictJsonParse(responseText);
 
-    if (!parsed?.optimized_sequence || !Array.isArray(parsed.optimized_sequence)) return null;
+    if (!parsed?.optimized_sequence || !Array.isArray(parsed.optimized_sequence)) {
+      console.warn('[_tryGroqRouteOptimization] Groq returned wrong schema, using TSP fallback');
+      return null;
+    }
     if (parsed.optimized_sequence.length !== stops.length) return null;
 
     const seq = parsed.optimized_sequence;
@@ -1003,7 +1017,11 @@ Return STRICT JSON only:
       type: newPos === 0 ? 'origin' : (newPos === stops.length - 1 ? 'destination' : 'stop'),
     }));
 
-    return this._buildOptimizationResult(deliveryData, stops, reorderedStops, false, parsed.reason);
+   const cleanReason = this._safeString(parsed.reasoning || parsed.reason, '');
+const localTips = Array.isArray(parsed.local_tips)
+  ? parsed.local_tips.map(t => this._safeString(t)).filter(Boolean)
+  : [];
+return this._buildOptimizationResult(deliveryData, stops, reorderedStops, false, cleanReason, localTips);
   }
 
   _tspOptimization(deliveryData, originalStops) {
@@ -1011,7 +1029,7 @@ Return STRICT JSON only:
     return this._buildOptimizationResult(deliveryData, originalStops, reorderedStops, true, null);
   }
 
-  _buildOptimizationResult(deliveryData, originalStops, reorderedStops, usedFallback, groqReason) {
+  _buildOptimizationResult(deliveryData, originalStops, reorderedStops, usedFallback, groqReason, localTips = []) {
     const origDist  = this._calcTotalDistance(originalStops);
     const optDist   = this._calcTotalDistance(reorderedStops);
     const hasCoords = originalStops.some(s => s.lat && s.lng);
@@ -1051,30 +1069,59 @@ Return STRICT JSON only:
       .map(s => (s.location || '').split(' ')[0])
       .join(' → ');
 
-    let aiRecommendations;
-    if (!usedFallback && groqReason) {
-      aiRecommendations = [
-        groqReason,
-        `Reordered stop sequence saves ~${savedDistance} km and ${savedTime} minutes on Dagupan routes.`,
-        midNames ? `Optimized mid-stop order: ${midNames}` : 'Backtracking between barangay stops eliminated.',
-        `Departure before 7AM recommended to reach wet markets during peak buying window (6AM-9AM).`,
-        `Estimated fuel savings: PHP ${(savedFuel * fuelCostPerLiter).toFixed(0)} at current Dagupan diesel prices.`,
-      ];
-    } else if (orderChanged) {
-      aiRecommendations = [
-        `Stop sequence reordered via Nearest-Neighbor algorithm — saves ~${savedDistance} km on Pangasinan roads.`,
-        midNames ? `Optimized mid-stop order: ${midNames}` : `Backtracking eliminated across ${reorderedStops.length} waypoints.`,
-        `Depart before 7AM to reach Dagupan and Calasiao markets before peak buying window closes at 9AM.`,
-        `Estimated ${improvementPct}% efficiency improvement. Fuel savings: PHP ${(savedFuel * fuelCostPerLiter).toFixed(0)}.`,
-      ];
-    } else {
-      aiRecommendations = [
-        `Route is already in shortest-path order for the given stop locations.`,
-        `${improvementPct}% efficiency applied from vehicle load and departure timing.`,
-        `Depart before 7AM to reach Dagupan wet markets before the 9AM buying window closes.`,
-        `Follow MacArthur Highway corridor for Calasiao-Mangaldan-Urdaneta runs to avoid barangay road detours.`,
-      ];
-    }
+      const stopNames = reorderedStops.map(s => s.location || '').filter(Boolean);
+      const firstStop = stopNames[0] || 'your first stop';
+      const lastStop  = stopNames[stopNames.length - 1] || 'your last stop';
+      const midStopNames = reorderedStops
+        .filter(s => s.type === 'stop')
+        .map(s => s.location || '')
+        .filter(Boolean);
+      const fuelCostSaved = `PHP ${(savedFuel * fuelCostPerLiter).toFixed(0)}`;
+  
+      let aiRecommendations;
+      if (!usedFallback && groqReason) {
+        // Clean up groqReason — strip any delivery code references
+        const cleanedReason = groqReason.replace(/Route-\d+[:\s]*/gi, '').trim();
+        const cleanedTips = localTips
+          .map(t => t.replace(/Route-\d+[:\s]*/gi, '').trim())
+          .filter(t => t.length > 10 && !/reduce backtracking|routing algorithm|optimize delivery route/i.test(t));
+  
+        if (cleanedReason || cleanedTips.length > 0) {
+          aiRecommendations = [
+            cleanedReason || `Stops reordered to follow the most direct path through Dagupan — saves ${savedDistance} km.`,
+            ...cleanedTips,
+            `This route saves about ${savedTime} minutes and ${fuelCostSaved} in fuel compared to the original order.`,
+          ].filter(Boolean).slice(0, 5);
+        } else {
+          // Groq returned generic text anyway — use smart deterministic fallback
+          aiRecommendations = _buildSmartFallback();
+        }
+      } else if (orderChanged) {
+        aiRecommendations = [
+          `Stop order was rearranged to reduce total driving distance by ${savedDistance} km on Dagupan roads.`,
+          midStopNames.length > 0
+            ? `Best order for your middle stops: ${midStopNames.join(' → ')}.`
+            : `The new order avoids unnecessary back-and-forth between your delivery points.`,
+          `Leave by 7AM — your stops are near market areas that get busy after 8AM on Arellano Street.`,
+          `Estimated savings: ${savedTime} minutes and ${fuelCostSaved} in diesel at current Dagupan prices.`,
+        ];
+      } else {
+        aiRecommendations = [
+          `Your stops are already in the most efficient order — no reordering needed.`,
+          `Leave by 7AM to reach Banco Nacional and Magsaysay Market before the 9AM peak buying window.`,
+          `Use Arellano Street for the Dagupan city center portion of this route — it's the main market corridor and fastest at off-peak hours.`,
+          `For future routes with more stops along MacArthur Highway, group Calasiao and Mangaldan together to cut fuel cost.`,
+        ];
+      }
+  
+      function _buildSmartFallback() {
+        return [
+          `Stops reordered to follow the shortest path — saves ${savedDistance} km and ${savedTime} minutes.`,
+          `Leave by 7AM to reach wet market stops before the 8AM–9AM congestion on Arellano Street and Pérez Boulevard.`,
+          `Grouping nearby stops on the same street before moving to the next area saves ${fuelCostSaved} in fuel on this route.`,
+          `After delivering, return via Arellano Street after 10AM when market traffic clears.`,
+        ];
+      }
 
     return {
       originalRoute: {

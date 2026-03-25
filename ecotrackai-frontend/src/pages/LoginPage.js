@@ -471,7 +471,7 @@ const LoginPage = () => {
                 Email or username
               </label>
               <input id="identifier" type="text" name="identifier" value={formData.identifier}
-                onChange={handleChange} required autoComplete="username" placeholder="you@company.com or admin_user"
+                onChange={handleChange} required autoComplete="username" placeholder="Enter your email"
                 className="inp-field"
                 style={{ width:'100%', height:44, padding:'0 14px', borderColor: fieldError === 'identifier' ? '#EF4444' : '#E5E7EB',
                   borderRadius:10, background:'#FAFAFA', color:'#111827', fontSize:14,
